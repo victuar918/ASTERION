@@ -69,9 +69,21 @@
   <img src="images/ttl_codeindex.png" alt="Structure Code Index" class="title-img">
 
   <!-- 입력창 -->
-  <div class="input-group">
-    <input type="text" id="structureCode" placeholder="S-00000-000000">
-  </div>
+<div class="input-group">
+  <input type="text" id="structureCode" placeholder="S-00000-000000">
+</div>
+
+<style>
+  .input-group {
+    display: flex;
+    flex-direction: column;
+    width: 35vw; /* 화면 가로의 35% */
+    margin: 0 auto;
+    position: absolute;
+    top: 50%; /* 화면 중간 */
+    transform: translateY(-50%); /* 정확히 중간 위치로 조정 */
+  }
+</style>
 
   <!-- 하단 버튼 -->
   <div class="bottom-nav">
