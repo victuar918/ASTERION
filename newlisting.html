@@ -14,7 +14,7 @@
     }
 
     .container {
-      padding: 20px 40px 100px 40px;
+      padding: 20px 40px 120px 40px;
     }
 
     /* 타이틀 이미지 */
@@ -106,9 +106,9 @@
 
 <body>
 
-    <!-- 타이틀 -->
-    <img src="images/ttl_gemstonelist.png" alt="New Listing" class="title-img">
-  
+  <!-- 타이틀 이미지 -->
+  <img src="images/ttl_gemstonelist.png" alt="New Listing" class="title-img">
+
   <div class="container">
     <!-- Name 입력 -->
     <div class="input-group">
@@ -135,11 +135,12 @@
 
   </div>
 
-  <!-- 하단 버튼 -->
+  <!-- 하단 버튼 4개: 홈 / Before / Listing / 이미지 업로드 -->
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
-    <img src="images/btn_before.png" onclick="goBack()">
+    <img src="images/btn_go_before.png" onclick="goBack()">
     <img src="images/btn_stonelisting.png" onclick="submitListing()">
+    <img src="images/btn_imageupload.png" onclick="uploadImage()">
   </div>
 
   <script>
@@ -199,6 +200,11 @@
         console.error(err);
         alert("서버 호출 중 오류가 발생했습니다.");
       }
+    }
+
+    function uploadImage() {
+      alert("이미지 업로드 기능 구현 예정");
+      // 여기에 Google Form 연동 또는 드라이브 업로드 스크립트 연결
     }
   </script>
 
