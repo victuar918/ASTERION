@@ -10,36 +10,37 @@
       font-family: Arial, Helvetica, sans-serif;
       color: #2b1e08;
       background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
-      height: 100vh;
+      min-height: 100vh;
     }
 
+    .container {
+      padding: 20px 40px 100px 40px;
+    }
+
+    /* 타이틀 이미지 */
     .title-img {
       width: 95%;
       display: block;
       margin: 20px auto 30px auto;
     }
 
-    .container {
-      padding: 0 40px 120px 40px; /* 하단 버튼 공간 확보 */
-      max-width: 600px;
-      margin: 0 auto;
-    }
-
+    /* 텍스트 입력 */
     .input-group {
       display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-      justify-content: center;
+      flex-direction: column;
+      max-width: 400px;
+      margin: 0 auto 20px auto;
     }
 
     .input-group input {
-      flex: 1;
-      padding: 10px;
       font-size: 16px;
+      padding: 10px;
+      margin-bottom: 10px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
     }
 
+    /* 사이즈+Stock 라인 */
     .stone-line {
       display: flex;
       align-items: center;
@@ -47,22 +48,33 @@
       margin-bottom: 10px;
     }
 
-    .stone-line select,
-    .stone-line input {
-      padding: 6px;
-      font-size: 14px;
-      border: 1px solid #d8ad3c;
+    .stone-line select {
+      padding: 8px;
+      border: 2px solid #d8ad3c;
       border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .stone-line input.stock-input {
+      width: 25%; /* 너비 1/4 */
+      padding: 8px;
+      border: 2px solid #d8ad3c;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .stone-line .pcs-label {
+      font-size: 14px;
     }
 
     .stone-line button.add-line {
       padding: 6px 10px;
       font-size: 16px;
       cursor: pointer;
-      background-color: #d8ad3c;
-      color: #fff;
       border: none;
       border-radius: 4px;
+      background-color: #d8ad3c;
+      color: white;
       transition: 0.2s;
     }
 
@@ -70,6 +82,7 @@
       opacity: 0.8;
     }
 
+    /* 하단 네비게이션 */
     .bottom-nav {
       position: absolute;
       bottom: 5%;
@@ -93,17 +106,17 @@
 
 <body>
 
-  <!-- 타이틀 -->
-  <img src="images/ttl_newlisting.png" alt="New Listing" class="title-img">
-
   <div class="container">
+    <!-- 타이틀 -->
+    <img src="images/ttl_gemstonelist.png" alt="New Listing" class="title-img">
+
     <!-- Name 입력 -->
     <div class="input-group">
       <input type="text" id="nameEng" placeholder="Name">
       <input type="text" id="nameKr" placeholder="원석명">
     </div>
 
-    <!-- Stone 입력 라인 -->
+    <!-- 사이즈/Stock 라인 -->
     <div id="stoneLines">
       <div class="stone-line">
         <select class="size-select">
@@ -115,23 +128,24 @@
           <option value="12mm">12mm</option>
         </select>
         <input type="number" class="stock-input" placeholder="Stock" min="0">
-        <span>PCS</span>
+        <span class="pcs-label">PCS</span>
         <button class="add-line">+</button>
       </div>
     </div>
+
   </div>
 
   <!-- 하단 버튼 -->
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
-    <img src="images/btn_go_before.png" onclick="goBefore()">
+    <img src="images/btn_before.png" onclick="goBack()">
     <img src="images/btn_stonelisting.png" onclick="submitListing()">
   </div>
 
   <script>
     const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzjX-kWbDv9P5f-tyNV8Txa6mqzzW7xbPX-GYbCwxH7yL7B80UohJkmaPGdhmjQWGo1sw/exec";
 
-    // 라인 추가 버튼
+    // + 버튼 클릭 시 라인 추가
     const stoneLines = document.getElementById("stoneLines");
     stoneLines.addEventListener("click", function (e) {
       if (e.target.classList.contains("add-line")) {
@@ -142,26 +156,23 @@
       }
     });
 
-    // 하단 버튼
     function goHome() {
       window.location.href = "index.html";
     }
 
-    function goBefore() {
-      window.location.href = "j.html"; // J화면으로 이동
+    function goBack() {
+      window.location.href = "inventory.html"; // J화면으로 이동
     }
 
-    // Listing 버튼
     async function submitListing() {
       const nameEng = document.getElementById("nameEng").value.trim();
-      const nameKr = document.getElementById("nameKr").value.trim();
-
+      const nameKr  = document.getElementById("nameKr").value.trim();
       if (!nameEng || !nameKr) return alert("NameEng와 NameKr를 입력해주세요.");
 
       const stones = [];
       document.querySelectorAll(".stone-line").forEach(line => {
-        const size = line.querySelector(".size-select").value;
-        const stock = line.querySelector(".stock-input").value.trim();
+        const size     = line.querySelector(".size-select").value;
+        const stock    = line.querySelector(".stock-input").value.trim();
         const stockNum = Number(stock);
         if (stock === "" || isNaN(stockNum) || stockNum < 0) return;
         stones.push({ NameEng: nameEng, NameKr: nameKr, Size: size, Stock: stockNum });
@@ -192,4 +203,5 @@
   </script>
 
 </body>
+
 </html>
