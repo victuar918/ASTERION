@@ -4,7 +4,6 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Select Tasking</title>
-
   <style>
     body {
       margin: 0;
@@ -73,22 +72,17 @@
 <body>
 
   <div class="container">
-
-    <div class="title">
-      Select Tasking
-    </div>
-
+    <div class="title">Select Tasking</div>
     <div id="taskList"></div>
-
   </div>
 
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
   </div>
 
+  <!-- 스크립트는 body 끝에 위치 -->
   <script>
-    const API_URL =
-      "https://script.google.com/macros/s/AKfycbyo3je07vljWl9ZnErIiG-bBG97v6tKSiRK1vyorPdY5r27Bznv7gx84Isdn93qIfX6bg/exec?action=getTaskingList";
+    const API_URL = "https://script.google.com/macros/s/AKfycbyo3je07vljWl9ZnErIiG-bBG97v6tKSiRK1vyorPdY5r27Bznv7gx84Isdn93qIfX6bg/exec?action=getTaskingList";
 
     async function loadTasking() {
       try {
@@ -100,31 +94,4 @@
           const row = document.createElement("div");
           row.className = "row";
 
-          row.innerHTML = `<div class="code">${item.StructureCode}</div>
-                           <div class="status">${item.Status}</div>`;
-
-          row.onclick = function () {
-            goStructure(item.StructureCode);
-          };
-
-          list.appendChild(row);
-        });
-      } catch (err) {
-        console.error("API error", err);
-      }
-    }
-
-    function goStructure(code) {
-      window.location.href = "structuredesign.html?code=" + code;
-    }
-
-    function goHome() {
-      window.location.href = "index.html";
-    }
-
-    loadTasking();
-  </script>
-
-</body>
-
-</html>
+          // 백
