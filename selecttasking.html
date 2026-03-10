@@ -1,0 +1,141 @@
+<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Select Tasking</title><style>
+
+body{
+margin:0;
+font-family:Arial, Helvetica, sans-serif;
+color:#2b1e08;
+
+background:linear-gradient(
+135deg,
+#f4e7c5 0%,
+#d4af37 35%,
+#b8962e 65%,
+#8f6b1c 100%
+);
+
+height:100vh;
+}
+
+.container{
+padding:40px;
+}
+
+.title{
+font-size:36px;
+font-weight:600;
+margin-bottom:40px;
+}
+
+.row{
+
+display:flex;
+justify-content:space-between;
+
+font-size:24px;
+
+padding:14px 0;
+
+cursor:pointer;
+
+}
+
+.row:hover{
+opacity:0.6;
+}
+
+.code{
+font-weight:600;
+}
+
+.status{
+opacity:0.8;
+}
+
+.bottom-nav{
+
+position:absolute;
+
+bottom:20%;
+
+left:50%;
+
+transform:translateX(-50%);
+
+}
+
+.bottom-nav img{
+
+width:90px;
+
+cursor:pointer;
+
+transition:0.2s;
+
+}
+
+.bottom-nav img:hover{
+
+transform:scale(1.08);
+
+}
+
+</style></head><body><div class="container"><div class="title">
+Select Tasking
+</div><div id="taskList"></div></div><div class="bottom-nav"><img src="images/btn_go_home.png" onclick="goHome()"></div><script>
+
+const API_URL =
+"https://script.google.com/macros/s/AKfycbyo3je07vljWl9ZnErIiG-bBG97v6tKSiRK1vyorPdY5r27Bznv7gx84Isdn93qIfX6bg/exec?action=getTaskingList";
+
+async function loadTasking(){
+
+try{
+
+const response = await fetch(API_URL);
+const data = await response.json();
+
+const list = document.getElementById("taskList");
+
+data.forEach(item=>{
+
+const row=document.createElement("div");
+row.className="row";
+
+row.innerHTML=`
+<div class="code">${item.StructureCode}</div>
+<div class="status">${item.Status}</div>
+`;
+
+row.onclick=function(){
+
+goStructure(item.StructureCode);
+
+};
+
+list.appendChild(row);
+
+});
+
+}catch(err){
+
+console.error("API error",err);
+
+}
+
+}
+
+function goStructure(code){
+
+window.location.href="structuredesign.html?code="+code;
+
+}
+
+function goHome(){
+
+window.location.href="index.html";
+
+}
+
+loadTasking();
+
+</script></body></html>
