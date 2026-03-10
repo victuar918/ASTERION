@@ -13,8 +13,9 @@
       min-height: 100vh;
     }
 
+    /* 컨테이너 */
     .container {
-      padding: 20px 40px 120px 40px;
+      padding: 20px 40px 120px 40px; /* 하단 버튼 여백 확보 */
     }
 
     /* 타이틀 이미지 */
@@ -24,7 +25,7 @@
       margin: 20px auto 30px auto;
     }
 
-    /* 텍스트 입력 */
+    /* Name 입력 */
     .input-group {
       display: flex;
       flex-direction: column;
@@ -84,29 +85,34 @@
 
     /* 하단 네비게이션 */
     .bottom-nav {
-      position: absolute;
-      bottom: 5%;
-      left: 50%;
-      transform: translateX(-50%);
+      position: fixed;       /* 화면 하단 고정 */
+      bottom: 20px;
+      left: 0;
+      right: 0;
       display: flex;
-      gap: 20px;
+      justify-content: center;
+      gap: 24px;           /* 기존보다 70% 간격으로 축소 */
+      padding: 0 10px;
+      z-index: 1000;
     }
 
     .bottom-nav img {
-      width: 90px;
+      width: 63px;      /* 기존보다 두 배로 늘림 (원래 31.5px였음) */
+      height: auto;
       cursor: pointer;
-      transition: 0.2s;
+      transition: transform 0.2s;
+      object-fit: contain;
     }
 
     .bottom-nav img:hover {
-      transform: scale(1.08);
+      transform: scale(1.1);
     }
   </style>
 </head>
 
 <body>
 
-  <!-- 타이틀 이미지 -->
+  <!-- 타이틀 이미지: 컨테이너 밖 -->
   <img src="images/ttl_gemstonelist.png" alt="New Listing" class="title-img">
 
   <div class="container">
@@ -132,10 +138,9 @@
         <button class="add-line">+</button>
       </div>
     </div>
-
   </div>
 
-  <!-- 하단 버튼 4개: 홈 / Before / Listing / 이미지 업로드 -->
+  <!-- 하단 버튼: 총 4개 -->
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
     <img src="images/btn_go_before.png" onclick="goBack()">
@@ -162,7 +167,12 @@
     }
 
     function goBack() {
-      window.location.href = "inventory.html"; // J화면으로 이동
+      window.location.href = "inventory.html"; // J화면
+    }
+
+    function uploadImage() {
+      // 추후 이미지 업로드 처리 함수
+      alert("이미지 업로드 버튼 클릭됨.");
     }
 
     async function submitListing() {
@@ -191,7 +201,7 @@
         if (result.success) {
           alert(result.message);
           document.getElementById("nameEng").value = "";
-          document.getElementById("nameKr").value = "";
+          document.getElementById("nameKr").value  = "";
           document.querySelectorAll(".stock-input").forEach(inp => inp.value = "");
         } else {
           alert("Error: " + result.error);
@@ -200,11 +210,6 @@
         console.error(err);
         alert("서버 호출 중 오류가 발생했습니다.");
       }
-    }
-
-    function uploadImage() {
-      alert("이미지 업로드 기능 구현 예정");
-      // 여기에 Google Form 연동 또는 드라이브 업로드 스크립트 연결
     }
   </script>
 
