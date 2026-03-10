@@ -9,53 +9,63 @@
       margin: 0;
       font-family: Arial, Helvetica, sans-serif;
       color: #2b1e08;
-      background: linear-gradient(
-        135deg,
-        #fff6da 0%,
-        #f5d97a 40%,
-        #eac45a 70%,
-        #d8ad3c 100%
-      );
+      background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
       height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
     }
 
-    /* 타이틀 고정 */
+    /* 전체 컨테이너 */
+    .container {
+      padding: 20px 40px 100px 40px; /* 하단 공간 확보 */
+    }
+
+    /* 타이틀 이미지 */
     .title-img {
-      display: block;
       width: 95%;
-      max-width: 1400px;
-      margin: 10px auto 35px auto; /* 상단 여백 10px, 아래 여백 35px */
+      display: block;
+      margin: 20px auto 30px auto; /* 상단 여백 + 아래 간격 */
     }
 
-    /* 입력 컨테이너 */
-    .input-container {
+    /* StructureCode 입력 */
+    .input-group {
       display: flex;
       flex-direction: column;
-      width: 90%;
-      max-width: 500px;
-      margin-bottom: 40px;
+      max-width: 400px;
+      margin: 0 auto 30px auto;
     }
 
-    .input-container input {
-      font-size: 18px;
+    .input-group input {
+      font-size: 16px;
       padding: 10px;
-      margin-bottom: 20px;
-      text-transform: uppercase; /* 입력 자동 대문자 처리 */
-      border: 1px solid #d8ad3c;
-      border-radius: 6px;
+      margin-bottom: 10px;
+      border: 2px solid #d8ad3c;
+      border-radius: 4px;
+      text-transform: uppercase; /* 자동 대문자 */
     }
 
-    /* 버튼 하단 고정 */
+    .input-group button {
+      font-size: 16px;
+      padding: 10px;
+      margin-bottom: 10px;
+      background-color: #d8ad3c;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .input-group button:hover {
+      opacity: 0.8;
+    }
+
+    /* 하단 네비게이션 버튼 */
     .bottom-nav {
       position: absolute;
-      bottom: 10%;
+      bottom: 5%;
+      left: 50%;
+      transform: translateX(-50%);
       display: flex;
       gap: 20px;
-      justify-content: center;
-      width: 100%;
     }
 
     .bottom-nav img {
@@ -72,53 +82,67 @@
 
 <body>
 
-  <!-- 타이틀 이미지: 컨테이너 밖 -->
-  <img src="images/ttl_codeindex.png" alt="Structure Code Index"
-     style="width:95%; margin-top:20px; display:block; margin-left:auto; margin-right:auto;">
+  <div class="container">
+    <!-- 타이틀 이미지 -->
+    <img src="images/ttl_codeindex.png" alt="Structure Code Index" class="title-img">
 
-  <!-- 입력 컨테이너 -->
-  <div class="input-container">
-    <input id="structureCode" placeholder="Enter StructureCode [S-00000-000000]">
+    <!-- 입력 영역 -->
+    <div class="input-group">
+      <input type="text" id="structureCode" placeholder="Enter Structure Code" maxlength="13">
+      <button onclick="setAS()">A/S</button>
+      <button onclick="selectCode()">Select</button>
+    </div>
   </div>
 
-  <!-- 하단 버튼 -->
+  <!-- 하단 네비게이션 -->
   <div class="bottom-nav">
-    <img src="images/btn_go_home.png" onclick="goHome()" alt="Home">
-    <img src="images/btn_forwarding.png" onclick="updateAS()" alt="A/S">
-    <img src="images/btn_go_next.png" onclick="goSelect()" alt="Select">
+    <img src="images/btn_go_home.png" onclick="goHome()">
+    <img src="images/btn_as.png" onclick="setAS()">
+    <img src="images/btn_select.png" onclick="selectCode()">
   </div>
 
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbwj3LYGr7Z3X7UCR6gOdZ32exbsWkxQ1zEFDEgJKop3w3nA4XPX9lSqBW8rUHv7uwZmFQ/exec";
 
-    function goHome() {
-      window.location.href = "index.html";
-    }
+    // 입력값 처리: 대문자 + 하이픈 자동
+    const input = document.getElementById("structureCode");
+    input.addEventListener("input", function () {
+      let val = input.value.toUpperCase().replace(/[^0-9A-Z]/g, '');
+      // 중간 하이픈 추가: S-00000-000000 형식
+      if (val.length > 1) val = val.slice(0, 1) + '-' + val.slice(1);
+      if (val.length > 7) val = val.slice(0, 7) + '-' + val.slice(7);
+      input.value = val.slice(0, 13);
+    });
 
-    async function updateAS() {
-      const code = document.getElementById("structureCode").value.toUpperCase();
-      if (!code) return alert("StructureCode를 입력하세요.");
+    async function setAS() {
+      const code = input.value;
+      if (!code) return alert("StructureCode를 입력해주세요.");
 
-      const res = await fetch(API_URL, {
-        method: "POST",
-        body: JSON.stringify({
-          action: "updateStatus",
-          structureCode: code,
-          newStatus: "A/S"
-        })
-      }).then(r => r.json());
-
-      if (res.success) {
-        alert(code + " 상태가 A/S로 변경되었습니다.");
-      } else {
-        alert("오류: " + res.error);
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          body: JSON.stringify({ action: "updateStatus", structureCode: code, newStatus: "A/S" })
+        });
+        const result = await res.json();
+        if (result.success) {
+          alert(code + " 상태가 A/S로 변경되었습니다.");
+        } else {
+          alert("Error: " + result.error);
+        }
+      } catch (err) {
+        console.error(err);
+        alert("API 호출 중 오류가 발생했습니다.");
       }
     }
 
-    function goSelect() {
-      const code = document.getElementById("structureCode").value.toUpperCase();
-      if (!code) return alert("StructureCode를 입력하세요.");
+    function selectCode() {
+      const code = input.value;
+      if (!code) return alert("StructureCode를 입력해주세요.");
       window.location.href = "structuredesign.html?code=" + code;
+    }
+
+    function goHome() {
+      window.location.href = "index.html";
     }
   </script>
 
