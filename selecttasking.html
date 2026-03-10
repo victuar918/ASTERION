@@ -1,125 +1,111 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="ko">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Select Tasking</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      color: #2b1e08;
-      background: linear-gradient(
-        135deg,
-        #fff6da 0%,
-        #f5d97a 40%,
-        #eac45a 70%,
-        #d8ad3c 100%
-      );
-      height: 100vh;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Select Tasking</title>
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(to bottom right, #fff8e1, #ffe082); /* 밝은 골드 그라데이션 */
+  }
 
-    .container {
-      padding: 40px;
-    }
+  /* 상단 타이틀 이미지 */
+  .title-img {
+    display: block;
+    width: 95%;      /* 좌우 95% */
+    max-width: 1400px; /* 화면이 크면 최대폭 제한 가능 */
+    margin: 10px auto; /* 상단 여백 + 중앙 정렬 */
+  }
 
-    .title {
-      font-size: 32px;
-      font-weight: 500;
-      letter-spacing: 1px;
-      margin-bottom: 35px;
-    }
+  /* 목록 스타일 */
+  #list {
+    margin: 20px auto;
+    width: 95%;
+    max-width: 1400px;
+  }
 
-    .row {
-      display: flex;
-      justify-content: space-between;
-      font-size: 12px;
-      padding: 10px 0;
-      cursor: pointer;
-    }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    background: rgba(255, 255, 255, 0.2); /* 반투명 */
+    cursor: pointer;
+    font-size: 0.5rem; /* 텍스트 크기 50%로 감소 */
+  }
 
-    .row:hover {
-      opacity: 0.6;
-    }
+  .buttons {
+    position: fixed;
+    bottom: 16.66%; /* 화면 하단 5/6 지점 */
+    width: 95%;
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-around;
+  }
 
-    .code {
-      font-weight: 600;
-    }
-
-    .status {
-      opacity: 0.8;
-    }
-
-    .bottom-nav {
-      position: absolute;
-      bottom: 10%;
-      left: 50%;
-      transform: translateX(-50%);
-    }
-
-    .bottom-nav img {
-      width: 90px;
-      cursor: pointer;
-      transition: 0.2s;
-    }
-
-    .bottom-nav img:hover {
-      transform: scale(1.08);
-    }
-  </style>
+  .buttons img {
+    height: 60px;
+    cursor: pointer;
+  }
+</style>
 </head>
-
 <body>
 
-  <div class="container">
-    <div class="title">Select Tasking</div>
-    <div id="taskList"></div>
-  </div>
+<!-- 상단 타이틀 이미지 -->
+<img src="images/ttl_selecttasking.png" alt="Select Tasking" class="title-img">
 
-  <div class="bottom-nav">
-    <img src="images/btn_go_home.png" onclick="goHome()">
-  </div>
+<!-- StructureCode / Status 목록 -->
+<div id="list"></div>
 
-  <!-- 스크립트는 body 끝에 위치 -->
-  <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbyo3je07vljWl9ZnErIiG-bBG97v6tKSiRK1vyorPdY5r27Bznv7gx84Isdn93qIfX6bg/exec?action=getTaskingList";
+<!-- 하단 버튼 -->
+<div class="buttons">
+  <img src="images/btn_go_before.png" alt="Before" onclick="goBefore()">
+  <img src="images/btn_go_home.png" alt="Home" onclick="goHome()">
+  <img src="images/btn_go_next.png" alt="Next" onclick="goNext()">
+</div>
 
-    async function loadTasking() {
-      try {
-        const response = await fetch(API_URL);
-        const data = await response.json();
-        const list = document.getElementById("taskList");
+<script>
+async function loadTasking() {
+  try {
+    const res = await fetch('YOUR_APPS_SCRIPT_URL?action=getTaskingList');
+    const data = await res.json();
+    const list = document.getElementById('list');
+    list.innerHTML = '';
 
-        data.forEach(item => {
-          const row = document.createElement("div");
-          row.className = "row";
+    data.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.textContent = `${item.StructureCode} - ${item.Status}`;
+      row.onclick = () => goStructure(item.StructureCode);
+      list.appendChild(row);
+    });
+  } catch(err) {
+    console.error("API error", err);
+  }
+}
 
-          // 백틱으로 HTML 문자열 생성
-          row.innerHTML = `<div class="code">${item.StructureCode}</div>
-                           <div class="status">${item.Status}</div>`;
+function goStructure(code) {
+  window.location.href = "structuredesign.html?code=" + code;
+}
 
-          row.onclick = function () {
-            goStructure(item.StructureCode);
-          };
+function goHome() {
+  window.location.href = "index.html";
+}
 
-          list.appendChild(row);
-        });
-      } catch (err) {
-        console.error("API error", err);
-      }
-    }
+function goBefore() {
+  window.history.back();
+}
 
-    function goStructure(code) {
-      window.location.href = "structuredesign.html?code=" + code;
-    }
+function goNext() {
+  // 다음 화면 이동 로직 필요 시 작성
+}
 
-    function goHome() {
-      window.location.href = "index.html";
-    }
-
-    loadTasking();
-  </script>
+loadTasking();
+</script>
 
 </body>
-
 </html>
