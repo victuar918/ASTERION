@@ -3,34 +3,33 @@
 
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>New Listing</title>
+  <title>Structure Code Index</title>
   <style>
     body {
       margin: 0;
       font-family: Arial, Helvetica, sans-serif;
       color: #2b1e08;
       background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
-      min-height: 100vh;
-    }
-
-    /* 컨테이너 */
-    .container {
-      padding: 20px 40px 120px 40px; /* 하단 버튼 여백 확보 */
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
     /* 타이틀 이미지 */
     .title-img {
       width: 95%;
+      margin: 20px auto 30px auto; /* 상단 여백 + 아래 간격 */
       display: block;
-      margin: 20px auto 30px auto;
     }
 
-    /* Name 입력 */
+    /* 입력 영역 */
     .input-group {
       display: flex;
       flex-direction: column;
-      max-width: 400px;
-      margin: 0 auto 20px auto;
+      width: 400px;
+      margin-top: auto;
+      margin-bottom: auto; /* 화면 중간 배치 */
     }
 
     .input-group input {
@@ -39,177 +38,107 @@
       margin-bottom: 10px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
+      text-transform: uppercase;
     }
 
-    /* 사이즈+Stock 라인 */
-    .stone-line {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    .stone-line select {
-      padding: 8px;
-      border: 2px solid #d8ad3c;
-      border-radius: 4px;
-      font-size: 14px;
-    }
-
-    .stone-line input.stock-input {
-      width: 25%; /* 너비 1/4 */
-      padding: 8px;
-      border: 2px solid #d8ad3c;
-      border-radius: 4px;
-      font-size: 14px;
-    }
-
-    .stone-line .pcs-label {
-      font-size: 14px;
-    }
-
-    .stone-line button.add-line {
-      padding: 6px 10px;
-      font-size: 16px;
-      cursor: pointer;
-      border: none;
-      border-radius: 4px;
-      background-color: #d8ad3c;
-      color: white;
-      transition: 0.2s;
-    }
-
-    .stone-line button.add-line:hover {
-      opacity: 0.8;
-    }
-
-    /* 하단 네비게이션 */
+    /* 하단 네비게이션 버튼 */
     .bottom-nav {
-      position: fixed;       /* 화면 하단 고정 */
-      bottom: 20px;
-      left: 0;
-      right: 0;
+      position: absolute;
+      bottom: 5%;
+      left: 50%;
+      transform: translateX(-50%);
       display: flex;
-      justify-content: center;
-      gap: 24px;           /* 기존보다 70% 간격으로 축소 */
-      padding: 0 10px;
-      z-index: 1000;
+      gap: 20px;
     }
 
     .bottom-nav img {
-      width: 63px;      /* 기존보다 두 배로 늘림 (원래 31.5px였음) */
-      height: auto;
+      width: 90px;
       cursor: pointer;
-      transition: transform 0.2s;
-      object-fit: contain;
+      transition: 0.2s;
     }
 
     .bottom-nav img:hover {
-      transform: scale(1.1);
+      transform: scale(1.08);
     }
   </style>
 </head>
 
 <body>
 
-  <!-- 타이틀 이미지: 컨테이너 밖 -->
-  <img src="images/ttl_gemstonelist.png" alt="New Listing" class="title-img">
+  <!-- 타이틀 이미지 (컨테이너 밖) -->
+  <img src="images/ttl_codeindex.png" alt="Structure Code Index" class="title-img">
 
-  <div class="container">
-    <!-- Name 입력 -->
-    <div class="input-group">
-      <input type="text" id="nameEng" placeholder="Name">
-      <input type="text" id="nameKr" placeholder="원석명">
-    </div>
-
-    <!-- 사이즈/Stock 라인 -->
-    <div id="stoneLines">
-      <div class="stone-line">
-        <select class="size-select">
-          <option value="4mm">4mm</option>
-          <option value="5mm">5mm</option>
-          <option value="6mm">6mm</option>
-          <option value="8mm">8mm</option>
-          <option value="10mm">10mm</option>
-          <option value="12mm">12mm</option>
-        </select>
-        <input type="number" class="stock-input" placeholder="Stock" min="0">
-        <span class="pcs-label">PCS</span>
-        <button class="add-line">+</button>
-      </div>
-    </div>
+<!-- 입력창 -->
+  <div class="input-group">
+    <input type="text" id="structureCode" placeholder="S-00000-000000">
   </div>
 
-  <!-- 하단 버튼: 총 4개 -->
+  <style>
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      width: 35vw; /* 화면 가로의 35% */
+      margin: 0 auto;
+      position: absolute;
+      top: 40%; /* 화면 세로 기준 3/6 지점 */
+      transform: translateY(-50%);
+    }
+  </style>
+
+  <!-- 하단 버튼 -->
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
-    <img src="images/btn_go_before.png" onclick="goBack()">
-    <img src="images/btn_stonelisting.png" onclick="submitListing()">
-    <img src="images/btn_imageupload.png" onclick="uploadImage()">
+    <img src="images/btn_as.png" onclick="setAS()">
+    <img src="images/btn_select.png" onclick="selectCode()">
   </div>
 
   <script>
-    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzjX-kWbDv9P5f-tyNV8Txa6mqzzW7xbPX-GYbCwxH7yL7B80UohJkmaPGdhmjQWGo1sw/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbwj3LYGr7Z3X7UCR6gOdZ32exbsWkxQ1zEFDEgJKop3w3nA4XPX9lSqBW8rUHv7uwZmFQ/exec";
 
-    // + 버튼 클릭 시 라인 추가
-    const stoneLines = document.getElementById("stoneLines");
-    stoneLines.addEventListener("click", function (e) {
-      if (e.target.classList.contains("add-line")) {
-        const newLine = e.target.parentElement.cloneNode(true);
-        newLine.querySelector("input").value = "";
-        newLine.querySelector("select").selectedIndex = 0;
-        stoneLines.appendChild(newLine);
-      }
+    const input = document.getElementById("structureCode");
+
+    // 자동 대문자 + S-00000-000000 형식
+    input.addEventListener("input", function () {
+      let val = input.value.toUpperCase().replace(/[^0-9A-Z]/g, '');
+
+      if (!val.startsWith('S')) val = 'S' + val.slice(1);
+
+      if (val.length > 1) val = val.slice(0, 1) + '-' + val.slice(1);
+      if (val.length > 7) val = val.slice(0, 7) + '-' + val.slice(7);
+      if (val.length > 14) val = val.slice(0, 14);
+
+      input.value = val;
     });
 
-    function goHome() {
-      window.location.href = "index.html";
-    }
-
-    function goBack() {
-      window.location.href = "inventory.html"; // J화면
-    }
-
-    function uploadImage() {
-      // 추후 이미지 업로드 처리 함수
-      alert("이미지 업로드 버튼 클릭됨.");
-    }
-
-    async function submitListing() {
-      const nameEng = document.getElementById("nameEng").value.trim();
-      const nameKr  = document.getElementById("nameKr").value.trim();
-      if (!nameEng || !nameKr) return alert("NameEng와 NameKr를 입력해주세요.");
-
-      const stones = [];
-      document.querySelectorAll(".stone-line").forEach(line => {
-        const size     = line.querySelector(".size-select").value;
-        const stock    = line.querySelector(".stock-input").value.trim();
-        const stockNum = Number(stock);
-        if (stock === "" || isNaN(stockNum) || stockNum < 0) return;
-        stones.push({ NameEng: nameEng, NameKr: nameKr, Size: size, Stock: stockNum });
-      });
-
-      if (stones.length === 0) return alert("적어도 한 개의 사이즈+Stock을 입력해야 합니다.");
+    async function setAS() {
+      const code = input.value;
+      if (!code) return alert("StructureCode를 입력해주세요.");
 
       try {
-        const res = await fetch(WEBAPP_URL, {
+        const res = await fetch(API_URL, {
           method: "POST",
-          headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify({ action: "addNewStones", stones })
+          body: JSON.stringify({ action: "updateStatus", structureCode: code, newStatus: "A/S" })
         });
         const result = await res.json();
         if (result.success) {
-          alert(result.message);
-          document.getElementById("nameEng").value = "";
-          document.getElementById("nameKr").value  = "";
-          document.querySelectorAll(".stock-input").forEach(inp => inp.value = "");
+          alert(code + " 상태가 A/S로 변경되었습니다.");
         } else {
           alert("Error: " + result.error);
         }
       } catch (err) {
         console.error(err);
-        alert("서버 호출 중 오류가 발생했습니다.");
+        alert("API 호출 중 오류가 발생했습니다.");
       }
+    }
+
+    function selectCode() {
+      const code = input.value;
+      if (!code) return alert("StructureCode를 입력해주세요.");
+      window.location.href = "structuredesign.html?code=" + code;
+    }
+
+    function goHome() {
+      window.location.href = "index.html";
     }
   </script>
 
