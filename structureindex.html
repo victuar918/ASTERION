@@ -13,8 +13,9 @@
       min-height: 100vh;
     }
 
+    /* 컨테이너 */
     .container {
-      padding: 20px 40px 100px 40px;
+      padding: 20px 40px 120px 40px; /* 하단 버튼 여백 확보 */
     }
 
     /* 타이틀 이미지 */
@@ -24,7 +25,7 @@
       margin: 20px auto 30px auto;
     }
 
-    /* 텍스트 입력 */
+    /* Name 입력 */
     .input-group {
       display: flex;
       flex-direction: column;
@@ -56,7 +57,7 @@
     }
 
     .stone-line input.stock-input {
-      width: 25% !important; /* 너비 1/4 */
+      width: 25%; /* 너비 1/4 */
       padding: 8px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
@@ -68,8 +69,8 @@
     }
 
     .stone-line button.add-line {
-      padding: 6px 10px !important;
-      font-size: 16px !important;
+      padding: 6px 10px;
+      font-size: 16px;
       cursor: pointer;
       border: none;
       border-radius: 4px;
@@ -84,29 +85,34 @@
 
     /* 하단 네비게이션 */
     .bottom-nav {
-      position: absolute;
-      bottom: 5%;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex !important;
-      gap: 6px !important; /* 간격 70% 축소 */
+      position: fixed;       /* 화면 하단 고정 */
+      bottom: 20px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      gap: 2.4px;           /* 기존보다 70% 간격으로 축소 */
+      padding: 0 10px;
+      z-index: 1000;
     }
 
     .bottom-nav img {
-      width: 63px !important; /* 버튼 크기 70% */
+      width: 31.5px;         /* 기존 45px 대비 약 30% 더 축소 */
+      height: auto;
       cursor: pointer;
-      transition: 0.2s;
+      transition: transform 0.2s;
+      object-fit: contain;
     }
 
     .bottom-nav img:hover {
-      transform: scale(1.08);
+      transform: scale(1.1);
     }
   </style>
 </head>
 
 <body>
 
-  <!-- 타이틀은 꼭 컨테이너 밖 -->
+  <!-- 타이틀 이미지: 컨테이너 밖 -->
   <img src="images/ttl_gemstonelist.png" alt="New Listing" class="title-img">
 
   <div class="container">
@@ -134,12 +140,12 @@
     </div>
   </div>
 
-  <!-- 하단 버튼 -->
+  <!-- 하단 버튼: 총 4개 -->
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
     <img src="images/btn_go_before.png" onclick="goBack()">
-    <img src="images/btn_imageupload.png" onclick="uploadImage()">
     <img src="images/btn_stonelisting.png" onclick="submitListing()">
+    <img src="images/btn_imageupload.png" onclick="uploadImage()">
   </div>
 
   <script>
@@ -161,22 +167,23 @@
     }
 
     function goBack() {
-      window.location.href = "inventory.html"; // J화면으로 이동
+      window.location.href = "inventory.html"; // J화면
     }
 
     function uploadImage() {
-      alert("이미지 업로드 기능 구현 예정");
+      // 추후 이미지 업로드 처리 함수
+      alert("이미지 업로드 버튼 클릭됨.");
     }
 
     async function submitListing() {
       const nameEng = document.getElementById("nameEng").value.trim();
-      const nameKr = document.getElementById("nameKr").value.trim();
+      const nameKr  = document.getElementById("nameKr").value.trim();
       if (!nameEng || !nameKr) return alert("NameEng와 NameKr를 입력해주세요.");
 
       const stones = [];
       document.querySelectorAll(".stone-line").forEach(line => {
-        const size = line.querySelector(".size-select").value;
-        const stock = line.querySelector(".stock-input").value.trim();
+        const size     = line.querySelector(".size-select").value;
+        const stock    = line.querySelector(".stock-input").value.trim();
         const stockNum = Number(stock);
         if (stock === "" || isNaN(stockNum) || stockNum < 0) return;
         stones.push({ NameEng: nameEng, NameKr: nameKr, Size: size, Stock: stockNum });
@@ -194,7 +201,7 @@
         if (result.success) {
           alert(result.message);
           document.getElementById("nameEng").value = "";
-          document.getElementById("nameKr").value = "";
+          document.getElementById("nameKr").value  = "";
           document.querySelectorAll(".stock-input").forEach(inp => inp.value = "");
         } else {
           alert("Error: " + result.error);
@@ -207,4 +214,5 @@
   </script>
 
 </body>
+
 </html>
