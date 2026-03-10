@@ -94,4 +94,32 @@
           const row = document.createElement("div");
           row.className = "row";
 
-          // 백
+          // 백틱으로 HTML 문자열 생성
+          row.innerHTML = `<div class="code">${item.StructureCode}</div>
+                           <div class="status">${item.Status}</div>`;
+
+          row.onclick = function () {
+            goStructure(item.StructureCode);
+          };
+
+          list.appendChild(row);
+        });
+      } catch (err) {
+        console.error("API error", err);
+      }
+    }
+
+    function goStructure(code) {
+      window.location.href = "structuredesign.html?code=" + code;
+    }
+
+    function goHome() {
+      window.location.href = "index.html";
+    }
+
+    loadTasking();
+  </script>
+
+</body>
+
+</html>
