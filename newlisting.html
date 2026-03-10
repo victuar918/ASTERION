@@ -13,9 +13,9 @@
       min-height: 100vh;
     }
 
-    /* 컨테이너 */
+    /* 전체 컨테이너 */
     .container {
-      padding: 20px 40px 120px 40px; /* 하단 버튼 여백 확보 */
+      padding: 20px 40px 150px 40px;
     }
 
     /* 타이틀 이미지 */
@@ -25,18 +25,28 @@
       margin: 20px auto 30px auto;
     }
 
-    /* Name 입력 */
+    /* 텍스트 입력 */
     .input-group {
       display: flex;
       flex-direction: column;
       max-width: 400px;
       margin: 0 auto 20px auto;
+      font-size: 14px;
     }
 
     .input-group input {
-      font-size: 16px;
-      padding: 10px;
+      font-size: 14px;
+      padding: 8px;
       margin-bottom: 10px;
+      border: 2px solid #d8ad3c;
+      border-radius: 4px;
+    }
+
+    /* Exp 입력창 */
+    #expInput {
+      font-size: 14px;
+      padding: 8px;
+      margin-bottom: 15px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
     }
@@ -50,7 +60,7 @@
     }
 
     .stone-line select {
-      padding: 8px;
+      padding: 6px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
       font-size: 14px;
@@ -58,7 +68,7 @@
 
     .stone-line input.stock-input {
       width: 25%; /* 너비 1/4 */
-      padding: 8px;
+      padding: 6px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
       font-size: 14px;
@@ -69,7 +79,7 @@
     }
 
     .stone-line button.add-line {
-      padding: 6px 10px;
+      padding: 4px 8px;
       font-size: 16px;
       cursor: pointer;
       border: none;
@@ -85,19 +95,18 @@
 
     /* 하단 네비게이션 */
     .bottom-nav {
-      position: fixed;       /* 화면 하단 고정 */
+      position: fixed;
       bottom: 20px;
       left: 0;
       right: 0;
       display: flex;
       justify-content: center;
-      gap: 24px;           /* 기존보다 70% 간격으로 축소 */
-      padding: 0 10px;
+      gap: 60px; /* 버튼 간격 */
       z-index: 1000;
     }
 
     .bottom-nav img {
-      width: 63px;      /* 기존보다 두 배로 늘림 (원래 31.5px였음) */
+      width: 90px;
       height: auto;
       cursor: pointer;
       transition: transform 0.2s;
@@ -112,14 +121,16 @@
 
 <body>
 
-  <!-- 타이틀 이미지: 컨테이너 밖 -->
+  <!-- 타이틀 -->
   <img src="images/ttl_gemstonelist.png" alt="New Listing" class="title-img">
 
   <div class="container">
-    <!-- Name 입력 -->
+
+    <!-- Name 및 Exp 입력 -->
     <div class="input-group">
       <input type="text" id="nameEng" placeholder="Name">
       <input type="text" id="nameKr" placeholder="원석명">
+      <input type="text" id="expInput" placeholder="원석에 대한 해설">
     </div>
 
     <!-- 사이즈/Stock 라인 -->
@@ -138,9 +149,10 @@
         <button class="add-line">+</button>
       </div>
     </div>
+
   </div>
 
-  <!-- 하단 버튼: 총 4개 -->
+  <!-- 하단 버튼 -->
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
     <img src="images/btn_go_before.png" onclick="goBack()">
@@ -167,26 +179,27 @@
     }
 
     function goBack() {
-      window.location.href = "inventory.html"; // J화면
+      window.location.href = "inventory.html"; // J화면으로 이동
     }
 
     function uploadImage() {
-      // 추후 이미지 업로드 처리 함수
-      alert("이미지 업로드 버튼 클릭됨.");
+      alert("이미지 업로드 기능은 추후 구현 예정");
     }
 
     async function submitListing() {
       const nameEng = document.getElementById("nameEng").value.trim();
       const nameKr  = document.getElementById("nameKr").value.trim();
+      const expText = document.getElementById("expInput").value.trim();
+
       if (!nameEng || !nameKr) return alert("NameEng와 NameKr를 입력해주세요.");
 
       const stones = [];
       document.querySelectorAll(".stone-line").forEach(line => {
-        const size     = line.querySelector(".size-select").value;
-        const stock    = line.querySelector(".stock-input").value.trim();
+        const size  = line.querySelector(".size-select").value;
+        const stock = line.querySelector(".stock-input").value.trim();
         const stockNum = Number(stock);
         if (stock === "" || isNaN(stockNum) || stockNum < 0) return;
-        stones.push({ NameEng: nameEng, NameKr: nameKr, Size: size, Stock: stockNum });
+        stones.push({ NameEng: nameEng, NameKr: nameKr, Size: size, Stock: stockNum, Exp: expText });
       });
 
       if (stones.length === 0) return alert("적어도 한 개의 사이즈+Stock을 입력해야 합니다.");
@@ -201,7 +214,8 @@
         if (result.success) {
           alert(result.message);
           document.getElementById("nameEng").value = "";
-          document.getElementById("nameKr").value  = "";
+          document.getElementById("nameKr").value = "";
+          document.getElementById("expInput").value = "";
           document.querySelectorAll(".stock-input").forEach(inp => inp.value = "");
         } else {
           alert("Error: " + result.error);
