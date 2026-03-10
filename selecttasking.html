@@ -1,108 +1,133 @@
-<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Select Tasking</title><style>
+<!DOCTYPE html>
+<html>
 
-body{
-margin:0;
-font-family:Arial, Helvetica, sans-serif;
-color:#2b1e08;
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Select Tasking</title>
 
-background:linear-gradient(
-135deg,
-#fff6da 0%,
-#f5d97a 40%,
-#eac45a 70%,
-#d8ad3c 100%
-);
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #2b1e08;
+      background: linear-gradient(
+        135deg,
+        #fff6da 0%,
+        #f5d97a 40%,
+        #eac45a 70%,
+        #d8ad3c 100%
+      );
+      height: 100vh;
+    }
 
-height:100vh;
-}
+    .container {
+      padding: 40px;
+    }
 
-.container{
-padding:40px;
-}
+    .title {
+      font-size: 32px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      margin-bottom: 35px;
+    }
 
-.title{
-font-size:32px;
-font-weight:500;
-letter-spacing:1px;
-margin-bottom:35px;
-}
+    .row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      padding: 10px 0;
+      cursor: pointer;
+    }
 
-.row{
+    .row:hover {
+      opacity: 0.6;
+    }
 
-display:flex;
-justify-content:space-between;
+    .code {
+      font-weight: 600;
+    }
 
-font-size:12px;
+    .status {
+      opacity: 0.8;
+    }
 
-padding:10px 0;
+    .bottom-nav {
+      position: absolute;
+      bottom: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+    }
 
-cursor:pointer;
+    .bottom-nav img {
+      width: 90px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
 
-}
+    .bottom-nav img:hover {
+      transform: scale(1.08);
+    }
+  </style>
+</head>
 
-.row:hover{
-opacity:0.6;
-}
+<body>
 
-.code{
-font-weight:600;
-}
+  <div class="container">
 
-.status{
-opacity:0.8;
-}
+    <div class="title">
+      Select Tasking
+    </div>
 
-.bottom-nav{
+    <div id="taskList"></div>
 
-position:absolute;
+  </div>
 
-bottom:20%;
+  <div class="bottom-nav">
+    <img src="images/btn_go_home.png" onclick="goHome()">
+  </div>
 
-left:50%;
+  <script>
+    const API_URL =
+      "https://script.google.com/macros/s/AKfycbyo3je07vljWl9ZnErIiG-bBG97v6tKSiRK1vyorPdY5r27Bznv7gx84Isdn93qIfX6bg/exec?action=getTaskingList";
 
-transform:translateX(-50%);
+    async function loadTasking() {
+      try {
+        const response = await fetch(API_URL);
+        const data = await response.json();
+        const list = document.getElementById("taskList");
 
-}
+        data.forEach(item => {
+          const row = document.createElement("div");
+          row.className = "row";
 
-.bottom-nav img{
+          row.innerHTML = `<div class="code">${item.StructureCode}</div>
+                           <div class="status">${item.Status}</div>`;
 
-width:90px;
+          row.onclick = function () {
+            goStructure(item.StructureCode);
+          };
 
-cursor:pointer;
+          list.appendChild(row);
+        });
+      } catch (err) {
+        console.error("API error", err);
+      }
+    }
 
-transition:0.2s;
+    function goStructure(code) {
+      window.location.href = "structuredesign.html?code=" + code;
+    }
 
-}
+    function goHome() {
+      window.location.href = "index.html";
+    }
 
-.bottom-nav img:hover{
+    loadTasking();
+  </script>
 
-transform:scale(1.08);
+</body>
 
-}
-
-</style></head><body><div class="container"><div class="title">
-Select Tasking
-</div><div id="taskList"></div></div><div class="bottom-nav"><img src="images/btn_go_home.png" onclick="goHome()"></div><script>
-
-const API_URL =
-"https://script.google.com/macros/s/AKfycbyo3je07vljWl9ZnErIiG-bBG97v6tKSiRK1vyorPdY5r27Bznv7gx84Isdn93qIfX6bg/exec?action=getTaskingList";
-
-async function loadTasking(){
-
-try{
-
-const response = await fetch(API_URL);
-const data = await response.json();
-
-const list = document.getElementById("taskList");
-
-data.forEach(item=>{
-
-const row=document.createElement("div");
-row.className="row";
-
-row.innerHTML=`
+</html>row.innerHTML=`
 <div class="code">${item.StructureCode}</div>
 <div class="status">${item.Status}</div>
 `;
