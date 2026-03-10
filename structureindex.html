@@ -16,10 +16,10 @@
       align-items: center;
     }
 
-    /* 타이틀 이미지 - 컨테이너 밖 */
+    /* 타이틀 이미지 */
     .title-img {
       width: 95%;
-      margin: 20px auto 0 auto;
+      margin: 20px auto 30px auto; /* 상단 여백 + 아래 간격 */
       display: block;
     }
 
@@ -27,19 +27,18 @@
     .input-group {
       display: flex;
       flex-direction: column;
-      max-width: 400px;
-      width: 80%;
-      margin: auto; /* 화면 세로 중앙 */
-      flex-grow: 1;
-      justify-content: center;
+      width: 400px;
+      margin-top: auto;
+      margin-bottom: auto; /* 화면 중간 배치 */
     }
 
     .input-group input {
       font-size: 16px;
       padding: 10px;
+      margin-bottom: 10px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
-      text-transform: uppercase; /* 자동 대문자 */
+      text-transform: uppercase;
     }
 
     /* 하단 네비게이션 버튼 */
@@ -66,15 +65,15 @@
 
 <body>
 
-  <!-- 타이틀 이미지 -->
+  <!-- 타이틀 이미지 (컨테이너 밖) -->
   <img src="images/ttl_codeindex.png" alt="Structure Code Index" class="title-img">
 
-  <!-- 입력 영역 -->
+  <!-- 입력창 -->
   <div class="input-group">
-    <input type="text" id="structureCode" placeholder="S-00000-000000" maxlength="13">
+    <input type="text" id="structureCode" placeholder="S-00000-000000">
   </div>
 
-  <!-- 하단 네비게이션 버튼 -->
+  <!-- 하단 버튼 -->
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
     <img src="images/btn_as.png" onclick="setAS()">
@@ -85,14 +84,16 @@
     const API_URL = "https://script.google.com/macros/s/AKfycbwj3LYGr7Z3X7UCR6gOdZ32exbsWkxQ1zEFDEgJKop3w3nA4XPX9lSqBW8rUHv7uwZmFQ/exec";
 
     const input = document.getElementById("structureCode");
+
+    // 자동 대문자 + S-00000-000000 형식
     input.addEventListener("input", function () {
       let val = input.value.toUpperCase().replace(/[^0-9A-Z]/g, '');
 
-      // S-00000-000000 형식: 맨 앞 'S', 첫 하이픈, 5자리, 두 번째 하이픈, 마지막 6자리
       if (!val.startsWith('S')) val = 'S' + val.slice(1);
-      if (val.length > 1) val = val.slice(0, 1) + '-' + val.slice(1);       // 첫 번째 하이픈
-      if (val.length > 7) val = val.slice(0, 7) + '-' + val.slice(7);      // 두 번째 하이픈
-      if (val.length > 13) val = val.slice(0, 13);                         // 총 13자리 제한
+
+      if (val.length > 1) val = val.slice(0, 1) + '-' + val.slice(1);
+      if (val.length > 7) val = val.slice(0, 7) + '-' + val.slice(7);
+      if (val.length > 14) val = val.slice(0, 14);
 
       input.value = val;
     });
