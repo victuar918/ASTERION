@@ -56,7 +56,7 @@
     }
 
     .stone-line input.stock-input {
-      width: 25%; /* 너비 1/4 */
+      width: 25%;
       padding: 8px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
@@ -89,13 +89,13 @@
       left: 50%;
       transform: translateX(-50%);
       display: flex;
-      gap: 15px; /* 버튼 간격 조정 */
+      gap: 4.5px; /* 기존 15px 대비 70% 축소 */
     }
 
     .bottom-nav img {
-      width: 63px;       /* 버튼 크기 70% */
-      max-width: none;   /* max-width 제한 해제 */
-      display: block;    /* block으로 강제 */
+      width: 44px; /* 기존 63px 대비 30% 축소 */
+      max-width: none;
+      display: block;
       cursor: pointer;
       transition: 0.2s;
     }
@@ -147,7 +147,6 @@
   <script>
     const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzjX-kWbDv9P5f-tyNV8Txa6mqzzW7xbPX-GYbCwxH7yL7B80UohJkmaPGdhmjQWGo1sw/exec";
 
-    // + 버튼 클릭 시 라인 추가
     const stoneLines = document.getElementById("stoneLines");
     stoneLines.addEventListener("click", function (e) {
       if (e.target.classList.contains("add-line")) {
@@ -168,7 +167,6 @@
 
     function uploadImage() {
       alert("이미지 업로드 기능 구현 예정");
-      // 구글 드라이브 업로드 로직 또는 구글폼 연동 구현
     }
 
     async function submitListing() {
