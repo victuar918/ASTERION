@@ -42,19 +42,19 @@
     }
 
     /* 하단 네비게이션 버튼 */
+    .bottom-nav img {
+      width: 63px; /* 기존 90px → 70% */
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
     .bottom-nav {
       position: absolute;
       bottom: 5%;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
-      gap: 20px;
-    }
-
-    .bottom-nav img {
-      width: 90px;
-      cursor: pointer;
-      transition: 0.2s;
+      gap: 10px; /* 기존 20px → 10px로 간격 좁힘 */
     }
 
     .bottom-nav img:hover {
