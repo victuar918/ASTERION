@@ -8,10 +8,10 @@ color:#2b1e08;
 
 background:linear-gradient(
 135deg,
-#f4e7c5 0%,
-#d4af37 35%,
-#b8962e 65%,
-#8f6b1c 100%
+#fff6da 0%,
+#f5d97a 40%,
+#eac45a 70%,
+#d8ad3c 100%
 );
 
 height:100vh;
@@ -22,9 +22,10 @@ padding:40px;
 }
 
 .title{
-font-size:36px;
-font-weight:600;
-margin-bottom:40px;
+font-size:32px;
+font-weight:500;
+letter-spacing:1px;
+margin-bottom:35px;
 }
 
 .row{
@@ -32,9 +33,9 @@ margin-bottom:40px;
 display:flex;
 justify-content:space-between;
 
-font-size:24px;
+font-size:12px;
 
-padding:14px 0;
+padding:10px 0;
 
 cursor:pointer;
 
@@ -103,6 +104,42 @@ row.className="row";
 
 row.innerHTML=`
 <div class="code">${item.StructureCode}</div>
+<div class="status">${item.Status}</div>
+`;
+
+row.onclick=function(){
+
+goStructure(item.StructureCode);
+
+};
+
+list.appendChild(row);
+
+});
+
+}catch(err){
+
+console.error("API error",err);
+
+}
+
+}
+
+function goStructure(code){
+
+window.location.href="structuredesign.html?code="+code;
+
+}
+
+function goHome(){
+
+window.location.href="index.html";
+
+}
+
+loadTasking();
+
+</script></body></html><div class="code">${item.StructureCode}</div>
 <div class="status">${item.Status}</div>
 `;
 
