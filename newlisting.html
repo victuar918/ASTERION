@@ -14,7 +14,7 @@
     }
 
     .container {
-      padding: 20px 40px 120px 40px; /* 하단 버튼 공간 확보 */
+      padding: 20px 40px 160px 40px; /* 하단 버튼+Exp 공간 확보 */
     }
 
     /* 타이틀 이미지 */
@@ -30,7 +30,7 @@
       flex-direction: column;
       max-width: 400px;
       margin: 0 auto 20px auto;
-      font-size: 13px; /* 전체 폰트 13px로 통일 */
+      font-size: 13px;
     }
 
     .input-group input,
@@ -40,6 +40,7 @@
       margin-bottom: 10px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
+      background-color: rgba(255, 255, 255, 0.6); /* 60% 투명 */
     }
 
     /* 사이즈+Stock 라인 */
@@ -55,6 +56,7 @@
       border: 2px solid #d8ad3c;
       border-radius: 4px;
       font-size: 13px;
+      background-color: rgba(255, 255, 255, 0.6);
     }
 
     .stone-line input.stock-input {
@@ -63,6 +65,7 @@
       border: 2px solid #d8ad3c;
       border-radius: 4px;
       font-size: 13px;
+      background-color: rgba(255, 255, 255, 0.6);
     }
 
     .stone-line .pcs-label {
@@ -84,6 +87,14 @@
       opacity: 0.8;
     }
 
+    /* Exp 입력창 */
+    #expInput {
+      width: 100%;
+      min-height: 60px; /* 3줄 정도 */
+      resize: vertical;
+      overflow-y: auto;
+    }
+
     /* 하단 네비게이션 */
     .bottom-nav {
       position: fixed;
@@ -92,12 +103,12 @@
       transform: translateX(-50%);
       display: flex;
       justify-content: center;
-      gap: 20px; /* 마지막 만족 상태 간격 유지 */
+      gap: 20px;
       z-index: 1000;
     }
 
     .bottom-nav img {
-      width: 70px; /* 버튼 크기 마지막 만족 상태 */
+      width: 70px; /* 마지막 만족 상태 */
       cursor: pointer;
       transition: transform 0.2s;
       object-fit: contain;
@@ -121,7 +132,6 @@
     <div class="input-group">
       <input type="text" id="nameEng" placeholder="Name">
       <input type="text" id="nameKr" placeholder="원석명">
-      <input type="text" id="expInput" placeholder="원석에 대한 해설">
     </div>
 
     <!-- 사이즈/Stock 라인 -->
@@ -139,6 +149,11 @@
         <span class="pcs-label">PCS</span>
         <button class="add-line">+</button>
       </div>
+    </div>
+
+    <!-- Exp 입력창 (하단 버튼 바로 위) -->
+    <div class="input-group">
+      <textarea id="expInput" placeholder="원석에 대한 해설"></textarea>
     </div>
 
   </div>
@@ -179,15 +194,15 @@
 
     async function submitListing() {
       const nameEng = document.getElementById("nameEng").value.trim();
-      const nameKr  = document.getElementById("nameKr").value.trim();
+      const nameKr = document.getElementById("nameKr").value.trim();
       const expText = document.getElementById("expInput").value.trim();
 
       if (!nameEng || !nameKr) return alert("NameEng와 NameKr를 입력해주세요.");
 
       const stones = [];
       document.querySelectorAll(".stone-line").forEach(line => {
-        const size     = line.querySelector(".size-select").value;
-        const stock    = line.querySelector(".stock-input").value.trim();
+        const size = line.querySelector(".size-select").value;
+        const stock = line.querySelector(".stock-input").value.trim();
         const stockNum = Number(stock);
         if (stock === "" || isNaN(stockNum) || stockNum < 0) return;
         stones.push({ NameEng: nameEng, NameKr: nameKr, Size: size, Stock: stockNum, Exp: expText });
@@ -205,7 +220,7 @@
         if (result.success) {
           alert(result.message);
           document.getElementById("nameEng").value = "";
-          document.getElementById("nameKr").value  = "";
+          document.getElementById("nameKr").value = "";
           document.getElementById("expInput").value = "";
           document.querySelectorAll(".stock-input").forEach(inp => inp.value = "");
         } else {
