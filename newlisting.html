@@ -13,9 +13,10 @@
       min-height: 100vh;
     }
 
-    /* 전체 컨테이너 */
     .container {
-      padding: 20px 40px 150px 40px;
+      padding: 20px 40px 120px 40px; /* 하단 버튼 공간 확보 */
+      max-width: 480px;
+      margin: 0 auto;
     }
 
     /* 타이틀 이미지 */
@@ -29,26 +30,25 @@
     .input-group {
       display: flex;
       flex-direction: column;
-      max-width: 400px;
-      margin: 0 auto 20px auto;
-      font-size: 14px;
+      gap: 10px;
+      margin-bottom: 20px;
     }
 
     .input-group input {
       font-size: 14px;
       padding: 8px;
-      margin-bottom: 10px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
     }
 
-    /* Exp 입력창 */
+    /* Exp 입력 */
     #expInput {
       font-size: 14px;
       padding: 8px;
-      margin-bottom: 15px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
+      margin-bottom: 15px;
+      width: 100%;
     }
 
     /* 사이즈+Stock 라인 */
@@ -79,7 +79,7 @@
     }
 
     .stone-line button.add-line {
-      padding: 4px 8px;
+      padding: 6px 10px;
       font-size: 16px;
       cursor: pointer;
       border: none;
@@ -96,42 +96,40 @@
     /* 하단 네비게이션 */
     .bottom-nav {
       position: fixed;
-      bottom: 20px;
-      left: 0;
-      right: 0;
+      bottom: 15px;
+      left: 50%;
+      transform: translateX(-50%);
       display: flex;
-      justify-content: center;
-      gap: 60px; /* 버튼 간격 */
+      gap: 20px; /* 원래 간격 */
       z-index: 1000;
     }
 
     .bottom-nav img {
-      width: 90px;
-      height: auto;
+      width: 90px; /* 원래 크기 */
       cursor: pointer;
-      transition: transform 0.2s;
-      object-fit: contain;
+      transition: 0.2s;
     }
 
     .bottom-nav img:hover {
-      transform: scale(1.1);
+      transform: scale(1.08);
     }
   </style>
 </head>
 
 <body>
 
-  <!-- 타이틀 -->
+  <!-- 타이틀 (컨테이너 밖) -->
   <img src="images/ttl_gemstonelist.png" alt="New Listing" class="title-img">
 
   <div class="container">
-
-    <!-- Name 및 Exp 입력 -->
+    <!-- Name 입력 -->
     <div class="input-group">
       <input type="text" id="nameEng" placeholder="Name">
       <input type="text" id="nameKr" placeholder="원석명">
-      <input type="text" id="expInput" placeholder="원석에 대한 해설">
     </div>
+
+    <!-- Exp 입력 -->
+    <input type="text" id="expInput" placeholder="원석에 대한 해설">
 
     <!-- 사이즈/Stock 라인 -->
     <div id="stoneLines">
@@ -149,19 +147,18 @@
         <button class="add-line">+</button>
       </div>
     </div>
-
   </div>
 
   <!-- 하단 버튼 -->
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
     <img src="images/btn_go_before.png" onclick="goBack()">
+    <img src="images/btn_imageupload.png" onclick="goImageUpload()">
     <img src="images/btn_stonelisting.png" onclick="submitListing()">
-    <img src="images/btn_imageupload.png" onclick="uploadImage()">
   </div>
 
   <script>
-    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzjX-kWbDv9P5f-tyNV8Txa6mqzzW7xbPX-GYbCwxH7yL7B80UohJkmaPGdhmjQWGo1sw/exec";
+    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbw_Wz1GLehzL3jFebHraHbBzSLqRaBfovUt1d7yHYtU_QTmuEpXAiyUZqnGchGxqAz0wA/exec";
 
     // + 버튼 클릭 시 라인 추가
     const stoneLines = document.getElementById("stoneLines");
@@ -182,20 +179,19 @@
       window.location.href = "inventory.html"; // J화면으로 이동
     }
 
-    function uploadImage() {
-      alert("이미지 업로드 기능은 추후 구현 예정");
+    function goImageUpload() {
+      window.location.href = "imageupload.html"; // 이미지 업로드 화면
     }
 
     async function submitListing() {
       const nameEng = document.getElementById("nameEng").value.trim();
-      const nameKr  = document.getElementById("nameKr").value.trim();
+      const nameKr = document.getElementById("nameKr").value.trim();
       const expText = document.getElementById("expInput").value.trim();
-
       if (!nameEng || !nameKr) return alert("NameEng와 NameKr를 입력해주세요.");
 
       const stones = [];
       document.querySelectorAll(".stone-line").forEach(line => {
-        const size  = line.querySelector(".size-select").value;
+        const size = line.querySelector(".size-select").value;
         const stock = line.querySelector(".stock-input").value.trim();
         const stockNum = Number(stock);
         if (stock === "" || isNaN(stockNum) || stockNum < 0) return;
@@ -226,7 +222,5 @@
       }
     }
   </script>
-
 </body>
-
 </html>
