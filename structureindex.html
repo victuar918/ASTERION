@@ -19,7 +19,7 @@
     /* 타이틀 이미지 - 컨테이너 밖 */
     .title-img {
       width: 95%;
-      margin: 20px auto 0 auto; /* 상단 여백만 유지 */
+      margin: 20px auto 0 auto;
       display: block;
     }
 
@@ -29,7 +29,7 @@
       flex-direction: column;
       max-width: 400px;
       width: 80%;
-      margin: auto; /* 세로 중앙 배치를 위해 flex 사용 */
+      margin: auto; /* 화면 세로 중앙 */
       flex-grow: 1;
       justify-content: center;
     }
@@ -66,12 +66,12 @@
 
 <body>
 
-  <!-- 타이틀 이미지는 컨테이너 밖 -->
+  <!-- 타이틀 이미지 -->
   <img src="images/ttl_codeindex.png" alt="Structure Code Index" class="title-img">
 
-  <!-- 입력 영역 (화면 세로 중앙) -->
+  <!-- 입력 영역 -->
   <div class="input-group">
-    <input type="text" id="structureCode" placeholder="Enter Structure Code" maxlength="13">
+    <input type="text" id="structureCode" placeholder="S-00000-000000" maxlength="13">
   </div>
 
   <!-- 하단 네비게이션 버튼 -->
@@ -87,9 +87,14 @@
     const input = document.getElementById("structureCode");
     input.addEventListener("input", function () {
       let val = input.value.toUpperCase().replace(/[^0-9A-Z]/g, '');
-      if (val.length > 1) val = val.slice(0, 1) + '-' + val.slice(1);
-      if (val.length > 7) val = val.slice(0, 7) + '-' + val.slice(7);
-      input.value = val.slice(0, 13);
+
+      // S-00000-000000 형식: 맨 앞 'S', 첫 하이픈, 5자리, 두 번째 하이픈, 마지막 6자리
+      if (!val.startsWith('S')) val = 'S' + val.slice(1);
+      if (val.length > 1) val = val.slice(0, 1) + '-' + val.slice(1);       // 첫 번째 하이픈
+      if (val.length > 7) val = val.slice(0, 7) + '-' + val.slice(7);      // 두 번째 하이픈
+      if (val.length > 13) val = val.slice(0, 13);                         // 총 13자리 제한
+
+      input.value = val;
     });
 
     async function setAS() {
