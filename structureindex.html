@@ -56,7 +56,7 @@
     }
 
     .stone-line input.stock-input {
-      width: 25%;
+      width: 25%; /* 너비 1/4 */
       padding: 8px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
@@ -89,12 +89,13 @@
       left: 50%;
       transform: translateX(-50%);
       display: flex;
-      gap: 8px; /* 간격 좁힘 */
+      gap: 15px; /* 버튼 간격 조정 */
     }
 
     .bottom-nav img {
-      width: 63px; /* 기존 90px → 70% */
-      max-width: 100%;
+      width: 63px;       /* 버튼 크기 70% */
+      max-width: none;   /* max-width 제한 해제 */
+      display: block;    /* block으로 강제 */
       cursor: pointer;
       transition: 0.2s;
     }
@@ -107,7 +108,7 @@
 
 <body>
 
-  <!-- 타이틀 이미지 (컨테이너 밖) -->
+  <!-- 타이틀 -->
   <img src="images/ttl_gemstonelist.png" alt="New Listing" class="title-img">
 
   <div class="container">
@@ -133,7 +134,6 @@
         <button class="add-line">+</button>
       </div>
     </div>
-
   </div>
 
   <!-- 하단 버튼 -->
@@ -167,8 +167,8 @@
     }
 
     function uploadImage() {
-      alert("이미지 업로드 기능 준비중...");
-      // 이후 구글 드라이브 업로드 폼 연결 예정
+      alert("이미지 업로드 기능 구현 예정");
+      // 구글 드라이브 업로드 로직 또는 구글폼 연동 구현
     }
 
     async function submitListing() {
