@@ -1,8 +1,7 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html>
 
 <head>
-  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Structure Code Index</title>
   <style>
@@ -10,47 +9,53 @@
       margin: 0;
       font-family: Arial, Helvetica, sans-serif;
       color: #2b1e08;
-      background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
+      background: linear-gradient(
+        135deg,
+        #fff6da 0%,
+        #f5d97a 40%,
+        #eac45a 70%,
+        #d8ad3c 100%
+      );
       height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
-    .container {
-      padding: 40px;
+    /* 타이틀 고정 */
+    .title {
+      font-size: 36px; /* 화면 대비 충분히 크게 */
+      font-weight: 600;
+      margin: 20px 0 30px 0; /* 상단 약간 여백 */
       text-align: center;
     }
 
-    /* 타이틀 이미지 */
-    .title-img {
-      width: 95%;
-      max-width: 740px;
-      margin-top: 10px;
+    /* 입력 컨테이너 */
+    .input-container {
+      display: flex;
+      flex-direction: column;
+      width: 90%;
+      max-width: 500px;
+      margin-bottom: 40px;
     }
 
-    /* 입력란 */
-    .input-group {
-      margin: 30px 0;
-    }
-
-    input[type="text"] {
-      padding: 10px 15px;
+    .input-container input {
       font-size: 18px;
-      width: 250px;
-      text-align: center;
-      text-transform: uppercase; /* 자동 대문자 */
-      letter-spacing: 2px;
-      border: 2px solid #d8ad3c;
-      border-radius: 5px;
+      padding: 10px;
+      margin-bottom: 20px;
+      text-transform: uppercase; /* 입력 자동 대문자 처리 */
+      border: 1px solid #d8ad3c;
+      border-radius: 6px;
     }
 
-    /* 하단 버튼 */
+    /* 버튼 하단 고정 */
     .bottom-nav {
       position: absolute;
       bottom: 10%;
-      left: 50%;
-      transform: translateX(-50%);
       display: flex;
+      gap: 20px;
       justify-content: center;
-      gap: 30px;
+      width: 100%;
     }
 
     .bottom-nav img {
@@ -66,71 +71,56 @@
 </head>
 
 <body>
-  <div class="container">
-    <img src="images/ttl_codeindex.png" class="title-img">
 
-    <div class="input-group">
-      <input type="text" id="structureCodeInput" placeholder="S-00000-000000">
-    </div>
+  <!-- 타이틀: 컨테이너 밖 -->
+  <div class="title">Structure Code Index</div>
+
+  <!-- 입력 컨테이너 -->
+  <div class="input-container">
+    <input id="structureCode" placeholder="Enter StructureCode [S-00000-000000]">
   </div>
 
+  <!-- 하단 버튼 -->
   <div class="bottom-nav">
-    <img src="images/btn_go_home.png" onclick="goHome()">
-    <img src="images/btn_as.png" onclick="setAS()">
-    <img src="images/btn_select.png" onclick="goSelect()">
+    <img src="images/btn_go_home.png" onclick="goHome()" alt="Home">
+    <img src="images/btn_forwarding.png" onclick="updateAS()" alt="A/S">
+    <img src="images/btn_go_next.png" onclick="goSelect()" alt="Select">
   </div>
 
   <script>
     const API_URL = "https://script.google.com/macros/s/AKfycbwj3LYGr7Z3X7UCR6gOdZ32exbsWkxQ1zEFDEgJKop3w3nA4XPX9lSqBW8rUHv7uwZmFQ/exec";
 
-    const input = document.getElementById("structureCodeInput");
-
-    // 입력 자동 포맷: 대문자 + 하이픈
-    input.addEventListener("input", () => {
-      let val = input.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-      if (val.length > 1) val = val.slice(0, 1) + "-" + val.slice(1);
-      if (val.length > 6) val = val.slice(0, 6) + "-" + val.slice(6);
-      input.value = val;
-    });
-
-    // A/S 버튼 클릭 → Status 변경
-    async function setAS() {
-      const code = input.value.trim();
-      if (!code) return alert("StructureCode를 입력하세요.");
-
-      try {
-        const res = await fetch(API_URL, {
-          method: "POST",
-          body: JSON.stringify({
-            action: "updateStatus",
-            structureCode: code,
-            newStatus: "A/S"
-          })
-        });
-        const data = await res.json();
-        if (data.success) {
-          alert(`${code}의 Status를 A/S로 변경했습니다.`);
-        } else {
-          alert(`오류: ${data.error}`);
-        }
-      } catch (err) {
-        console.error(err);
-        alert("API 호출 중 오류가 발생했습니다.");
-      }
-    }
-
-    // Select 버튼 클릭 → B화면 이동
-    function goSelect() {
-      const code = input.value.trim();
-      if (!code) return alert("StructureCode를 입력하세요.");
-      window.location.href = "structuredesign.html?code=" + code;
-    }
-
-    // Home 버튼
     function goHome() {
       window.location.href = "index.html";
     }
+
+    async function updateAS() {
+      const code = document.getElementById("structureCode").value.toUpperCase();
+      if (!code) return alert("StructureCode를 입력하세요.");
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "updateStatus",
+          structureCode: code,
+          newStatus: "A/S"
+        })
+      }).then(r => r.json());
+
+      if (res.success) {
+        alert(code + " 상태가 A/S로 변경되었습니다.");
+      } else {
+        alert("오류: " + res.error);
+      }
+    }
+
+    function goSelect() {
+      const code = document.getElementById("structureCode").value.toUpperCase();
+      if (!code) return alert("StructureCode를 입력하세요.");
+      window.location.href = "structuredesign.html?code=" + code;
+    }
   </script>
+
 </body>
 
 </html>
