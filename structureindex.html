@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Structure Code Index</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #2b1e08;
+      background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
+      height: 100vh;
+    }
+
+    .container {
+      padding: 40px;
+      text-align: center;
+    }
+
+    /* 타이틀 이미지 */
+    .title-img {
+      width: 95%;
+      max-width: 740px;
+      margin-top: 10px;
+    }
+
+    /* 입력란 */
+    .input-group {
+      margin: 30px 0;
+    }
+
+    input[type="text"] {
+      padding: 10px 15px;
+      font-size: 18px;
+      width: 250px;
+      text-align: center;
+      text-transform: uppercase; /* 자동 대문자 */
+      letter-spacing: 2px;
+      border: 2px solid #d8ad3c;
+      border-radius: 5px;
+    }
+
+    /* 하단 버튼 */
+    .bottom-nav {
+      position: absolute;
+      bottom: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+    }
+
+    .bottom-nav img {
+      width: 90px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .bottom-nav img:hover {
+      transform: scale(1.08);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <img src="images/ttl_structurecodeindex.png" class="title-img">
+
+    <div class="input-group">
+      <input type="text" id="structureCodeInput" placeholder="S-00000-000000">
+    </div>
+  </div>
+
+  <div class="bottom-nav">
+    <img src="images/btn_go_home.png" onclick="goHome()">
+    <img src="images/btn_as.png" onclick="setAS()">
+    <img src="images/btn_select.png" onclick="goSelect()">
+  </div>
+
+  <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbwj3LYGr7Z3X7UCR6gOdZ32exbsWkxQ1zEFDEgJKop3w3nA4XPX9lSqBW8rUHv7uwZmFQ/exec";
+
+    const input = document.getElementById("structureCodeInput");
+
+    // 입력 자동 포맷: 대문자 + 하이픈
+    input.addEventListener("input", () => {
+      let val = input.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (val.length > 1) val = val.slice(0, 1) + "-" + val.slice(1);
+      if (val.length > 6) val = val.slice(0, 6) + "-" + val.slice(6);
+      input.value = val;
+    });
+
+    // A/S 버튼 클릭 → Status 변경
+    async function setAS() {
+      const code = input.value.trim();
+      if (!code) return alert("StructureCode를 입력하세요.");
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "updateStatus",
+            structureCode: code,
+            newStatus: "A/S"
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(`${code}의 Status를 A/S로 변경했습니다.`);
+        } else {
+          alert(`오류: ${data.error}`);
+        }
+      } catch (err) {
+        console.error(err);
+        alert("API 호출 중 오류가 발생했습니다.");
+      }
+    }
+
+    // Select 버튼 클릭 → B화면 이동
+    function goSelect() {
+      const code = input.value.trim();
+      if (!code) return alert("StructureCode를 입력하세요.");
+      window.location.href = "structuredesign.html?code=" + code;
+    }
+
+    // Home 버튼
+    function goHome() {
+      window.location.href = "index.html";
+    }
+  </script>
+</body>
+
+</html>
