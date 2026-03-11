@@ -43,50 +43,6 @@
       background-color: rgba(255, 255, 255, 0.6); /* 60% 투명 */
     }
 
-    /* 사이즈+Stock 라인 */
-    .stone-line {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    .stone-line select {
-      padding: 6px;
-      border: 2px solid #d8ad3c;
-      border-radius: 4px;
-      font-size: 13px;
-      background-color: rgba(255, 255, 255, 0.6);
-    }
-
-    .stone-line input.stock-input {
-      width: 25%;
-      padding: 6px;
-      border: 2px solid #d8ad3c;
-      border-radius: 4px;
-      font-size: 13px;
-      background-color: rgba(255, 255, 255, 0.6);
-    }
-
-    .stone-line .pcs-label {
-      font-size: 13px;
-    }
-
-    .stone-line button.add-line {
-      padding: 5px 8px;
-      font-size: 14px;
-      cursor: pointer;
-      border: none;
-      border-radius: 4px;
-      background-color: #d8ad3c;
-      color: white;
-      transition: 0.2s;
-    }
-
-    .stone-line button.add-line:hover {
-      opacity: 0.8;
-    }
-
     /* Exp 입력창 */
     #expInput {
       width: 100%;
@@ -108,7 +64,7 @@
     }
 
     .bottom-nav img {
-      width: 70px; /* 마지막 만족 상태 */
+      width: 70px;
       cursor: pointer;
       transition: transform 0.2s;
       object-fit: contain;
@@ -117,7 +73,6 @@
     .bottom-nav img:hover {
       transform: scale(1.1);
     }
-
   </style>
 </head>
 
@@ -134,24 +89,7 @@
       <input type="text" id="nameKr" placeholder="원석명">
     </div>
 
-    <!-- 사이즈/Stock 라인 -->
-    <div id="stoneLines">
-      <div class="stone-line">
-        <select class="size-select">
-          <option value="4mm">4mm</option>
-          <option value="5mm">5mm</option>
-          <option value="6mm">6mm</option>
-          <option value="8mm">8mm</option>
-          <option value="10mm">10mm</option>
-          <option value="12mm">12mm</option>
-        </select>
-        <input type="number" class="stock-input" placeholder="Stock" min="0">
-        <span class="pcs-label">PCS</span>
-        <button class="add-line">+</button>
-      </div>
-    </div>
-
-    <!-- Exp 입력창 (하단 버튼 바로 위) -->
+    <!-- Exp 입력창 -->
     <div class="input-group">
       <textarea id="expInput" placeholder="원석에 대한 해설"></textarea>
     </div>
@@ -167,25 +105,14 @@
   </div>
 
   <script>
-    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbw_Wz1GLehzL3jFebHraHbBzSLqRaBfovUt1d7yHYtU_QTmuEpXAiyUZqnGchGxqAz0wA/exec";
-
-    // + 버튼 클릭 시 라인 추가
-    const stoneLines = document.getElementById("stoneLines");
-    stoneLines.addEventListener("click", function (e) {
-      if (e.target.classList.contains("add-line")) {
-        const newLine = e.target.parentElement.cloneNode(true);
-        newLine.querySelector("input").value = "";
-        newLine.querySelector("select").selectedIndex = 0;
-        stoneLines.appendChild(newLine);
-      }
-    });
+    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyF5cvjXJT_iM5MQ6S2BR_hoO0uhp1d7mwcsHJmeqVO4etRH_UFn016kN_r6xT6BFddgw/exec";
 
     function goHome() {
       window.location.href = "index.html";
     }
 
     function goBack() {
-      window.location.href = "inventory.html"; // J화면으로 이동
+      window.location.href = "inventory.html";
     }
 
     function uploadImage() {
@@ -199,30 +126,21 @@
 
       if (!nameEng || !nameKr) return alert("NameEng와 NameKr를 입력해주세요.");
 
-      const stones = [];
-      document.querySelectorAll(".stone-line").forEach(line => {
-        const size = line.querySelector(".size-select").value;
-        const stock = line.querySelector(".stock-input").value.trim();
-        const stockNum = Number(stock);
-        if (stock === "" || isNaN(stockNum) || stockNum < 0) return;
-        stones.push({ NameEng: nameEng, NameKr: nameKr, Size: size, Stock: stockNum, Exp: expText });
-      });
-
-      if (stones.length === 0) return alert("적어도 한 개의 사이즈+Stock을 입력해야 합니다.");
+      // 사이즈/재고 없이 단일 원석 등록
+      const stone = { nameEng: nameEng, nameKr: nameKr, exp: expText };
 
       try {
         const res = await fetch(WEBAPP_URL, {
           method: "POST",
           headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify({ action: "addNewStones", stones })
+          body: JSON.stringify({ action: "addStone", data: stone })
         });
         const result = await res.json();
         if (result.success) {
-          alert(result.message);
+          alert("원석 등록 성공!");
           document.getElementById("nameEng").value = "";
           document.getElementById("nameKr").value = "";
           document.getElementById("expInput").value = "";
-          document.querySelectorAll(".stock-input").forEach(inp => inp.value = "");
         } else {
           alert("Error: " + result.error);
         }
