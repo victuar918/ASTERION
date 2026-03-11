@@ -14,17 +14,15 @@
     }
 
     .container {
-      padding: 20px 40px 160px 40px; /* 하단 버튼+Exp 공간 확보 */
+      padding: 20px 40px 160px 40px;
     }
 
-    /* 타이틀 이미지 */
     .title-img {
       width: 95%;
       display: block;
       margin: 20px auto 30px auto;
     }
 
-    /* 입력 그룹 */
     .input-group {
       display: flex;
       flex-direction: column;
@@ -45,14 +43,12 @@
       box-sizing: border-box;
     }
 
-    /* Exp 입력창 */
     #expInput {
-      min-height: 300px; /* 세로 3배 */
+      min-height: 300px;
       resize: vertical;
       overflow-y: auto;
     }
 
-    /* 하단 네비게이션 */
     .bottom-nav {
       position: fixed;
       bottom: 20px;
@@ -97,6 +93,9 @@
 
   </div>
 
+  <!-- 숨겨진 파일 input -->
+  <input type="file" id="imageFileInput" accept="image/*" style="display:none" />
+
   <!-- 하단 버튼 -->
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
@@ -113,14 +112,45 @@
     }
 
     function goBack() {
-      window.location.href = "inventory.html"; // 이전 화면
+      window.location.href = "inventory.html";
     }
 
+    // 이미지 업로드 버튼
     function uploadImage() {
-      const formURL = "https://docs.google.com/forms/d/e/1FAIpQLScdQW_gLaXhG1RbboI_IFvSJZOGFEAfiH9LkuckN7gyw4oNAQ/viewform?usp=header"; // 여기에 구글 폼 URL
-      window.open(formURL, "_blank"); // 새 탭에서 폼 열기
+      document.getElementById("imageFileInput").click();
     }
 
+    // 파일 선택 후 자동 업로드
+    document.getElementById("imageFileInput").addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      const nameKr = document.getElementById("nameKr").value.trim();
+      if (!file) return alert("파일을 선택해주세요.");
+      if (!nameKr) return alert("먼저 원석명을 입력하세요.");
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("nameKr", nameKr);
+
+      try {
+        const res = await fetch(WEBAPP_URL, {
+          method: "POST",
+          body: formData
+        });
+        const result = await res.json();
+        if (result.success) {
+          alert("이미지 업로드 성공!");
+        } else {
+          alert("이미지 업로드 실패: " + result.error);
+        }
+      } catch (err) {
+        console.error(err);
+        alert("업로드 중 오류가 발생했습니다.");
+      }
+
+      event.target.value = "";
+    });
+
+    // StoneMaster 등록
     async function submitListing() {
       const nameEng = document.getElementById("nameEng").value.trim();
       const nameKr = document.getElementById("nameKr").value.trim();
@@ -128,36 +158,35 @@
 
       if (!nameEng || !nameKr) return alert("NameEng와 NameKr를 입력해주세요.");
 
-      // StoneMaster에 등록할 객체 생성
       const stones = [{
         nameEng: nameEng,
         nameKr: nameKr,
         exp: expText
       }];
 
-  try {
-     const res = await fetch(WEBAPP_URL, {
-       method: "POST",
-       headers: { "Content-Type": "text/plain" },
-       body: JSON.stringify({ action: "addStones", data: stones })
-      });
-     const result = await res.json();
+      try {
+        const res = await fetch(WEBAPP_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify({ action: "addStones", data: stones })
+        });
+        const result = await res.json();
 
-     if (result.success) {
-       alert(`성공적으로 등록되었습니다.: ${result.inserted}개`);
-       document.getElementById("nameEng").value = "";
-       document.getElementById("nameKr").value = "";
-       document.getElementById("expInput").value = "";
-      } else if (result.partialSuccess) {
-        alert(`부분 등록: ${result.inserted}개\n오류: ${result.errors.map(e => e.error).join(", ")}`);
-      } else {
-        alert(`오류 발생: ${result.errors?.map(e => e.error).join(", ") || result.error || "알 수 없는 오류"}`);
+        if (result.success) {
+          alert(`성공적으로 등록되었습니다.: ${result.inserted}개`);
+          document.getElementById("nameEng").value = "";
+          document.getElementById("nameKr").value = "";
+          document.getElementById("expInput").value = "";
+        } else if (result.partialSuccess) {
+          alert(`부분 등록: ${result.inserted}개\n오류: ${result.errors.map(e => e.error).join(", ")}`);
+        } else {
+          alert(`오류 발생: ${result.errors?.map(e => e.error).join(", ") || result.error || "알 수 없는 오류"}`);
+        }
+      } catch (err) {
+        console.error(err);
+        alert("서버 호출 중 오류가 발생했습니다.");
       }
-    } catch (err) {
-      console.error(err);
-      alert("서버 호출 중 오류가 발생했습니다.");
     }
-      }
   </script>
 
 </body>
