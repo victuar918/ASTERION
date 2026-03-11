@@ -8,56 +8,59 @@
     body {
       margin: 0;
       font-family: Arial, Helvetica, sans-serif;
-      color: #2b1e08;
       background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
+      color: #2b1e08;
     }
 
+    /* 타이틀 */
     .title-img {
       width: 95%;
       display: block;
-      margin: 20px auto 10px auto;
+      margin: 20px auto;
     }
 
-    .stone-list-container {
-      flex: 1;
+    /* 원석 리스트 영역 */
+    .stone-container {
+      max-width: 600px;
+      margin: 10px auto;
+      padding: 10px;
+      background-color: rgba(255, 255, 255, 0); /* 완전 투명 */
       overflow-y: auto;
-      margin: 0 20px 120px 20px; /* 하단 버튼 공간 확보 */
+      max-height: calc(100vh - 200px); /* 타이틀 + 하단 버튼 공간 제외 */
     }
 
     .stone-item {
-      padding: 12px 16px;
-      margin-bottom: 10px;
+      padding: 10px 15px;
+      margin-bottom: 5px;
       border-radius: 6px;
-      background-color: transparent; /* 완전 투명 */
-      font-size: 12px; /* 30% 축소 */
+      background-color: rgba(255, 255, 255, 0.2); /* 반투명 강조 */
       cursor: pointer;
-      border: 1px solid rgba(216, 173, 60, 0.5);
+      font-size: 12px; /* 원석명 30% 작게 */
       transition: background 0.2s;
     }
 
     .stone-item:hover {
-      background-color: rgba(255, 255, 255, 0.2);
+      background-color: rgba(255, 255, 255, 0.4);
     }
 
+    /* 하단 버튼 */
     .bottom-nav {
       position: fixed;
-      bottom: 20px;
+      bottom: 15px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
       justify-content: center;
       gap: 15px;
-      z-index: 1000; /* 리스트보다 위 */
+      z-index: 1000;
     }
 
     .bottom-nav img {
-      width: 50px; /* 네 개 버튼이 균형있게 들어가도록 조정 */
+      width: 60px; /* 네 개 버튼이 들어갈 수 있게 크기 조절 */
       cursor: pointer;
-      transition: transform 0.2s;
       object-fit: contain;
+      transition: transform 0.2s;
     }
 
     .bottom-nav img:hover {
@@ -68,55 +71,56 @@
 
 <body>
 
-  <!-- 타이틀 -->
   <img src="images/ttl_inventory.png" alt="Inventory" class="title-img">
 
-  <!-- 원석 리스트 영역 -->
-  <div class="stone-list-container" id="stoneListContainer">
-    <!-- JS에서 원석 아이템 추가 -->
+  <!-- 원석 리스트 -->
+  <div class="stone-container" id="stoneListContainer">
+    <!-- JS에서 동적으로 등록 -->
   </div>
 
   <!-- 하단 버튼 -->
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
-    <img src="images/btn_management.png" onclick="goManagement()">
+    <img src="images/btn_management.png" onclick="goManage()">
     <img src="images/btn_information.png" onclick="goInformation()">
     <img src="images/btn_stonelisting.png" onclick="goNewListing()">
   </div>
 
   <script>
-    const stones = [
-      { nameKr: "아파타이트", nameEng: "Apatite", exp: "샘플 설명" },
-      { nameKr: "루비", nameEng: "Ruby", exp: "샘플 설명" },
-      { nameKr: "사파이어", nameEng: "Sapphire", exp: "샘플 설명" }
-      // 실제 원석 데이터는 GAS에서 불러오면 됩니다.
-    ];
+    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxD2CfRJ2SgwKB19wj9P-gYTGP2SOWxPNbepaDOClUiNdfUZdXP0HIOYwZlnwHMr2NzdA/exec";
 
     const stoneListContainer = document.getElementById("stoneListContainer");
 
-    function renderStoneList() {
-      stoneListContainer.innerHTML = "";
-      stones.forEach(stone => {
-        const div = document.createElement("div");
-        div.className = "stone-item";
-        div.textContent = `${stone.nameKr} (${stone.nameEng})`;
-        div.onclick = () => {
-          // 선택한 원석 NameKr을 가지고 화면 이동
-          sessionStorage.setItem("selectedNameKr", stone.nameKr);
-          goInformation();
-        };
-        stoneListContainer.appendChild(div);
-      });
+    async function loadStones() {
+      try {
+        const res = await fetch(`${WEBAPP_URL}?action=getStones`);
+        const data = await res.json();
+        if (data.success && data.stones) {
+          stoneListContainer.innerHTML = "";
+          data.stones.forEach(stone => {
+            const div = document.createElement("div");
+            div.className = "stone-item";
+            div.textContent = `${stone.NameKr} (${stone.NameEng})`;
+            div.onclick = () => {
+              sessionStorage.setItem("selectedNameKr", stone.NameKr);
+              sessionStorage.setItem("selectedNameEng", stone.NameEng);
+              sessionStorage.setItem("selectedExp", stone.Exp);
+            };
+            stoneListContainer.appendChild(div);
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        alert("원석 데이터를 불러오는 중 오류가 발생했습니다.");
+      }
     }
 
-    renderStoneList();
-
+    // 화면 이동 함수
     function goHome() {
       window.location.href = "index.html";
     }
 
-    function goManagement() {
-      // 선택된 원석 없으면 alert
+    function goManage() {
       const selected = sessionStorage.getItem("selectedNameKr");
       if (!selected) return alert("원석을 선택해주세요.");
       window.location.href = "invenmanage.html";
@@ -131,6 +135,8 @@
     function goNewListing() {
       window.location.href = "newlisting.html";
     }
+
+    window.onload = loadStones;
   </script>
 
 </body>
