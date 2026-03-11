@@ -24,7 +24,7 @@
       margin: 20px auto 30px auto;
     }
 
-    /* 텍스트 입력 */
+    /* 입력 그룹 */
     .input-group {
       display: flex;
       flex-direction: column;
@@ -40,16 +40,17 @@
       margin-bottom: 10px;
       border: 2px solid #d8ad3c;
       border-radius: 4px;
-      background-color: rgba(255, 255, 255, 0.6); /* 60% 투명 */
+      background-color: rgba(255, 255, 255, 0.6);
+      width: 100%;
+      box-sizing: border-box;
     }
 
     /* Exp 입력창 */
-     #expInput {
-      width: 100%;
-      min-height: 180px; /* 3줄 정도 */
+    #expInput {
+      min-height: 180px; /* 세로 3배 */
       resize: vertical;
       overflow-y: auto;
-     }
+    }
 
     /* 하단 네비게이션 */
     .bottom-nav {
@@ -112,7 +113,7 @@
     }
 
     function goBack() {
-      window.location.href = "inventory.html";
+      window.location.href = "inventory.html"; // 이전 화면
     }
 
     function uploadImage() {
@@ -126,18 +127,17 @@
 
       if (!nameEng || !nameKr) return alert("NameEng와 NameKr를 입력해주세요.");
 
-      // 사이즈/재고 없이 단일 원석 등록
-      const stone = { nameEng: nameEng, nameKr: nameKr, exp: expText };
+      const stones = [{ NameEng: nameEng, NameKr: nameKr, Exp: expText }];
 
       try {
         const res = await fetch(WEBAPP_URL, {
           method: "POST",
           headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify({ action: "addStone", data: stone })
+          body: JSON.stringify({ action: "addNewStones", data: stones })
         });
         const result = await res.json();
         if (result.success) {
-          alert("원석 등록 성공!");
+          alert("원석이 성공적으로 등록되었습니다!");
           document.getElementById("nameEng").value = "";
           document.getElementById("nameKr").value = "";
           document.getElementById("expInput").value = "";
