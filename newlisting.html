@@ -134,7 +134,7 @@
         const res = await fetch(WEBAPP_URL, {
           method: "POST",
           headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify({ action: "addNewStones", data: stones })
+          body: JSON.stringify({ action: "addStones", data: stones })
         });
         const result = await res.json();
         if (result.success) {
