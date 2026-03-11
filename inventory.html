@@ -23,23 +23,24 @@
     }
 
     /* 대시보드 원석 리스트 */
-    .stone-list {
-      flex: 1;
-      overflow-y: auto;
-      margin: 0 20px;
-      background-color: rgba(255, 255, 255, 0.5); /* 투명 배경 */
-      border-radius: 8px;
-      padding: 10px;
-    }
+.stone-list {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0 20px;
+  background-color: transparent; /* 완전 투명 */
+  padding: 10px;
+}
 
-    .stone-item {
-      padding: 10px;
-      margin-bottom: 8px;
-      border: 1px solid #d8ad3c;
-      border-radius: 4px;
-      cursor: pointer;
-      background-color: rgba(255, 255, 255, 0.8);
-    }
+/* 원석 항목 */
+.stone-item {
+  padding: 8px;
+  margin-bottom: 6px;
+  border: 1px solid #d8ad3c;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: rgba(255, 255, 255, 0); /* 완전 투명 */
+  font-size: 70%; /* 글자 크기 30% 축소 */
+}
 
     .stone-item:hover {
       background-color: rgba(255, 255, 255, 1);
