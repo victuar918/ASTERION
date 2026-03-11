@@ -128,28 +128,36 @@
 
       if (!nameEng || !nameKr) return alert("NameEng와 NameKr를 입력해주세요.");
 
-      const stones = [{ NameEng: nameEng, NameKr: nameKr, Exp: expText }];
+      // StoneMaster에 등록할 객체 생성
+      const stones = [{
+        nameEng: nameEng,
+        nameKr: nameKr,
+        exp: expText
+      }];
 
-      try {
-        const res = await fetch(WEBAPP_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify({ action: "addStones", data: stones })
-        });
-        const result = await res.json();
-        if (result.success) {
-          alert("원석이 성공적으로 등록되었습니다!");
-          document.getElementById("nameEng").value = "";
-          document.getElementById("nameKr").value = "";
-          document.getElementById("expInput").value = "";
-        } else {
-          alert("Error: " + result.error);
-        }
-      } catch (err) {
-        console.error(err);
-        alert("서버 호출 중 오류가 발생했습니다.");
+  try {
+     const res = await fetch(WEBAPP_URL, {
+       method: "POST",
+       headers: { "Content-Type": "text/plain" },
+       body: JSON.stringify({ action: "addStones", data: stones })
+      });
+     const result = await res.json();
+
+     if (result.success) {
+       alert(`성공적으로 등록되었습니다.: ${result.inserted}개`);
+       document.getElementById("nameEng").value = "";
+       document.getElementById("nameKr").value = "";
+       document.getElementById("expInput").value = "";
+      } else if (result.partialSuccess) {
+        alert(`부분 등록: ${result.inserted}개\n오류: ${result.errors.map(e => e.error).join(", ")}`);
+      } else {
+        alert(`오류 발생: ${result.errors?.map(e => e.error).join(", ") || result.error || "알 수 없는 오류"}`);
       }
+    } catch (err) {
+      console.error(err);
+      alert("서버 호출 중 오류가 발생했습니다.");
     }
+      }
   </script>
 
 </body>
