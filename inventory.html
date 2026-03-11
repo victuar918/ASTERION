@@ -3,142 +3,142 @@
 
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Inventory</title>
+  <title>Inventory Dashboard</title>
   <style>
     body {
       margin: 0;
       font-family: Arial, Helvetica, sans-serif;
       color: #2b1e08;
       background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
-      height: 100vh;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
     /* 타이틀 이미지 */
     .title-img {
       width: 95%;
       display: block;
-      margin: 20px auto 20px auto;
+      margin: 20px auto;
     }
 
-    /* 리스트 영역 */
-    .list-container {
-      max-width: 90%;
-      margin: 0 auto;
-      overflow-y: auto;
-      max-height: 70vh;
-      padding: 10px;
-      background-color: rgba(255, 255, 255, 0.15); /* 투명 배경 */
-      border-radius: 4px;
-    }
-
-    .row {
-      display: flex;
-      justify-content: space-between;
-      padding: 8px 12px;
-      font-size: 14px;
-      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-      cursor: default;
-    }
-
-    .row:hover {
-      background-color: rgba(255, 255, 255, 0.1);
-    }
-
-    .namekr {
+    /* 대시보드 원석 리스트 */
+    .stone-list {
       flex: 1;
-      font-weight: 600;
+      overflow-y: auto;
+      margin: 0 20px;
+      background-color: rgba(255, 255, 255, 0.5); /* 투명 배경 */
+      border-radius: 8px;
+      padding: 10px;
     }
 
-    .size {
-      flex: 0.5;
-      text-align: center;
+    .stone-item {
+      padding: 10px;
+      margin-bottom: 8px;
+      border: 1px solid #d8ad3c;
+      border-radius: 4px;
+      cursor: pointer;
+      background-color: rgba(255, 255, 255, 0.8);
     }
 
-    .stock {
-      flex: 0.5;
-      text-align: right;
+    .stone-item:hover {
+      background-color: rgba(255, 255, 255, 1);
     }
 
-    /* 하단 네비게이션 버튼 */
+    /* 하단 버튼 */
     .bottom-nav {
-      position: absolute;
-      bottom: 5%;
-      left: 50%;
-      transform: translateX(-50%);
       display: flex;
-      gap: 20px;
+      justify-content: center;
+      gap: 15px;
+      padding: 10px 0;
+      background-color: rgba(255, 255, 255, 0.7);
+      position: fixed;
+      bottom: 0;
+      width: 100%;
     }
 
     .bottom-nav img {
-      width: 90px;
+      width: 70px;
       cursor: pointer;
-      transition: 0.2s;
+      transition: transform 0.2s;
+      object-fit: contain;
     }
 
     .bottom-nav img:hover {
-      transform: scale(1.08);
+      transform: scale(1.1);
     }
   </style>
 </head>
 
 <body>
-  <!-- 타이틀 이미지 -->
+
+  <!-- 타이틀 -->
   <img src="images/ttl_inventory.png" alt="Inventory" class="title-img">
 
-  <!-- 리스트 영역 -->
-  <div class="list-container" id="inventoryList">
-    <!-- 스크립트로 채워짐 -->
+  <!-- 원석 리스트 -->
+  <div class="stone-list" id="stoneList">
+    <!-- JS로 원석 리스트 동적 생성 -->
   </div>
 
   <!-- 하단 버튼 -->
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
-    <img src="images/btn_select.png" onclick="goSelect()">
-    <img src="images/btn_stonelisting.png" onclick="goStoneListing()">
+    <img src="images/btn_management.png" onclick="goManage()">
+    <img src="images/btn_information.png" onclick="goInfo()">
+    <img src="images/btn_stonelisting.png" onclick="goNewListing()">
   </div>
 
   <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbz_WyEAjbZkAsmXrSotclquQTLGfMf36RPKkvukG9--bLxUWJFEFi3KNxVCnzUp0aZTVQ/exec?action=getInventoryList";
+    const stoneListDiv = document.getElementById("stoneList");
 
-    async function loadInventory() {
-      try {
-        const res = await fetch(API_URL);
-        const data = await res.json();
-        const container = document.getElementById("inventoryList");
-        container.innerHTML = ""; // 초기화
+    // 샘플 데이터 (실제 시트 연동 시 이 부분을 fetch 또는 google.script.run으로 교체)
+    const stones = [
+      { nameKr: "아파타이트", nameEng: "Apatite" },
+      { nameKr: "루비", nameEng: "Ruby" },
+      { nameKr: "사파이어", nameEng: "Sapphire" },
+      { nameKr: "에메랄드", nameEng: "Emerald" },
+    ];
 
-        data.forEach(item => {
-          const row = document.createElement("div");
-          row.className = "row";
-          row.innerHTML = `
-            <div class="namekr">${item.NameKr}</div>
-            <div class="size">${item.Size}</div>
-            <div class="stock">${item.Stock}</div>
-          `;
-          container.appendChild(row);
-        });
+    let selectedStone = null;
 
-      } catch (err) {
-        console.error("API error", err);
-        const container = document.getElementById("inventoryList");
-        container.innerHTML = "<div style='color:red;padding:10px;'>Inventory 불러오기 실패</div>";
-      }
+    function renderStones() {
+      stoneListDiv.innerHTML = "";
+      stones.forEach((stone, idx) => {
+        const div = document.createElement("div");
+        div.className = "stone-item";
+        div.textContent = `${stone.nameKr} (${stone.nameEng})`;
+        div.onclick = () => {
+          // 선택 시 강조
+          document.querySelectorAll(".stone-item").forEach(el => el.style.borderColor = "#d8ad3c");
+          div.style.borderColor = "#ff0000";
+          selectedStone = stone.nameKr; // NameKr 저장
+        };
+        stoneListDiv.appendChild(div);
+      });
     }
 
+    renderStones();
+
+    // 버튼 이동
     function goHome() {
       window.location.href = "index.html";
     }
 
-    function goSelect() {
-      window.location.href = "inventoryinfo.html";
-    }
-
-    function goStoneListing() {
+    function goNewListing() {
       window.location.href = "newlisting.html";
     }
 
-    loadInventory();
+    function goManage() {
+      if (!selectedStone) return alert("원석을 선택하세요!");
+      window.location.href = `invenmanage.html?nameKr=${encodeURIComponent(selectedStone)}`;
+    }
+
+    function goInfo() {
+      if (!selectedStone) return alert("원석을 선택하세요!");
+      window.location.href = `stoneinfo.html?nameKr=${encodeURIComponent(selectedStone)}`;
+    }
   </script>
+
 </body>
 
 </html>
