@@ -49,6 +49,26 @@
       overflow-y: auto;
     }
 
+    .autocomplete-items {
+      position: absolute;
+      border: 1px solid #d8ad3c;
+      border-bottom: none;
+      border-top: none;
+      z-index: 99;
+      background: #fff;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
+    .autocomplete-items div {
+      padding: 8px;
+      cursor: pointer;
+    }
+
+    .autocomplete-items div:hover {
+      background-color: #eac45a;
+    }
+
     .bottom-nav {
       position: fixed;
       bottom: 20px;
@@ -75,28 +95,23 @@
 
 <body>
 
-  <!-- 타이틀 -->
   <img src="images/ttl_gemstonelist.png" alt="New Listing" class="title-img">
 
   <div class="container">
 
-    <!-- Name 입력 -->
-    <div class="input-group">
+    <div class="input-group" style="position:relative;">
       <input type="text" id="nameEng" placeholder="Name">
       <input type="text" id="nameKr" placeholder="원석명">
+      <div id="nameKrList" class="autocomplete-items"></div>
     </div>
 
-    <!-- Exp 입력창 -->
     <div class="input-group">
       <textarea id="expInput" placeholder="원석에 대한 해설"></textarea>
     </div>
 
+    <input type="file" id="imageFileInput" style="display:none">
   </div>
 
-  <!-- 숨겨진 파일 input -->
-  <input type="file" id="imageFileInput" accept="image/*" style="display:none" />
-
-  <!-- 하단 버튼 -->
   <div class="bottom-nav">
     <img src="images/btn_go_home.png" onclick="goHome()">
     <img src="images/btn_go_before.png" onclick="goBack()">
@@ -105,64 +120,73 @@
   </div>
 
   <script>
-    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbz_WyEAjbZkAsmXrSotclquQTLGfMf36RPKkvukG9--bLxUWJFEFi3KNxVCnzUp0aZTVQ/exec";
+    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxD2CfRJ2SgwKB19wj9P-gYTGP2SOWxPNbepaDOClUiNdfUZdXP0HIOYwZlnwHMr2NzdA/exec";
 
-    function goHome() {
-      window.location.href = "index.html";
-    }
+    function goHome() { window.location.href = "index.html"; }
+    function goBack() { window.location.href = "inventory.html"; }
 
-    function goBack() {
-      window.location.href = "inventory.html";
-    }
+    // ----------------- NameKr 자동완성 -----------------
+    const nameKrInput = document.getElementById("nameKr");
+    const nameKrListDiv = document.getElementById("nameKrList");
 
-    // 이미지 업로드 버튼
+    nameKrInput.addEventListener("input", async () => {
+      const val = nameKrInput.value.trim();
+      nameKrListDiv.innerHTML = "";
+      if (!val) return;
+
+      try {
+        const res = await fetch(`${WEBAPP_URL}?action=searchNameKr&query=${encodeURIComponent(val)}`);
+        const data = await res.json();
+        data.results?.forEach(item => {
+          const div = document.createElement("div");
+          div.textContent = item;
+          div.addEventListener("click", () => {
+            nameKrInput.value = item;
+            nameKrListDiv.innerHTML = "";
+          });
+          nameKrListDiv.appendChild(div);
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+    document.addEventListener("click", (e) => {
+      if (e.target !== nameKrInput) nameKrListDiv.innerHTML = "";
+    });
+
+    // ----------------- 이미지 업로드 -----------------
     function uploadImage() {
+      const nameKr = nameKrInput.value.trim();
+      if (!nameKr) return alert("먼저 원석명을 입력하세요.");
       document.getElementById("imageFileInput").click();
     }
 
-    // 파일 선택 후 자동 업로드
     document.getElementById("imageFileInput").addEventListener("change", async (event) => {
       const file = event.target.files[0];
-      const nameKr = document.getElementById("nameKr").value.trim();
-      if (!file) return alert("파일을 선택해주세요.");
-      if (!nameKr) return alert("먼저 원석명을 입력하세요.");
-
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("nameKr", nameKr);
+      const nameKr = nameKrInput.value.trim();
+      if (!file || !nameKr) return alert("원석명을 먼저 입력하고 파일을 선택하세요.");
 
       try {
-        const res = await fetch(WEBAPP_URL, {
-          method: "POST",
-          body: formData
-        });
+        const uploadUrl = `${WEBAPP_URL}?nameKr=${encodeURIComponent(nameKr)}`;
+        const res = await fetch(uploadUrl, { method: "POST", body: file });
         const result = await res.json();
-        if (result.success) {
-          alert("이미지 업로드 성공!");
-        } else {
-          alert("이미지 업로드 실패: " + result.error);
-        }
+        if (result.success) alert("이미지 업로드 성공!");
+        else alert("업로드 실패: " + result.error);
       } catch (err) {
         console.error(err);
         alert("업로드 중 오류가 발생했습니다.");
       }
-
-      event.target.value = "";
     });
 
-    // StoneMaster 등록
+    // ----------------- 원석 등록 -----------------
     async function submitListing() {
       const nameEng = document.getElementById("nameEng").value.trim();
-      const nameKr = document.getElementById("nameKr").value.trim();
+      const nameKr = nameKrInput.value.trim();
       const expText = document.getElementById("expInput").value.trim();
-
       if (!nameEng || !nameKr) return alert("NameEng와 NameKr를 입력해주세요.");
 
-      const stones = [{
-        nameEng: nameEng,
-        nameKr: nameKr,
-        exp: expText
-      }];
+      const stones = [{ nameEng, nameKr, exp: expText }];
 
       try {
         const res = await fetch(WEBAPP_URL, {
@@ -170,17 +194,17 @@
           headers: { "Content-Type": "text/plain" },
           body: JSON.stringify({ action: "addStones", data: stones })
         });
-        const result = await res.json();
 
+        const result = await res.json();
         if (result.success) {
-          alert(`성공적으로 등록되었습니다.: ${result.inserted}개`);
+          alert(`등록 성공: ${result.inserted}개`);
           document.getElementById("nameEng").value = "";
-          document.getElementById("nameKr").value = "";
+          nameKrInput.value = "";
           document.getElementById("expInput").value = "";
         } else if (result.partialSuccess) {
           alert(`부분 등록: ${result.inserted}개\n오류: ${result.errors.map(e => e.error).join(", ")}`);
         } else {
-          alert(`오류 발생: ${result.errors?.map(e => e.error).join(", ") || result.error || "알 수 없는 오류"}`);
+          alert(`오류: ${result.errors?.map(e => e.error).join(", ") || result.error || "알 수 없는 오류"}`);
         }
       } catch (err) {
         console.error(err);
@@ -188,7 +212,6 @@
       }
     }
   </script>
-
 </body>
 
 </html>
