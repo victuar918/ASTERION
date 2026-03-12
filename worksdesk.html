@@ -3,156 +3,162 @@
 
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>Works Desk</title>
 
 <style>
 
 body{
-margin:0;
-font-family:Arial, Helvetica, sans-serif;
-color:#2b1e08;
-
-background: linear-gradient(
-135deg,
-#fff6da 0%,
-#f5d97a 40%,
-#eac45a 70%,
-#d8ad3c 100%
-);
-
-height:100vh;
-display:flex;
-flex-direction:column;
-align-items:center;
+  margin:0;
+  font-family:Arial, Helvetica, sans-serif;
+  color:#2b1e08;
+  background:linear-gradient(
+    135deg,
+    #fff6da 0%,
+    #f5d97a 40%,
+    #eac45a 70%,
+    #d8ad3c 100%
+  );
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
 }
 
 .title-img{
-display:block;
-width:95%;
-max-width:1400px;
-margin-top:10px;
+  display:block;
+  width:95%;
+  max-width:1400px;
+  margin-top:10px;
 }
 
 .structure-code{
-
-margin-top:10vh;
-margin-bottom:6vh;
-
-font-size:22px;
-font-weight:600;
-
-background:transparent;
+  margin-top:10vh;
+  margin-bottom:6vh;
+  font-size:22px;
+  font-weight:600;
+  background:transparent;
 }
 
 .button-area{
-
-margin-top:8vh;
-
-display:flex;
-flex-direction:column;
-align-items:center;
-gap:40px;
-
+  margin-top:8vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:40px;
 }
 
 .row{
-display:flex;
-justify-content:center;
-align-items:center;
-gap:30px;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:30px;
 }
 
 .row img{
-
-width:90px;
-cursor:pointer;
-transition:0.2s;
-
+  width:90px;
+  cursor:pointer;
+  transition:0.2s;
 }
 
 .row img:hover{
-transform:scale(1.08);
+  transform:scale(1.08);
 }
 
 </style>
-
 </head>
-
 
 <body>
 
-<img src="images/ttl_worksdesk.png" class="title-img">
+<img src="images/ttl_worksdesk.png" class="title-img" alt="Works Desk">
 
 <div id="structureCode" class="structure-code"></div>
 
-
 <div class="button-area">
 
-<!-- 1행 -->
+  <!-- 1행 -->
+  <div class="row">
+    <img src="images/btn_stoneselect.png"  alt="원석선택"   onclick="goPage('selectstone.html')">
+    <img src="images/btn_go_design.png"    alt="디자인"     onclick="goPage('design.html')">
+    <img src="images/btn_analysis.png"     alt="분석메모"   onclick="goPage('analysismemo.html')">
+  </div>
 
-<div class="row">
+  <!-- 2행 -->
+  <div class="row">
+    <img src="images/btn_productimage.png" alt="제품이미지"  onclick="goPage('productimage.html')">
+    <img src="images/btn_booklet.png"      alt="북릿"        onclick="goPage('booklet.html')">
+  </div>
 
-<img src="images/btn_stoneselect.png" onclick="goPage('selectstone.html')">
-
-<img src="images/btn_go_design.png" onclick="goPage('design.html')">
-
-<img src="images/btn_analysis.png" onclick="goPage('analysismemo.html')">
-
-</div>
-
-
-<!-- 2행 -->
-
-<div class="row">
-
-<img src="images/btn_productimage.png" onclick="goPage('productimage.html')">
-
-<img src="images/btn_booklet.png" onclick="goPage('booklet.html')">
-
-</div>
-
-
-<!-- 3행 -->
-
-<div class="row">
-
-<img src="images/btn_forwarding.png" onclick="goPage('forwarding.html')">
-
-<img src="images/btn_go_home.png" onclick="goHome()">
-
-<img src="images/btn_go_before.png" onclick="goBefore()">
+  <!-- 3행 -->
+  <div class="row">
+    <img src="images/btn_forwarding.png"   alt="포워딩"     onclick="goPage('forwarding.html')">
+    <img src="images/btn_go_home.png"      alt="홈"         onclick="goHome()">
+    <img src="images/btn_go_before.png"    alt="뒤로"       onclick="goBefore()">
+  </div>
 
 </div>
-
-</div>
-
 
 <script>
 
-const params = new URLSearchParams(window.location.search);
-const structureCode = params.get("code");
+// ── structureCode 수신 ────────────────────────────────────────
+// [FIX-W1][FIX-W7]
+//   1순위: URL 쿼리 파라미터 (?code=...)
+//   2순위: sessionStorage ("selectedStructureCode") 폴백
+//   SelectTasking.html 이 두 방식 모두 전달하므로 항상 복구 가능
+// ─────────────────────────────────────────────────────────────
+const _params        = new URLSearchParams(window.location.search);
+const structureCode  = _params.get("code")
+                     || sessionStorage.getItem("selectedStructureCode")
+                     || "";
 
-document.getElementById("structureCode").textContent = structureCode;
+// ── 초기화 ────────────────────────────────────────────────────
+// [FIX-W2][FIX-W9] window.onload 안에서 DOM 설정 — 다른 HTML과 일관성 유지
+window.onload = function () {
 
+  // [FIX-W1] null·빈 값 진입 차단 → selecttasking으로 리다이렉트
+  if (!structureCode) {
+    alert("Structure 정보가 없습니다. 목록으로 돌아가세요.");
+    window.location.href = "selecttasking.html";
+    return;
+  }
 
-function goPage(page){
+  // [FIX-W9] null이 절대 표시되지 않도록 onload 안에서 설정
+  document.getElementById("structureCode").textContent = structureCode;
 
-window.location.href = page + "?code=" + structureCode;
+  // [FIX-W5][FIX-W7] worksdesk 진입 시 sessionStorage 갱신
+  // → 하위 페이지 새로고침 시 sessionStorage 폴백으로 복구 가능
+  sessionStorage.setItem("selectedStructureCode", structureCode);
+};
 
+// ── 하위 페이지 이동 ──────────────────────────────────────────
+// [FIX-W3] structureCode null 시 이동 차단
+// [FIX-W4] encodeURIComponent 적용
+// [FIX-W5] 이동 전 sessionStorage 저장 (하위 페이지 새로고침 복구용)
+// ─────────────────────────────────────────────────────────────
+function goPage(page) {
+  if (!structureCode) {
+    alert("Structure 정보가 없습니다. 목록으로 돌아가세요.");
+    window.location.href = "selecttasking.html";
+    return;
+  }
+
+  // [FIX-W5] sessionStorage 저장 — 하위 페이지가 폴백으로 사용
+  sessionStorage.setItem("selectedStructureCode", structureCode);
+
+  // [FIX-W4] URL 인코딩 적용
+  window.location.href = page + "?code=" + encodeURIComponent(structureCode);
 }
 
-
-function goHome(){
-
-window.location.href = "index.html";
-
+// ── 홈으로 이동 ───────────────────────────────────────────────
+function goHome() {
+  window.location.href = "index.html";
 }
 
-function goBefore(){
-
-window.location.href = "selecttasking.html";
-
+// ── 뒤로 (SelectTasking) 이동 ─────────────────────────────────
+// [FIX-W6] selecttasking.html은 목록 재선택 페이지
+//           → 이전 structureCode를 sessionStorage에 유지
+//             (selecttasking에서 새로 선택하면 덮어씀)
+function goBefore() {
+  window.location.href = "selecttasking.html";
 }
 
 </script>
