@@ -7,58 +7,86 @@
 <style>
 
 body{
-margin:0;
-font-family:Arial;
-background:linear-gradient(135deg,#fff6da 0%,#f5d97a 40%,#eac45a 70%,#d8ad3c 100%);
-text-align:center;
+  margin:0;
+  font-family:Arial;
+  background:linear-gradient(135deg,#fff6da 0%,#f5d97a 40%,#eac45a 70%,#d8ad3c 100%);
+  text-align:center;
 }
 
 .title{
-width:90%;
-margin-top:20px;
+  width:90%;
+  margin-top:20px;
 }
 
 .image-area{
-margin-top:60px;
+  margin-top:60px;
 }
 
 .stone-img{
-width:200px;
-height:200px;
-object-fit:contain;
+  width:200px;
+  height:200px;
+  object-fit:contain;
 }
 
 .btn-select{
-width:200px;
-cursor:pointer;
+  width:200px;
+  cursor:pointer;
 }
 
 input,textarea{
-width:80%;
-margin-top:10px;
-padding:8px;
-font-size:14px;
-border-radius:6px;
-border:none;
+  width:80%;
+  margin-top:10px;
+  padding:8px;
+  font-size:14px;
+  border-radius:6px;
+  border:none;
+  box-sizing:border-box;
 }
 
 textarea{
-height:100px;
-resize:none;
+  height:100px;
+  resize:none;
 }
 
+/* 로딩 오버레이 */
+#loadingOverlay{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.45);
+  z-index:999;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  gap:12px;
+  color:#fff;
+  font-size:16px;
+}
+#loadingOverlay.active{
+  display:flex;
+}
+.spinner{
+  width:40px;
+  height:40px;
+  border:4px solid rgba(255,255,255,0.3);
+  border-top-color:#fff;
+  border-radius:50%;
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
 .bottom{
-position:fixed;
-bottom:20px;
-width:100%;
-display:flex;
-justify-content:center;
-gap:15px;
+  position:fixed;
+  bottom:20px;
+  width:100%;
+  display:flex;
+  justify-content:center;
+  gap:15px;
 }
 
 .bottom img{
-width:60px;
-cursor:pointer;
+  width:60px;
+  cursor:pointer;
 }
 
 </style>
@@ -66,209 +94,392 @@ cursor:pointer;
 
 <body>
 
-<img src="images/ttl_gemstoneinfo.png" class="title">
+<img src="images/ttl_gemstoneinfo.png" class="title" alt="Gemstone Info">
 
 <div class="image-area">
+  <!-- [FIX-B2] 전역 변수명을 stoneImg로 변경 → compressImage 내부 img 변수와 충돌 방지 -->
+  <img
+    id="stoneImage"
+    class="stone-img"
+    alt="원석 이미지"
+    onerror="this.onerror=null; this.src='images/btn_gemimageselec.png';"
+  >
 
-<img id="stoneImage" class="stone-img">
+  <br>
 
-<img src="images/btn_gemimageselec.png"
-class="btn-select"
-id="selectBtn">
+  <img
+    src="images/btn_gemimageselec.png"
+    class="btn-select"
+    id="selectBtn"
+    alt="이미지 선택"
+  >
 
-<input type="file"
-id="imageInput"
-accept="image/*"
-style="display:none">
-
+  <!-- [FIX] accept를 Code.gs ALLOWED_MIME 화이트리스트와 동일하게 제한 -->
+  <input
+    type="file"
+    id="imageInput"
+    accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+    style="display:none"
+  >
 </div>
 
 <br>
 
-<input id="nameEng">
+<input id="nameEng" placeholder="영문명 (NameEng)">
 <br>
-<input id="nameKr">
+<input id="nameKr" placeholder="한글명 (NameKr) *필수">
 <br>
-<textarea id="exp"></textarea>
+<textarea id="exp" placeholder="설명 (Exp)"></textarea>
+
+<!-- 로딩 오버레이 -->
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <span id="loadingMsg">처리 중...</span>
+</div>
 
 <div class="bottom">
-
-<img src="images/btn_go_home.png" onclick="goHome()">
-
-<img src="images/btn_go_before.png" onclick="goBefore()">
-
-<img src="images/btn_imageupload.png" onclick="uploadImage()">
-
-<img src="images/btn_btn_update.png" onclick="updateInfo()">
-
+  <img src="images/btn_go_home.png"     alt="홈"         onclick="goHome()">
+  <img src="images/btn_go_before.png"   alt="뒤로"       onclick="goBefore()">
+  <img src="images/btn_imageupload.png" alt="이미지업로드" onclick="uploadImage()">
+  <img src="images/btn_btn_update.png"  alt="업데이트"   onclick="updateInfo()">
 </div>
 
 <script>
 
-const WEBAPP_URL =
-"https://script.google.com/macros/s/AKfycbzCwDDiyGxq9DGHZA1tcAQ5BT6ZImhJP6BsS15OIhgdfnUOHhn5dhjSnf3VrYF-Y4Yjdw/exec";
+// ── 상수 ─────────────────────────────────────────────────────
+const WEBAPP_URL     = "https://script.google.com/macros/s/AKfycbzCwDDiyGxq9DGHZA1tcAQ5BT6ZImhJP6BsS15OIhgdfnUOHhn5dhjSnf3VrYF-Y4Yjdw/exec";
+const MAX_RAW_SIZE   = 50 * 1024 * 1024; // 원본 50MB 초과 시 사전 차단
+const MAX_COMP_SIZE  = 4  * 1024 * 1024; // 압축 후 4MB 초과 시 차단 (Code.gs 기준 동일)
+const COMP_MAX_PX    = 1200;             // 압축 후 최대 가로/세로 픽셀
+const COMP_QUALITY   = 0.82;             // JPEG 압축 품질
 
-let selectedFile=null;
+// ── DOM 참조 ─────────────────────────────────────────────────
+// [FIX-B2] 전역 변수명 stoneImg — compressImage 내부 img 변수와 이름 분리
+const stoneImg    = document.getElementById("stoneImage");
+const imageInput  = document.getElementById("imageInput");
+const nameKrEl    = document.getElementById("nameKr");
+const nameEngEl   = document.getElementById("nameEng");
+const expEl       = document.getElementById("exp");
+const overlay     = document.getElementById("loadingOverlay");
+const loadingMsg  = document.getElementById("loadingMsg");
 
-const img=document.getElementById("stoneImage");
-const input=document.getElementById("imageInput");
+// 선택된 원본 파일 (미선택 = null)
+let selectedFile = null;
 
-document.getElementById("selectBtn").onclick=()=>{
-input.click();
+// ── 로딩 헬퍼 ─────────────────────────────────────────────────
+function showLoading(msg) {
+  loadingMsg.textContent = msg || "처리 중...";
+  overlay.classList.add("active");
+}
+function hideLoading() {
+  overlay.classList.remove("active");
+}
+
+// ── 초기 데이터 로드 ──────────────────────────────────────────
+window.onload = function () {
+
+  // [FIX-B1] window.onload 안에서 이벤트 연결 → DOM 보장
+  document.getElementById("selectBtn").onclick = function () {
+    imageInput.click();
+  };
+
+  // sessionStorage — null 안전 처리 (|| "" 로 "null" 문자열 방지)
+  const nameKr = sessionStorage.getItem("selectedNameKr")  || "";
+  const nameEng= sessionStorage.getItem("selectedNameEng") || "";
+  const exp    = sessionStorage.getItem("selectedExp")     || "";
+  const image  = sessionStorage.getItem("selectedImage")   || "";
+
+  nameKrEl.value  = nameKr;
+  nameEngEl.value = nameEng;
+  expEl.value     = exp;
+
+  if (image) {
+    stoneImg.src = image;
+  } else {
+    stoneImg.style.display = "none";
+  }
 };
 
-input.onchange=()=>{
-selectedFile=input.files[0];
+// ── 파일 선택 이벤트 ─────────────────────────────────────────
+imageInput.onchange = function () {
+  const file = this.files[0];
 
-if(selectedFile){
-const reader=new FileReader();
-reader.onload=e=>{
-img.src=e.target.result;
-};
-reader.readAsDataURL(selectedFile);
-}
-};
+  // 파일 없으면 명시적 초기화
+  if (!file) {
+    selectedFile = null;
+    return;
+  }
 
-window.onload=()=>{
+  // 원본 크기 사전 차단 (50MB 초과 RAW 파일 등)
+  if (file.size > MAX_RAW_SIZE) {
+    alert("파일이 너무 큽니다 (50MB 초과). 다른 이미지를 선택해 주세요.");
+    this.value   = "";
+    selectedFile = null;
+    return;
+  }
 
-const nameKr=sessionStorage.getItem("selectedNameKr");
-const nameEng=sessionStorage.getItem("selectedNameEng");
-const exp=sessionStorage.getItem("selectedExp");
-const image=sessionStorage.getItem("selectedImage");
+  selectedFile = file;
 
-document.getElementById("nameKr").value=nameKr||"";
-document.getElementById("nameEng").value=nameEng||"";
-document.getElementById("exp").value=exp||"";
-
-if(image){
-img.src=image;
-}else{
-img.style.display="none";
-}
-
-};
-
-function goHome(){
-window.location.href="index.html";
-}
-
-function goBefore(){
-window.location.href="inventory.html";
-}
-
-async function compressImage(file){
-
-return new Promise(resolve=>{
-
-const img=new Image();
-const reader=new FileReader();
-
-reader.onload=e=>{
-
-img.src=e.target.result;
-
-img.onload=()=>{
-
-const canvas=document.createElement("canvas");
-
-let maxWidth=1200;
-
-let width=img.width;
-let height=img.height;
-
-if(width>maxWidth){
-
-height*=maxWidth/width;
-width=maxWidth;
-
-}
-
-canvas.width=width;
-canvas.height=height;
-
-const ctx=canvas.getContext("2d");
-
-ctx.drawImage(img,0,0,width,height);
-
-canvas.toBlob(blob=>{
-resolve(blob);
-},"image/jpeg",0.8);
-
+  // 미리보기 (로컬 DataURL — 서버 전송과 무관)
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    stoneImg.style.display = "";
+    stoneImg.src = e.target.result;
+  };
+  reader.onerror = function () {
+    alert("미리보기 실패. 다시 선택해 주세요.");
+    selectedFile     = null;
+    imageInput.value = "";
+  };
+  reader.readAsDataURL(file);
 };
 
-};
+// ── 이미지 자동 압축 (Canvas 방식) ───────────────────────────
+//
+// [FIX-B2] 내부 Image 객체 변수명을 imgEl로 사용 → 전역 stoneImg와 구분
+// [FIX-B3] reader.onerror / imgEl.onerror → reject 처리 (Promise 영구 pending 방지)
+// [FIX-B4] toBlob이 null 반환 시 reject 처리
+//
+// 흐름:
+//   File → FileReader(DataURL) → Image 로드 → Canvas 축소 렌더링
+//   → toBlob(JPEG, quality) → 압축된 Blob 반환
+//
+// 반환: Promise<Blob> — 항상 image/jpeg
+// ─────────────────────────────────────────────────────────────
+function compressImage(file) {
+  return new Promise(function (resolve, reject) {
 
-reader.readAsDataURL(file);
+    const reader = new FileReader();
 
-});
+    // [FIX-B3] 파일 읽기 실패 → reject
+    reader.onerror = function () {
+      reject(new Error("파일을 읽을 수 없습니다. 손상된 파일이거나 접근이 거부되었습니다."));
+    };
 
+    reader.onload = function (e) {
+      // [FIX-B2] 전역 stoneImg와 이름 분리 → imgEl
+      const imgEl = new Image();
+
+      // [FIX-B3] 이미지 로드 실패 → reject
+      imgEl.onerror = function () {
+        reject(new Error("이미지를 불러올 수 없습니다. 지원하지 않는 형식이거나 손상된 파일입니다."));
+      };
+
+      imgEl.onload = function () {
+        // 자연 크기 유효성 확인
+        const origW = imgEl.naturalWidth;
+        const origH = imgEl.naturalHeight;
+
+        if (!origW || !origH) {
+          reject(new Error("이미지 크기를 읽을 수 없습니다."));
+          return;
+        }
+
+        // 축소 비율 계산 (원본보다 크게 확대 안 함)
+        let w = origW;
+        let h = origH;
+        if (w > COMP_MAX_PX || h > COMP_MAX_PX) {
+          const ratio = Math.min(COMP_MAX_PX / w, COMP_MAX_PX / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+
+        // Canvas 생성
+        const canvas = document.createElement("canvas");
+        canvas.width  = w;
+        canvas.height = h;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Canvas 2D 컨텍스트를 사용할 수 없는 환경입니다."));
+          return;
+        }
+
+        // 흰 배경 채우기 (PNG 투명 → JPEG 변환 시 검은 배경 방지)
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(imgEl, 0, 0, w, h);
+
+        // JPEG 압축 출력
+        canvas.toBlob(function (blob) {
+          // [FIX-B4] toBlob null 반환 시 reject
+          if (!blob) {
+            reject(new Error("이미지 압축에 실패했습니다. (toBlob 반환값 없음)"));
+            return;
+          }
+          resolve(blob);
+        }, "image/jpeg", COMP_QUALITY);
+      };
+
+      imgEl.src = e.target.result;
+    };
+
+    reader.readAsDataURL(file);
+  });
 }
 
-async function uploadImage(){
+// ── 이미지 업로드 ─────────────────────────────────────────────
+//
+// [FIX-B5] try/catch 추가 → 네트워크 오류 시 unhandled rejection 방지
+// [FIX-B7] Content-Type: application/json 헤더 추가
+// [FIX-B8] 업로드 성공 후 data.url을 sessionStorage에 저장한 뒤 reload
+// [FIX-B12] 빈 nameKr 전송 방지 검증 추가
+//
+// Apps Script 수정 불필요:
+//   Utilities.newBlob(byteArray, mimeType, fileName) 은
+//   압축 전/후 구분 없이 동일하게 처리함
+// ─────────────────────────────────────────────────────────────
+async function uploadImage() {
 
-if(!selectedFile){
-alert("이미지를 선택하세요.");
-return;
+  // sessionStorage null 방어
+  const nameKr = sessionStorage.getItem("selectedNameKr") || "";
+  if (!nameKr) {
+    alert("원석 정보가 없습니다. 목록으로 돌아가세요.");
+    return;
+  }
+
+  if (!selectedFile) {
+    alert("이미지를 선택하세요.");
+    return;
+  }
+
+  showLoading("이미지 압축 중...");
+
+  // STEP 1. 압축
+  let compressedBlob;
+  try {
+    compressedBlob = await compressImage(selectedFile);
+  } catch (compErr) {
+    hideLoading();
+    alert("이미지 압축 오류: " + compErr.message);
+    return;
+  }
+
+  // STEP 2. 압축 후 크기 검증
+  if (compressedBlob.size > MAX_COMP_SIZE) {
+    hideLoading();
+    alert("압축 후에도 4MB를 초과합니다. 더 작은 이미지를 사용해 주세요.");
+    return;
+  }
+
+  showLoading("이미지 업로드 중...");
+
+  // STEP 3. 전송
+  try {
+    const buffer    = await compressedBlob.arrayBuffer();
+    const byteArray = Array.from(new Uint8Array(buffer));
+
+    // 파일명 확장자 .jpg 통일 (압축 출력이 항상 JPEG이므로)
+    const baseName = selectedFile.name.replace(/\.[^.]+$/, "");
+    const fileName = baseName + ".jpg";
+
+    // [FIX-B7] Content-Type 헤더 추가
+    const res = await fetch(WEBAPP_URL, {
+      method : "POST",
+      headers: { "Content-Type": "application/json" },
+      body   : JSON.stringify({
+        action   : "uploadImage",
+        nameKr   : nameKr,
+        fileName : fileName,
+        mimeType : "image/jpeg",   // 압축 출력은 항상 JPEG
+        byteArray: byteArray,
+      }),
+    });
+
+    if (!res.ok) throw new Error("서버 응답 오류: HTTP " + res.status);
+
+    const data = await res.json();
+
+    if (data.success) {
+      // [FIX-B8] 새 URL을 sessionStorage에 저장한 뒤 reload → 구 이미지 재표시 방지
+      sessionStorage.setItem("selectedImage", data.url);
+      alert("이미지 업로드 완료");
+      location.reload();
+    } else {
+      alert("업로드 실패: " + (data.error || "알 수 없는 오류"));
+    }
+
+  } catch (err) {
+    // [FIX-B5] 네트워크/JSON 오류 메시지 표시
+    alert("업로드 오류: " + err.message);
+  } finally {
+    hideLoading();
+  }
 }
 
-const compressed=await compressImage(selectedFile);
+// ── 원석 정보 업데이트 ────────────────────────────────────────
+//
+// [FIX-B6]  try/catch 추가
+// [FIX-B7]  Content-Type 헤더 추가
+// [FIX-B9]  키명 수정 (Code.gs data.oldNameKr 일치)
+// [FIX-B10] payload.data 래퍼 추가 (Code.gs updateStoneInfo(payload.data) 일치)
+// [FIX-B11] 성공 후 sessionStorage 동기화
+// [FIX-B12] 빈 nameKr 전송 방지
+// ─────────────────────────────────────────────────────────────
+async function updateInfo() {
 
-const buffer=await compressed.arrayBuffer();
+  // sessionStorage null 방어
+  const oldNameKr = sessionStorage.getItem("selectedNameKr") || "";
+  if (!oldNameKr) {
+    alert("원석 정보가 없습니다. 목록으로 돌아가세요.");
+    return;
+  }
 
-const byteArray=Array.from(new Uint8Array(buffer));
+  const newNameKr = nameKrEl.value.trim();
+  const nameEng   = nameEngEl.value.trim();
+  const exp       = expEl.value.trim();
 
-const nameKr=document.getElementById("nameKr").value;
+  // [FIX-B12] 필수 필드 검증
+  if (!newNameKr) {
+    alert("원석명(NameKr)은 필수입니다.");
+    nameKrEl.focus();
+    return;
+  }
 
-const payload={
-action:"uploadImage",
-nameKr:nameKr,
-fileName:compressed.name||"image.jpg",
-mimeType:compressed.type||"image/jpeg",
-byteArray:byteArray
-};
+  showLoading("정보 업데이트 중...");
 
-const res=await fetch(WEBAPP_URL,{
-method:"POST",
-body:JSON.stringify(payload)
-});
+  try {
+    // [FIX-B7] Content-Type 헤더 추가
+    const res = await fetch(WEBAPP_URL, {
+      method : "POST",
+      headers: { "Content-Type": "application/json" },
+      body   : JSON.stringify({
+        action: "updateStoneInfo",
+        // [FIX-B10] data 래퍼 추가 → Code.gs: updateStoneInfo(payload.data)
+        data: {
+          oldNameKr: oldNameKr,
+          nameKr   : newNameKr,
+          nameEng  : nameEng,
+          exp      : exp,
+        },
+      }),
+    });
 
-const data=await res.json();
+    if (!res.ok) throw new Error("서버 응답 오류: HTTP " + res.status);
 
-if(data.success){
-alert("이미지 업로드 완료");
-location.reload();
-}else{
-alert(data.error);
+    const data = await res.json();
+
+    if (data.success) {
+      // [FIX-B11] 성공 후 sessionStorage 새 값으로 동기화
+      sessionStorage.setItem("selectedNameKr",  newNameKr);
+      sessionStorage.setItem("selectedNameEng", nameEng);
+      sessionStorage.setItem("selectedExp",     exp);
+      alert("정보 업데이트 완료");
+    } else {
+      alert("업데이트 실패: " + (data.error || "알 수 없는 오류"));
+    }
+
+  } catch (err) {
+    // [FIX-B6] 네트워크/JSON 오류 메시지 표시
+    alert("업데이트 오류: " + err.message);
+  } finally {
+    hideLoading();
+  }
 }
 
-}
-
-async function updateInfo(){
-
-const nameKr=sessionStorage.getItem("selectedNameKr");
-
-const payload={
-action:"updateStoneInfo",
-originalNameKr:nameKr,
-nameKr:document.getElementById("nameKr").value,
-nameEng:document.getElementById("nameEng").value,
-exp:document.getElementById("exp").value
-};
-
-const res=await fetch(WEBAPP_URL,{
-method:"POST",
-body:JSON.stringify(payload)
-});
-
-const data=await res.json();
-
-if(data.success){
-alert("정보 업데이트 완료");
-}else{
-alert(data.error);
-}
-
-}
+// ── 페이지 이동 ───────────────────────────────────────────────
+function goHome()   { window.location.href = "index.html"; }
+function goBefore() { window.location.href = "inventory.html"; }
 
 </script>
 
