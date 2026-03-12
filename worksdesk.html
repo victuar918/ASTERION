@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Works Desk</title>
+
+<style>
+
+body{
+margin:0;
+font-family:Arial, Helvetica, sans-serif;
+color:#2b1e08;
+
+background: linear-gradient(
+135deg,
+#fff6da 0%,
+#f5d97a 40%,
+#eac45a 70%,
+#d8ad3c 100%
+);
+
+height:100vh;
+display:flex;
+flex-direction:column;
+align-items:center;
+}
+
+.title-img{
+display:block;
+width:95%;
+max-width:1400px;
+margin-top:10px;
+}
+
+.structure-code{
+
+margin-top:6vh;
+
+font-size:22px;
+font-weight:600;
+
+background:transparent;
+}
+
+.button-area{
+
+margin-top:8vh;
+
+display:flex;
+flex-direction:column;
+align-items:center;
+gap:40px;
+
+}
+
+.row{
+display:flex;
+justify-content:center;
+align-items:center;
+gap:30px;
+}
+
+.row img{
+
+width:90px;
+cursor:pointer;
+transition:0.2s;
+
+}
+
+.row img:hover{
+transform:scale(1.08);
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+<img src="images/ttl_worksdesk.png" class="title-img">
+
+<div id="structureCode" class="structure-code"></div>
+
+
+<div class="button-area">
+
+<!-- 1행 -->
+
+<div class="row">
+
+<img src="images/btn_stoneselect.png" onclick="goPage('selectstone.html')">
+
+<img src="images/btn_go_design.png" onclick="goPage('design.html')">
+
+<img src="images/btn_analysis.png" onclick="goPage('analysismemo.html')">
+
+</div>
+
+
+<!-- 2행 -->
+
+<div class="row">
+
+<img src="images/btn_productimage.png" onclick="goPage('productimage.html')">
+
+<img src="images/btn_booklet.png" onclick="goPage('booklet.html')">
+
+</div>
+
+
+<!-- 3행 -->
+
+<div class="row">
+
+<img src="images/btn_forwarding.png" onclick="goPage('forwarding.html')">
+
+<img src="images/btn_go_home.png" onclick="goHome()">
+
+<img src="images/btn_go_before.png" onclick="goBefore()">
+
+</div>
+
+</div>
+
+
+<script>
+
+const params = new URLSearchParams(window.location.search);
+const structureCode = params.get("code");
+
+document.getElementById("structureCode").textContent = structureCode;
+
+
+function goPage(page){
+
+window.location.href = page + "?code=" + structureCode;
+
+}
+
+
+function goHome(){
+
+window.location.href = "index.html";
+
+}
+
+function goBefore(){
+
+window.location.href = "selecttasking.html";
+
+}
+
+</script>
+
+</body>
+</html>
