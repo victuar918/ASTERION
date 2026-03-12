@@ -7,97 +7,114 @@
 <style>
 
 body{
-  margin:0;
-  font-family:Arial;
-  background:linear-gradient(135deg,#fff6da 0%,#f5d97a 40%,#eac45a 70%,#d8ad3c 100%);
-  text-align:center;
+margin:0;
+font-family:Arial;
+background:linear-gradient(135deg,#fff6da 0%,#f5d97a 40%,#eac45a 70%,#d8ad3c 100%);
+display:flex;
+flex-direction:column;
+align-items:center;
+min-height:100vh;
+text-align:center;
 }
 
 /* 타이틀 */
 .title{
-  width:90%;
-  margin-top:20px;
+width:90%;
+margin-top:20px;
 }
 
-/* ⬇️ 타이틀 아래 여백 40% 축소 (60px → 36px) */
+/* 콘텐츠 영역 */
+.content{
+width:100%;
+max-width:600px;
+display:flex;
+flex-direction:column;
+align-items:center;
+padding-bottom:90px;
+}
+
+/* 이미지 영역 */
 .image-area{
-  margin-top:36px;
+margin-top:30px;
+display:flex;
+flex-direction:column;
+align-items:center;
 }
 
 .stone-img{
-  width:200px;
-  height:200px;
-  object-fit:contain;
+width:200px;
+height:200px;
+object-fit:contain;
 }
 
 .btn-select{
-  width:200px;
-  cursor:pointer;
+width:200px;
+cursor:pointer;
+margin-top:10px;
 }
 
+/* 입력 */
 input,textarea{
-  width:80%;
-  margin-top:10px;
-  padding:8px;
-  font-size:14px;
-  border-radius:6px;
-  border:none;
-  box-sizing:border-box;
+width:80%;
+margin-top:12px;
+padding:8px;
+font-size:14px;
+border-radius:6px;
+border:none;
+box-sizing:border-box;
 }
 
 textarea{
-  height:100px;
-  resize:none;
+height:100px;
+resize:none;
 }
 
 /* 로딩 오버레이 */
 #loadingOverlay{
-  display:none;
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,0.45);
-  z-index:999;
-  flex-direction:column;
-  justify-content:center;
-  align-items:center;
-  gap:12px;
-  color:#fff;
-  font-size:16px;
+display:none;
+position:fixed;
+inset:0;
+background:rgba(0,0,0,0.45);
+z-index:999;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+gap:12px;
+color:#fff;
+font-size:16px;
 }
 
 #loadingOverlay.active{
-  display:flex;
+display:flex;
 }
 
 .spinner{
-  width:40px;
-  height:40px;
-  border:4px solid rgba(255,255,255,0.3);
-  border-top-color:#fff;
-  border-radius:50%;
-  animation:spin 0.8s linear infinite;
+width:40px;
+height:40px;
+border:4px solid rgba(255,255,255,0.3);
+border-top-color:#fff;
+border-radius:50%;
+animation:spin 0.8s linear infinite;
 }
 
 @keyframes spin{
-  to{transform:rotate(360deg);}
+to{transform:rotate(360deg);}
 }
 
-/* ⬇️ 버튼 영역 레이아웃 수정 */
+/* 하단 버튼 */
 .bottom{
-  position:fixed;
-  bottom:10px;              /* 기존 20px → 축소 */
-  width:100%;
-  display:flex;
-  justify-content:center;
-  gap:15px;
-
-  background:transparent;   /* 테이블 배경 제거 */
-  padding:0;                /* 불필요 높이 제거 */
+position:fixed;
+bottom:15px;
+left:50%;
+transform:translateX(-50%);
+display:flex;
+gap:15px;
+z-index:1000;
 }
 
 .bottom img{
-  width:60px;
-  cursor:pointer;
+width:60px;
+cursor:pointer;
 }
 
 </style>
@@ -105,57 +122,56 @@ textarea{
 
 <body>
 
-<img src="images/ttl_gemstoneinfo.png" class="title" alt="Gemstone Info">
+<img src="images/ttl_gemstoneinfo.png" class="title">
+
+<div class="content">
 
 <div class="image-area">
 
-  <img
-    id="stoneImage"
-    class="stone-img"
-    alt="원석 이미지"
-    onerror="this.onerror=null; this.src='images/btn_gemimageselec.png';"
-  >
+<img
+id="stoneImage"
+class="stone-img"
+alt="원석 이미지"
+onerror="this.onerror=null; this.src='images/btn_gemimageselec.png';"
+>
 
-  <br>
+<img
+src="images/btn_gemimageselec.png"
+class="btn-select"
+id="selectBtn"
+alt="이미지 선택"
+>
 
-  <img
-    src="images/btn_gemimageselec.png"
-    class="btn-select"
-    id="selectBtn"
-    alt="이미지 선택"
-  >
+<input
+type="file"
+id="imageInput"
+accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+style="display:none"
+>
 
-  <input
-    type="file"
-    id="imageInput"
-    accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
-    style="display:none"
-  >
 </div>
 
-<br>
-
 <input id="nameEng" placeholder="영문명 (NameEng)">
-<br>
 <input id="nameKr" placeholder="한글명 (NameKr) *필수">
-<br>
 <textarea id="exp" placeholder="설명 (Exp)"></textarea>
 
+</div>
+
 <div id="loadingOverlay">
-  <div class="spinner"></div>
-  <span id="loadingMsg">처리 중...</span>
+<div class="spinner"></div>
+<span id="loadingMsg">처리 중...</span>
 </div>
 
 <div class="bottom">
-  <img src="images/btn_go_home.png" alt="홈" onclick="goHome()">
-  <img src="images/btn_go_before.png" alt="뒤로" onclick="goBefore()">
-  <img src="images/btn_imageupload.png" alt="이미지업로드" onclick="uploadImage()">
-  <img src="images/btn_update.png" alt="업데이트" onclick="updateInfo()">
+<img src="images/btn_go_home.png" onclick="goHome()">
+<img src="images/btn_go_before.png" onclick="goBefore()">
+<img src="images/btn_imageupload.png" onclick="uploadImage()">
+<img src="images/btn_update.png" onclick="updateInfo()">
 </div>
 
 <script>
 
-/* 기존 SCRIPT 전체 그대로 유지 */
+/* 기존 SCRIPT 완전 그대로 */
 
 const WEBAPP_URL     = "https://script.google.com/macros/s/AKfycbxHIwm4XKlANkJLpbkaHN6kPG2z0C6ad3FbagTR_qyAdTUU9M40-R4-sr1E_vXoh_wYNQ/exec";
 const MAX_RAW_SIZE   = 50 * 1024 * 1024;
@@ -174,38 +190,36 @@ const loadingMsg  = document.getElementById("loadingMsg");
 let selectedFile = null;
 
 function showLoading(msg){
-  loadingMsg.textContent = msg || "처리 중...";
-  overlay.classList.add("active");
+loadingMsg.textContent = msg || "처리 중...";
+overlay.classList.add("active");
 }
 
 function hideLoading(){
-  overlay.classList.remove("active");
+overlay.classList.remove("active");
 }
 
 window.onload = function(){
 
-  document.getElementById("selectBtn").onclick = function(){
-    imageInput.click();
-  };
-
-  const nameKr = sessionStorage.getItem("selectedNameKr")  || "";
-  const nameEng= sessionStorage.getItem("selectedNameEng") || "";
-  const exp    = sessionStorage.getItem("selectedExp")     || "";
-  const image  = sessionStorage.getItem("selectedImage")   || "";
-
-  nameKrEl.value  = nameKr;
-  nameEngEl.value = nameEng;
-  expEl.value     = exp;
-
-  if(image){
-    stoneImg.src = image;
-  }else{
-    stoneImg.style.display = "none";
-  }
-
+document.getElementById("selectBtn").onclick = function(){
+imageInput.click();
 };
 
-/* 나머지 JS 전부 그대로 유지 */
+const nameKr = sessionStorage.getItem("selectedNameKr")  || "";
+const nameEng= sessionStorage.getItem("selectedNameEng") || "";
+const exp    = sessionStorage.getItem("selectedExp")     || "";
+const image  = sessionStorage.getItem("selectedImage")   || "";
+
+nameKrEl.value  = nameKr;
+nameEngEl.value = nameEng;
+expEl.value     = exp;
+
+if(image){
+stoneImg.src = image;
+}else{
+stoneImg.style.display = "none";
+}
+
+};
 
 function goHome(){window.location.href="index.html";}
 function goBefore(){window.location.href="inventory.html";}
