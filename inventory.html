@@ -25,18 +25,18 @@
       max-width: 600px;
       margin: 10px auto;
       padding: 10px;
-      background-color: rgba(255, 255, 255, 0); /* 완전 투명 */
+      background-color: rgba(255, 255, 255, 0);
       overflow-y: auto;
-      max-height: calc(100vh - 200px); /* 타이틀 + 하단 버튼 공간 제외 */
+      max-height: calc(100vh - 200px);
     }
 
     .stone-item {
       padding: 10px 15px;
       margin-bottom: 5px;
       border-radius: 6px;
-      background-color: rgba(255, 255, 255, 0.2); /* 반투명 강조 */
+      background-color: rgba(255, 255, 255, 0.2);
       cursor: pointer;
-      font-size: 12px; /* 원석명 30% 작게 */
+      font-size: 12px;
       transition: background 0.2s;
     }
 
@@ -57,7 +57,7 @@
     }
 
     .bottom-nav img {
-      width: 60px; /* 네 개 버튼이 들어갈 수 있게 크기 조절 */
+      width: 60px;
       cursor: pointer;
       object-fit: contain;
       transition: transform 0.2s;
@@ -87,6 +87,7 @@
   </div>
 
   <script>
+    // ✅ 최신 배포 URL 적용
     const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzCwDDiyGxq9DGHZA1tcAQ5BT6ZImhJP6BsS15OIhgdfnUOHhn5dhjSnf3VrYF-Y4Yjdw/exec";
 
     const stoneListContainer = document.getElementById("stoneListContainer");
@@ -95,27 +96,30 @@
       try {
         const res = await fetch(`${WEBAPP_URL}?action=getStones`);
         const data = await res.json();
-        if (data.success && data.stones) {
+
+        if (data.success && data.stones && data.stones.length > 0) {
           stoneListContainer.innerHTML = "";
           data.stones.forEach(stone => {
             const div = document.createElement("div");
             div.className = "stone-item";
-            div.textContent = `${stone.NameKr} (${stone.NameEng})`;
+            div.textContent = `${stone.NameKr} (${stone.NameEng || "-"})`;
             div.onclick = () => {
               sessionStorage.setItem("selectedNameKr", stone.NameKr);
-              sessionStorage.setItem("selectedNameEng", stone.NameEng);
-              sessionStorage.setItem("selectedExp", stone.Exp);
+              sessionStorage.setItem("selectedNameEng", stone.NameEng || "");
+              sessionStorage.setItem("selectedExp", stone.Exp || "");
             };
             stoneListContainer.appendChild(div);
           });
+        } else {
+          stoneListContainer.innerHTML = "<p style='text-align:center; opacity:0.6;'>등록된 원석이 없습니다.</p>";
         }
       } catch (err) {
-        console.error(err);
-        alert("원석 데이터를 불러오는 중 오류가 발생했습니다.");
+        console.error("원석 불러오기 오류:", err);
+        stoneListContainer.innerHTML = "<p style='text-align:center; color:red;'>원석 데이터를 불러올 수 없습니다.</p>";
       }
     }
 
-    // 화면 이동 함수
+    // 화면 이동
     function goHome() {
       window.location.href = "index.html";
     }
