@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gemstone Info</title>
+
+<style>
+
+body{
+margin:0;
+font-family:Arial;
+background:linear-gradient(135deg,#fff6da 0%,#f5d97a 40%,#eac45a 70%,#d8ad3c 100%);
+text-align:center;
+}
+
+.title{
+width:90%;
+margin-top:20px;
+}
+
+.image-area{
+margin-top:60px;
+}
+
+.stone-img{
+width:200px;
+height:200px;
+object-fit:contain;
+}
+
+.btn-select{
+width:200px;
+cursor:pointer;
+}
+
+input,textarea{
+width:80%;
+margin-top:10px;
+padding:8px;
+font-size:14px;
+border-radius:6px;
+border:none;
+}
+
+textarea{
+height:100px;
+resize:none;
+}
+
+.bottom{
+position:fixed;
+bottom:20px;
+width:100%;
+display:flex;
+justify-content:center;
+gap:15px;
+}
+
+.bottom img{
+width:60px;
+cursor:pointer;
+}
+
+</style>
+</head>
+
+<body>
+
+<img src="images/ttl_gemstoneinfo.png" class="title">
+
+<div class="image-area">
+
+<img id="stoneImage" class="stone-img">
+
+<img src="images/btn_gemimageselec.png"
+class="btn-select"
+id="selectBtn">
+
+<input type="file"
+id="imageInput"
+accept="image/*"
+style="display:none">
+
+</div>
+
+<br>
+
+<input id="nameEng">
+<br>
+<input id="nameKr">
+<br>
+<textarea id="exp"></textarea>
+
+<div class="bottom">
+
+<img src="images/btn_go_home.png" onclick="goHome()">
+
+<img src="images/btn_go_before.png" onclick="goBefore()">
+
+<img src="images/btn_imageupload.png" onclick="uploadImage()">
+
+<img src="images/btn_btn_update.png" onclick="updateInfo()">
+
+</div>
+
+<script>
+
+const WEBAPP_URL =
+"https://script.google.com/macros/s/AKfycbzCwDDiyGxq9DGHZA1tcAQ5BT6ZImhJP6BsS15OIhgdfnUOHhn5dhjSnf3VrYF-Y4Yjdw/exec";
+
+let selectedFile=null;
+
+const img=document.getElementById("stoneImage");
+const input=document.getElementById("imageInput");
+
+document.getElementById("selectBtn").onclick=()=>{
+input.click();
+};
+
+input.onchange=()=>{
+selectedFile=input.files[0];
+
+if(selectedFile){
+const reader=new FileReader();
+reader.onload=e=>{
+img.src=e.target.result;
+};
+reader.readAsDataURL(selectedFile);
+}
+};
+
+window.onload=()=>{
+
+const nameKr=sessionStorage.getItem("selectedNameKr");
+const nameEng=sessionStorage.getItem("selectedNameEng");
+const exp=sessionStorage.getItem("selectedExp");
+const image=sessionStorage.getItem("selectedImage");
+
+document.getElementById("nameKr").value=nameKr||"";
+document.getElementById("nameEng").value=nameEng||"";
+document.getElementById("exp").value=exp||"";
+
+if(image){
+img.src=image;
+}else{
+img.style.display="none";
+}
+
+};
+
+function goHome(){
+window.location.href="index.html";
+}
+
+function goBefore(){
+window.location.href="inventory.html";
+}
+
+async function compressImage(file){
+
+return new Promise(resolve=>{
+
+const img=new Image();
+const reader=new FileReader();
+
+reader.onload=e=>{
+
+img.src=e.target.result;
+
+img.onload=()=>{
+
+const canvas=document.createElement("canvas");
+
+let maxWidth=1200;
+
+let width=img.width;
+let height=img.height;
+
+if(width>maxWidth){
+
+height*=maxWidth/width;
+width=maxWidth;
+
+}
+
+canvas.width=width;
+canvas.height=height;
+
+const ctx=canvas.getContext("2d");
+
+ctx.drawImage(img,0,0,width,height);
+
+canvas.toBlob(blob=>{
+resolve(blob);
+},"image/jpeg",0.8);
+
+};
+
+};
+
+reader.readAsDataURL(file);
+
+});
+
+}
+
+async function uploadImage(){
+
+if(!selectedFile){
+alert("이미지를 선택하세요.");
+return;
+}
+
+const compressed=await compressImage(selectedFile);
+
+const buffer=await compressed.arrayBuffer();
+
+const byteArray=Array.from(new Uint8Array(buffer));
+
+const nameKr=document.getElementById("nameKr").value;
+
+const payload={
+action:"uploadImage",
+nameKr:nameKr,
+fileName:compressed.name||"image.jpg",
+mimeType:compressed.type||"image/jpeg",
+byteArray:byteArray
+};
+
+const res=await fetch(WEBAPP_URL,{
+method:"POST",
+body:JSON.stringify(payload)
+});
+
+const data=await res.json();
+
+if(data.success){
+alert("이미지 업로드 완료");
+location.reload();
+}else{
+alert(data.error);
+}
+
+}
+
+async function updateInfo(){
+
+const nameKr=sessionStorage.getItem("selectedNameKr");
+
+const payload={
+action:"updateStoneInfo",
+originalNameKr:nameKr,
+nameKr:document.getElementById("nameKr").value,
+nameEng:document.getElementById("nameEng").value,
+exp:document.getElementById("exp").value
+};
+
+const res=await fetch(WEBAPP_URL,{
+method:"POST",
+body:JSON.stringify(payload)
+});
+
+const data=await res.json();
+
+if(data.success){
+alert("정보 업데이트 완료");
+}else{
+alert(data.error);
+}
+
+}
+
+</script>
+
+</body>
+</html>
