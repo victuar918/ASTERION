@@ -87,6 +87,17 @@ textarea{
 .bottom img{
   width:60px;
   cursor:pointer;
+  transition:opacity 0.2s;
+}
+
+/* [IMP-5] 이미지 미선택 시 업로드 버튼 dim */
+#uploadBtn{
+  opacity:0.35;
+  pointer-events:none;
+}
+#uploadBtn.ready{
+  opacity:1;
+  pointer-events:auto;
 }
 
 </style>
@@ -140,14 +151,14 @@ textarea{
 <div class="bottom">
   <img src="images/btn_go_home.png"     alt="홈"         onclick="goHome()">
   <img src="images/btn_go_before.png"   alt="뒤로"       onclick="goBefore()">
-  <img src="images/btn_imageupload.png" alt="이미지업로드" onclick="uploadImage()">
+  <img src="images/btn_imageupload.png" alt="이미지업로드" id="uploadBtn" onclick="uploadImage()">
   <img src="images/btn_btn_update.png"  alt="업데이트"   onclick="updateInfo()">
 </div>
 
 <script>
 
 // ── 상수 ─────────────────────────────────────────────────────
-const WEBAPP_URL     = "https://script.google.com/macros/s/AKfycbzCwDDiyGxq9DGHZA1tcAQ5BT6ZImhJP6BsS15OIhgdfnUOHhn5dhjSnf3VrYF-Y4Yjdw/exec";
+const WEBAPP_URL     = "https://script.google.com/macros/s/AKfycbxCuGnpk6WfSqQoGUUBUDe_Gc4exr95DNi-RuvDdmKJzXHPgIBB2j3m08Sf7roBPEThtA/exec";
 const MAX_RAW_SIZE   = 50 * 1024 * 1024; // 원본 50MB 초과 시 사전 차단
 const MAX_COMP_SIZE  = 4  * 1024 * 1024; // 압축 후 4MB 초과 시 차단 (Code.gs 기준 동일)
 const COMP_MAX_PX    = 1200;             // 압축 후 최대 가로/세로 픽셀
@@ -207,6 +218,7 @@ imageInput.onchange = function () {
   // 파일 없으면 명시적 초기화
   if (!file) {
     selectedFile = null;
+    document.getElementById("uploadBtn").classList.remove("ready"); // [IMP-5] dim 복원
     return;
   }
 
@@ -220,6 +232,9 @@ imageInput.onchange = function () {
 
   selectedFile = file;
 
+  // [IMP-5] 파일 선택 시 업로드 버튼 활성화
+  document.getElementById("uploadBtn").classList.add("ready");
+
   // 미리보기 (로컬 DataURL — 서버 전송과 무관)
   const reader = new FileReader();
   reader.onload = function (e) {
@@ -230,6 +245,7 @@ imageInput.onchange = function () {
     alert("미리보기 실패. 다시 선택해 주세요.");
     selectedFile     = null;
     imageInput.value = "";
+    document.getElementById("uploadBtn").classList.remove("ready"); // [IMP-5] dim 복원
   };
   reader.readAsDataURL(file);
 };
