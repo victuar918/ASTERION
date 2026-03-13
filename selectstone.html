@@ -34,7 +34,7 @@ body{
 
 /* StructureCode */
 .structure-code{
-  margin-top:3vh;
+  margin-top:4vh;
   font-size:22px;
   font-weight:600;
   background:transparent;
@@ -42,7 +42,7 @@ body{
 
 /* 리스트 영역 */
 .list-container{
-  margin-top:3vh;
+  margin-top:4vh;
   width:80%;
   max-width:600px;
   display:flex;
@@ -82,7 +82,7 @@ body{
 /* 버튼 */
 .bottom-nav{
   position:absolute;
-  bottom:3%;
+  bottom:10%;
   display:flex;
   gap:30px;
 }
@@ -121,7 +121,7 @@ body{
 
 // ── 상수 ─────────────────────────────────────────────────────
 // [FIX-E1] YOUR_DEPLOY_ID → 다른 HTML과 동일한 WEBAPP_URL 사용
-const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwLjChH6dFXQSK6HL44LZ_pCTKuYzGFhVFAKq_AARDG4sVjE74jvsOuPlSqZrKud5DSOQ/exec";
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzCwDDiyGxq9DGHZA1tcAQ5BT6ZImhJP6BsS15OIhgdfnUOHhn5dhjSnf3VrYF-Y4Yjdw/exec";
 
 // ── structureCode 수신 ────────────────────────────────────────
 // [FIX-E4] URL param → sessionStorage 순으로 폴백
@@ -275,7 +275,7 @@ async function saveAndGoDesign() {
     // [FIX-E9] Content-Type 헤더 추가
     const res = await fetch(WEBAPP_URL, {
       method : "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain" },   // [CORS-FIX] text/plain → Simple Request (preflight 없음)
       body   : JSON.stringify({
         action        : "saveUsedStones",   // [FIX-E3] Code.gs 케이스 일치
         structureCode : structureCode,
