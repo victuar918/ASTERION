@@ -35,13 +35,13 @@ body{
   display:flex;
   flex-direction:column;
   align-items:center;
-  gap:20px;
+  gap:10px;
 }
 
 /* 헤더 */
 .stock-header{
   display:flex;
-  width:180px;
+  width:260px;
   justify-content:space-between;
   font-size:14px;
   font-weight:bold;
@@ -51,8 +51,7 @@ body{
 .stock-row{
   display:flex;
   align-items:center;
-  gap:20px;
-  padding:15px 0;
+  gap:6px;
 }
 
 /* size select */
@@ -122,7 +121,7 @@ body{
 
 <script>
 
-const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwLjChH6dFXQSK6HL44LZ_pCTKuYzGFhVFAKq_AARDG4sVjE74jvsOuPlSqZrKud5DSOQ/exec";
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzCwDDiyGxq9DGHZA1tcAQ5BT6ZImhJP6BsS15OIhgdfnUOHhn5dhjSnf3VrYF-Y4Yjdw/exec";
 
 const rowsDiv   = document.getElementById("rows");
 const stoneNameEl = document.getElementById("stoneName");
@@ -336,7 +335,7 @@ async function updateStock() {
     // [FIX-C10] Content-Type 헤더 추가
     const res = await fetch(WEBAPP_URL, {
       method : "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain" },   // [CORS-FIX] text/plain → Simple Request (preflight 없음)
       body   : JSON.stringify({
         action: "updateStock",  // [FIX-C7] 올바른 action명
         data  : stockMap,       // [FIX-C8] 올바른 payload 구조
