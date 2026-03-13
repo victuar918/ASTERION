@@ -4,6 +4,6 @@
 // ============================================================
 
 const CONFIG = {
-  API_BASE: "https://script.google.com/macros/s/AKfycbyBW9kp7KysY8bFK4NsYbVIPykysoWkZ-d4PGiYbVPlY1nwqD-syVUeNMHVVQ23jUdg7g/exec"
+  API_BASE: "https://script.google.com/macros/s/AKfycbzTqyfRAGLTcJ2dOtDlaeOiCxX42LfnmZ7xMgKFUiCRjLglKzR4K6JY1m5-rtaRGE6IPA/exec"
 };
 
