@@ -93,7 +93,7 @@ async function loadStones() {
   try {
     showLoading("원석 목록 불러오는 중...");
     // getAllStones → { success, stones:[{NameKr,NameEng,Exp,Image}] }
-    const data = await apiGet("getAllStones");
+    const data = await apiGet("getStones");
 
     if (!data.success || !Array.isArray(data.stones) || !data.stones.length) {
       container.innerHTML = "<p style='text-align:center; opacity:0.6;'>등록된 원석이 없습니다.</p>";
