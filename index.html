@@ -1,53 +1,63 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ASTERION</title>
 
 <style>
-
-body{
-margin:0;
-height:100vh;
-background-image:url("images/bg_home.jpg");
-background-size:cover;
-background-position:center;
-background-repeat:no-repeat;
-display:flex;
-flex-direction:column;
-justify-content:flex-end;
-align-items:center;
+body {
+  margin: 0;
+  height: 100vh;
+  background-image: url("images/bg_home.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
 }
 
-.button-container{
-width:100%;
-display:flex;
-justify-content:center;
-gap:30px;
-margin-bottom:12vh;
+.button-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-bottom: 12vh;
 }
 
-.button-container img{
-width:80px;
-height:80px;
-object-fit:contain;
+.button-container img {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  cursor: pointer;
+  transition: transform 0.15s;
 }
 
+.button-container img:hover {
+  transform: scale(1.08);
+}
 </style>
 </head>
 
 <body>
 
 <div class="button-container">
+  <!-- worksdesk: Structure 선택 + 작업 허브 -->
+  <img src="images/btn_go_design.png"
+       alt="Works Desk"
+       onclick="location.href='worksdesk.html'">
 
-<img src="images/btn_go_design.png"
-  onclick="location.href='worksdesk.html'">
-<img src="images/btn_go_index.png"
-  onclick="location.href='structureindex.html'">
-<img src="images/btn_go_inventory.png"
-  onclick="location.href='inventory.html'">
+  <!-- structureindex: A/S 코드 직접 조회 -->
+  <img src="images/btn_go_index.png"
+       alt="Structure Index"
+       onclick="location.href='structureindex.html'">
 
+  <!-- inventory: 원석 재고 관리 -->
+  <img src="images/btn_go_inventory.png"
+       alt="Inventory"
+       onclick="location.href='inventory.html'">
 </div>
 
 </body>
