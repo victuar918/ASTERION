@@ -1,149 +1,153 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="ko">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Inventory</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
-      min-height: 100vh;
-      color: #2b1e08;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventory</title>
 
-    /* 타이틀 */
-    .title-img {
-      width: 95%;
-      display: block;
-      margin: 20px auto;
-    }
+<!-- ▼ 공통 JS -->
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/state.js"></script>
+<script src="js/ui.js"></script>
 
-    /* 원석 리스트 영역 */
-    .stone-container {
-      max-width: 600px;
-      margin: 10px auto;
-      padding: 10px;
-      background-color: rgba(255, 255, 255, 0);
-      overflow-y: auto;
-      max-height: calc(100vh - 200px);
-    }
+<style>
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
+  min-height: 100vh;
+  color: #2b1e08;
+}
 
-    .stone-item {
-      padding: 10px 15px;
-      margin-bottom: 5px;
-      border-radius: 6px;
-      background-color: rgba(255, 255, 255, 0.2);
-      cursor: pointer;
-      font-size: 12px;
-      transition: background 0.2s;
-    }
+.title-img {
+  width: 95%;
+  display: block;
+  margin: 20px auto;
+}
 
-    .stone-item:hover {
-      background-color: rgba(255, 255, 255, 0.4);
-    }
+.stone-container {
+  max-width: 600px;
+  margin: 10px auto;
+  padding: 10px;
+  overflow-y: auto;
+  max-height: calc(100vh - 160px);
+}
 
-    /* 하단 버튼 */
-    .bottom-nav {
-      position: fixed;
-      bottom: 15px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      justify-content: center;
-      gap: 15px;
-      z-index: 1000;
-    }
+/* [B5 FIX] .selected 하이라이트 추가 */
+.stone-item {
+  padding: 10px 15px;
+  margin-bottom: 5px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.2);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s;
+  border: 2px solid transparent;
+}
 
-    .bottom-nav img {
-      width: 60px;
-      cursor: pointer;
-      object-fit: contain;
-      transition: transform 0.2s;
-    }
+.stone-item:hover    { background: rgba(255,255,255,0.35); }
+.stone-item.selected { background: rgba(255,255,255,0.55); border-color: #d8ad3c; font-weight: 600; }
 
-    .bottom-nav img:hover {
-      transform: scale(1.1);
-    }
-  </style>
+/* 하단 버튼 */
+.bottom-nav {
+  position: fixed;
+  bottom: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 15px;
+  z-index: 1000;
+}
+
+.bottom-nav img {
+  width: 60px;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.bottom-nav img:hover { transform: scale(1.1); }
+</style>
 </head>
 
 <body>
 
-  <img src="images/ttl_inventory.png" alt="Inventory" class="title-img">
+<img src="images/ttl_inventory.png" alt="Inventory" class="title-img">
 
-  <!-- 원석 리스트 -->
-  <div class="stone-container" id="stoneListContainer">
-    <!-- JS에서 동적으로 등록 -->
-  </div>
+<div class="stone-container" id="stoneListContainer"></div>
 
-  <!-- 하단 버튼 -->
-  <div class="bottom-nav">
-    <img src="images/btn_go_home.png" onclick="goHome()">
-    <img src="images/btn_management.png" onclick="goManage()">
-    <img src="images/btn_information.png" onclick="goInformation()">
-    <img src="images/btn_stonelisting.png" onclick="goNewListing()">
-  </div>
+<div class="bottom-nav">
+  <img src="images/btn_go_home.png"      alt="홈"        onclick="goHome()">
+  <img src="images/btn_management.png"   alt="재고관리"  onclick="goManage()">
+  <img src="images/btn_information.png"  alt="원석정보"  onclick="goInformation()">
+  <img src="images/btn_stonelisting.png" alt="원석등록"  onclick="goNewListing()">
+</div>
 
-  <script>
-    // ✅ 최신 배포 URL 적용
-    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxCuGnpk6WfSqQoGUUBUDe_Gc4exr95DNi-RuvDdmKJzXHPgIBB2j3m08Sf7roBPEThtA/exec";
+<script>
+window.onload = loadStones;
 
-    const stoneListContainer = document.getElementById("stoneListContainer");
+async function loadStones() {
+  const container = document.getElementById("stoneListContainer");
+  container.innerHTML = "<p style='opacity:0.6; text-align:center;'>불러오는 중...</p>";
 
-    async function loadStones() {
-      try {
-        const res = await fetch(`${WEBAPP_URL}?action=getStones`);
-        const data = await res.json();
+  try {
+    showLoading("원석 목록 불러오는 중...");
+    // getAllStones → { success, stones:[{NameKr,NameEng,Exp,Image}] }
+    const data = await apiGet("getAllStones");
 
-        if (data.success && data.stones && data.stones.length > 0) {
-          stoneListContainer.innerHTML = "";
-          data.stones.forEach(stone => {
-            const div = document.createElement("div");
-            div.className = "stone-item";
-            div.textContent = `${stone.NameKr} (${stone.NameEng || "-"})`;
-            div.onclick = () => {
-              sessionStorage.setItem("selectedNameKr", stone.NameKr);
-              sessionStorage.setItem("selectedNameEng", stone.NameEng || "");
-              sessionStorage.setItem("selectedExp", stone.Exp || "");
-              sessionStorage.setItem("selectedImage", stone.Image); // ← 이 줄만 추가
-            };
-            stoneListContainer.appendChild(div);
-          });
-        } else {
-          stoneListContainer.innerHTML = "<p style='text-align:center; opacity:0.6;'>등록된 원석이 없습니다.</p>";
-        }
-      } catch (err) {
-        console.error("원석 불러오기 오류:", err);
-        stoneListContainer.innerHTML = "<p style='text-align:center; color:red;'>원석 데이터를 불러올 수 없습니다.</p>";
-      }
+    if (!data.success || !Array.isArray(data.stones) || !data.stones.length) {
+      container.innerHTML = "<p style='text-align:center; opacity:0.6;'>등록된 원석이 없습니다.</p>";
+      return;
     }
 
-    // 화면 이동
-    function goHome() {
-      window.location.href = "index.html";
-    }
+    container.innerHTML = "";
 
-    function goManage() {
-      const selected = sessionStorage.getItem("selectedNameKr");
-      if (!selected) return alert("원석을 선택해주세요.");
-      window.location.href = "invenmanage.html";
-    }
+    data.stones.forEach(function (stone) {
+      const div = document.createElement("div");
+      div.className = "stone-item";
+      div.textContent = stone.NameKr + (stone.NameEng ? "  (" + stone.NameEng + ")" : "");
 
-    function goInformation() {
-      const selected = sessionStorage.getItem("selectedNameKr");
-      if (!selected) return alert("원석을 선택해주세요.");
-      window.location.href = "stoneinfo.html";
-    }
+      div.onclick = function () {
+        // [B5 FIX] 선택 하이라이트
+        document.querySelectorAll(".stone-item").forEach(function (el) {
+          el.classList.remove("selected");
+        });
+        div.classList.add("selected");
 
-    function goNewListing() {
-      window.location.href = "newlisting.html";
-    }
+        // [B6 FIX] Image null → '' 처리 후 state.js setSelectedStone 사용
+        setSelectedStone({
+          NameKr  : stone.NameKr,
+          NameEng : stone.NameEng  || "",
+          Exp     : stone.Exp      || "",
+          Image   : stone.Image    || "",
+        });
+      };
 
-    window.onload = loadStones;
-  </script>
+      container.appendChild(div);
+    });
+
+  } catch (err) {
+    container.innerHTML = "<p style='text-align:center; color:#c0392b;'>원석 데이터를 불러올 수 없습니다.</p>";
+    console.error("loadStones 오류:", err);
+  } finally {
+    hideLoading();
+  }
+}
+
+function goManage() {
+  if (!getSelectedStone().nameKr) { alert("원석을 선택해주세요."); return; }
+  location.href = "invenmanage.html";
+}
+
+function goInformation() {
+  if (!getSelectedStone().nameKr) { alert("원석을 선택해주세요."); return; }
+  location.href = "stoneinfo.html";
+}
+
+function goNewListing() {
+  location.href = "newlisting.html";
+}
+</script>
 
 </body>
-
 </html>
