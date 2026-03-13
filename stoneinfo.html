@@ -159,7 +159,7 @@ document.getElementById("imageInput").onchange = function () {
   reader.readAsDataURL(file);
 };
 
-// ── 이미지 압축 (Canvas → JPEG) ──────────────────────────────
+// ── 이미지 압축 (Canvas → PNG) ──────────────────────────────
 function compressImage(file) {
   return new Promise(function (resolve, reject) {
     const reader = new FileReader();
@@ -184,7 +184,7 @@ function compressImage(file) {
         canvas.toBlob(function (blob) {
           if (!blob) { reject(new Error("압축 실패")); return; }
           resolve(blob);
-        }, "image/jpeg", COMP_QUALITY);
+        }, "image/png", COMP_QUALITY);
       };
       imgEl.src = e.target.result;
     };
@@ -210,14 +210,14 @@ async function uploadImage() {
     showLoading("이미지 업로드 중...");
     const buffer    = await blob.arrayBuffer();
     const byteArray = Array.from(new Uint8Array(buffer));
-    const fileName  = selectedFile.name.replace(/\.[^.]+$/, "") + ".jpg";
+    const fileName  = selectedFile.name.replace(/\.[^.]+$/, "") + ".png";
 
     // api.js apiPost → CONFIG.API_BASE, Content-Type: text/plain (CORS 해결)
     const data = await apiPost({
       action   : "uploadImage",
       nameKr   : nameKr,
       fileName : fileName,
-      mimeType : "image/jpeg",
+      mimeType : "image/png",
       byteArray: byteArray,
     });
 
