@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Structure Design</title>
+
+<!-- ▼ 공통 JS (순서 중요) -->
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/state.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/layoutFormatter.js"></script>
+<!-- ▼ 페이지 전용 (defer: DOM 준비 후 실행) -->
+<script src="js/design.js" defer></script>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
+  min-height: 100vh;
+  text-align: center;
+  color: #2b1e08;
+  padding-bottom: 90px; /* 하단 버튼 공간 */
+}
+
+.title { width: 90%; margin: 16px auto 0; display: block; }
+
+/* ── 원석 선택 ── */
+#stoneSelector {
+  margin: 14px 0 6px;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.stone-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 2px solid transparent;
+  background: rgba(255,255,255,0.4);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.stone-btn.active {
+  background: #2b1e08;
+  color: #f5d97a;
+  border-color: #2b1e08;
+  font-weight: 600;
+}
+
+/* ── 사이즈 버튼 ── */
+#sizeButtons {
+  margin: 10px 0;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 10px;
+}
+
+#sizeButtons button {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #f5c542;
+  font-weight: bold;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+#sizeButtons button:hover { opacity: 0.75; }
+
+/* ── 안내 메시지 ── */
+.guide {
+  font-size: 12px;
+  opacity: 0.55;
+  margin: 4px 0;
+}
+
+/* ── Details 시퀀스 ── */
+#detailsContainer {
+  min-height: 50px;
+  margin: 10px auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  padding: 0 10px;
+}
+
+/* [+] 버튼 */
+.plus-btn {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 2px dashed #aaa;
+  background: transparent;
+  color: #888;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.plus-btn.active-plus {
+  border-color: #d8ad3c;
+  background: rgba(248,197,66,0.25);
+  color: #2b1e08;
+  font-weight: bold;
+}
+
+/* 원석 항목 */
+.detail-btn {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(255,255,255,0.65);
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.detail-btn:hover { opacity: 0.65; }
+
+/* ── Total Size ── */
+#totalSize {
+  margin: 10px 0;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+/* ── Layout Summary ── */
+#layoutSummaryContainer {
+  margin: 12px 14px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.35);
+  border-radius: 8px;
+  text-align: left;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+#layoutSummary { margin-top: 6px; color: #2b1e08; line-height: 1.6; }
+
+/* ── 하단 버튼 ── */
+.bottom {
+  position: fixed;
+  bottom: 18px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+}
+
+.bottom img {
+  width: 52px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.bottom img:hover { opacity: 0.75; }
+</style>
+</head>
+<body>
+
+<img src="images/ttl_structuredesign.png" class="title" alt="Structure Design">
+
+<!-- ① 원석 선택 (다중 원석 지원 — D5 수정) -->
+<div id="stoneSelector"></div>
+<div class="guide">원석 선택 후 사이즈를 클릭하세요</div>
+
+<!-- ② 사이즈 버튼 -->
+<div id="sizeButtons"></div>
+<div class="guide">[+]를 먼저 클릭하면 그 위치에 삽입됩니다</div>
+
+<!-- ③ Details 시퀀스 -->
+<div id="detailsContainer"></div>
+
+<!-- ④ Total Size -->
+<div id="totalSize">Total Size 0mm</div>
+
+<!-- ⑤ Layout Summary -->
+<div id="layoutSummaryContainer">
+  <strong>Layout:</strong>
+  <div id="layoutSummary"></div>
+</div>
+
+<!-- ⑥ 하단 버튼 -->
+<div class="bottom">
+  <img src="images/btn_go_home.png"   alt="홈"    onclick="goHome()">
+  <img src="images/btn_go_before.png" alt="뒤로"  onclick="goBeforeDesign()">
+  <img src="images/btn_analysis.png"  alt="Next"  onclick="goNextDesign()">
+  <img src="images/btn_save.png"      alt="Save"  onclick="saveDesign()">
+</div>
+
+</body>
+</html>
+
