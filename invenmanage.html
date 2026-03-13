@@ -22,35 +22,26 @@ body {
 }
 
 .title-img { width: 95%; margin-top: 20px; }
-.stone-name {
-  margin-top: 60px;
-  font-size: 20px;
-  font-weight: bold;
-}
+.stone-name { margin-top: 20px; font-size: 20px; font-weight: bold; }
 
 .stock-container {
-  margin-top: 80px;
+  margin-top: 25px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 15px;
+  gap: 10px;
   padding-bottom: 100px;
 }
 
 .stock-header {
   display: flex;
-  width: 200px;
+  width: 260px;
   justify-content: space-between;
   font-size: 14px;
   font-weight: bold;
 }
 
-.stock-row {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 10px 0;
-}
+.stock-row { display: flex; align-items: center; gap: 6px; }
 
 .size-select {
   width: 60px;
@@ -74,11 +65,11 @@ body {
 
 .bottom-nav {
   position: fixed;
-  bottom: 16px;
+  bottom: 15px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 14px;
+  gap: 12px;
 }
 
 .bottom-nav img { width: 60px; cursor: pointer; transition: transform 0.15s; }
@@ -169,7 +160,20 @@ async function loadInventory() {
     return;
   }
 
-  data.inventory.forEach(function (item) {
+  // [IM1 FIX] SizeMaster 순서 기준으로 정렬 후 렌더
+  // 사용자가 중간 사이즈를 먼저 추가해도 항상 SizeMaster 순서로 표시
+  const sortedInventory = sizeList
+    .map(function(sz) {
+      return data.inventory.find(function(item) { return item.Size === sz; });
+    })
+    .filter(Boolean); // SizeMaster에 없는 사이즈는 제외
+
+  // SizeMaster에 없는 사이즈 (레거시 데이터 등)는 뒤에 추가
+  const unmatchedInventory = data.inventory.filter(function(item) {
+    return !sizeList.includes(item.Size);
+  });
+
+  sortedInventory.concat(unmatchedInventory).forEach(function (item) {
     addRow(item.Size, item.Stock);
   });
 }
