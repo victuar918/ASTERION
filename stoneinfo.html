@@ -1,422 +1,236 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gemstone Info</title>
+<title>Stone Info</title>
+
+<!-- ▼ 공통 JS -->
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/state.js"></script>
+<script src="js/ui.js"></script>
 
 <style>
-
-body{
-  margin:0;
-  font-family:Arial;
-  background:linear-gradient(135deg,#fff6da 0%,#f5d97a 40%,#eac45a 70%,#d8ad3c 100%);
-  text-align:center;
+body {
+  margin: 0;
+  font-family: Arial;
+  background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
+  text-align: center;
 }
 
-.title{
-  width:90%;
-  margin-top:20px;
+.title { width: 90%; margin-top: 20px; }
+
+.image-area { margin-top: 40px; }
+
+.stone-img {
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
 }
 
-.image-area{
-  margin-top:60px;
+.btn-select { width: 200px; cursor: pointer; }
+
+input, textarea {
+  width: 80%;
+  margin-top: 10px;
+  padding: 8px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: none;
+  box-sizing: border-box;
+  background: rgba(255,255,255,0.5);
 }
 
-.stone-img{
-  width:200px;
-  height:200px;
-  object-fit:contain;
+textarea { height: 100px; resize: none; }
+
+.bottom {
+  position: fixed;
+  bottom: 20px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 15px;
 }
 
-.btn-select{
-  width:200px;
-  cursor:pointer;
+.bottom img {
+  width: 60px;
+  cursor: pointer;
+  transition: opacity 0.2s;
 }
 
-input,textarea{
-  width:80%;
-  margin-top:10px;
-  padding:8px;
-  font-size:14px;
-  border-radius:6px;
-  border:none;
-  box-sizing:border-box;
-}
-
-textarea{
-  height:100px;
-  resize:none;
-}
-
-/* 로딩 오버레이 */
-#loadingOverlay{
-  display:none;
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,0.45);
-  z-index:999;
-  flex-direction:column;
-  justify-content:center;
-  align-items:center;
-  gap:12px;
-  color:#fff;
-  font-size:16px;
-}
-#loadingOverlay.active{
-  display:flex;
-}
-.spinner{
-  width:40px;
-  height:40px;
-  border:4px solid rgba(255,255,255,0.3);
-  border-top-color:#fff;
-  border-radius:50%;
-  animation:spin 0.8s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg);}}
-
-.bottom{
-  position:fixed;
-  bottom:20px;
-  width:100%;
-  display:flex;
-  justify-content:center;
-  gap:15px;
-}
-
-.bottom img{
-  width:60px;
-  cursor:pointer;
-  transition:opacity 0.2s;
-}
-
-/* [IMP-5] 이미지 미선택 시 업로드 버튼 dim */
-#uploadBtn{
-  opacity:0.35;
-  pointer-events:none;
-}
-#uploadBtn.ready{
-  opacity:1;
-  pointer-events:auto;
-}
-
+/* 업로드 버튼 dim (이미지 미선택 시) */
+#uploadBtn          { opacity: 0.35; pointer-events: none; }
+#uploadBtn.ready    { opacity: 1;    pointer-events: auto; }
 </style>
 </head>
 
 <body>
 
-<img src="images/ttl_gemstoneinfo.png" class="title" alt="Gemstone Info">
+<img src="images/ttl_gemstoneinfo.png" class="title" alt="Stone Info">
 
 <div class="image-area">
-  <!-- [FIX-B2] 전역 변수명을 stoneImg로 변경 → compressImage 내부 img 변수와 충돌 방지 -->
-  <img
-    id="stoneImage"
-    class="stone-img"
-    alt="원석 이미지"
-    onerror="this.onerror=null; this.src='images/btn_gemimageselec.png';"
-  >
-
+  <img id="stoneImage" class="stone-img" alt="원석 이미지"
+       onerror="this.onerror=null; this.src='images/btn_gemimageselec.png';">
   <br>
-
-  <img
-    src="images/btn_gemimageselec.png"
-    class="btn-select"
-    id="selectBtn"
-    alt="이미지 선택"
-  >
-
-  <!-- [FIX] accept를 Code.gs ALLOWED_MIME 화이트리스트와 동일하게 제한 -->
-  <input
-    type="file"
-    id="imageInput"
-    accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
-    style="display:none"
-  >
+  <img src="images/btn_gemimageselec.png" class="btn-select" id="selectBtn" alt="이미지 선택">
+  <input type="file" id="imageInput"
+         accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+         style="display:none">
 </div>
 
 <br>
-
 <input id="nameEng" placeholder="영문명 (NameEng)">
 <br>
-<input id="nameKr" placeholder="한글명 (NameKr) *필수">
+<input id="nameKr"  placeholder="한글명 (NameKr) *필수">
 <br>
-<textarea id="exp" placeholder="설명 (Exp)"></textarea>
-
-<!-- 로딩 오버레이 -->
-<div id="loadingOverlay">
-  <div class="spinner"></div>
-  <span id="loadingMsg">처리 중...</span>
-</div>
+<textarea id="exp"  placeholder="설명 (Exp)"></textarea>
 
 <div class="bottom">
-  <img src="images/btn_go_home.png"     alt="홈"         onclick="goHome()">
-  <img src="images/btn_go_before.png"   alt="뒤로"       onclick="goBefore()">
+  <img src="images/btn_go_home.png"     alt="홈"          onclick="goHome()">
+  <img src="images/btn_go_before.png"   alt="뒤로"        onclick="goBefore()">
   <img src="images/btn_imageupload.png" alt="이미지업로드" id="uploadBtn" onclick="uploadImage()">
-  <img src="images/btn_update.png"  alt="업데이트"   onclick="updateInfo()">
+  <img src="images/btn_btn_update.png"  alt="업데이트"    onclick="updateInfo()">
 </div>
 
 <script>
+// ── 상수 ──────────────────────────────────────────────────────
+const MAX_RAW_SIZE  = 50 * 1024 * 1024; // 원본 50MB 초과 차단
+const MAX_COMP_SIZE =  4 * 1024 * 1024; // 압축 후 4MB 초과 차단
+const COMP_MAX_PX   = 1200;
+const COMP_QUALITY  = 0.82;
 
-// ── 상수 ─────────────────────────────────────────────────────
-const WEBAPP_URL     = "https://script.google.com/macros/s/AKfycbxCuGnpk6WfSqQoGUUBUDe_Gc4exr95DNi-RuvDdmKJzXHPgIBB2j3m08Sf7roBPEThtA/exec";
-const MAX_RAW_SIZE   = 50 * 1024 * 1024; // 원본 50MB 초과 시 사전 차단
-const MAX_COMP_SIZE  = 4  * 1024 * 1024; // 압축 후 4MB 초과 시 차단 (Code.gs 기준 동일)
-const COMP_MAX_PX    = 1200;             // 압축 후 최대 가로/세로 픽셀
-const COMP_QUALITY   = 0.82;             // JPEG 압축 품질
-
-// ── DOM 참조 ─────────────────────────────────────────────────
-// [FIX-B2] 전역 변수명 stoneImg — compressImage 내부 img 변수와 이름 분리
-const stoneImg    = document.getElementById("stoneImage");
-const imageInput  = document.getElementById("imageInput");
-const nameKrEl    = document.getElementById("nameKr");
-const nameEngEl   = document.getElementById("nameEng");
-const expEl       = document.getElementById("exp");
-const overlay     = document.getElementById("loadingOverlay");
-const loadingMsg  = document.getElementById("loadingMsg");
-
-// 선택된 원본 파일 (미선택 = null)
+// ── 초기화 ─────────────────────────────────────────────────────
 let selectedFile = null;
 
-// ── 로딩 헬퍼 ─────────────────────────────────────────────────
-function showLoading(msg) {
-  loadingMsg.textContent = msg || "처리 중...";
-  overlay.classList.add("active");
-}
-function hideLoading() {
-  overlay.classList.remove("active");
-}
-
-// ── 초기 데이터 로드 ──────────────────────────────────────────
 window.onload = function () {
-
-  // [FIX-B1] window.onload 안에서 이벤트 연결 → DOM 보장
+  // 이미지 선택 버튼 연결
   document.getElementById("selectBtn").onclick = function () {
-    imageInput.click();
+    document.getElementById("imageInput").click();
   };
 
-  // sessionStorage — null 안전 처리 (|| "" 로 "null" 문자열 방지)
-  const nameKr = sessionStorage.getItem("selectedNameKr")  || "";
-  const nameEng= sessionStorage.getItem("selectedNameEng") || "";
-  const exp    = sessionStorage.getItem("selectedExp")     || "";
-  const image  = sessionStorage.getItem("selectedImage")   || "";
+  // state.js getSelectedStone()으로 원석 정보 읽기
+  const s = getSelectedStone();
+  document.getElementById("nameKr").value  = s.nameKr;
+  document.getElementById("nameEng").value = s.nameEng;
+  document.getElementById("exp").value     = s.exp;
 
-  nameKrEl.value  = nameKr;
-  nameEngEl.value = nameEng;
-  expEl.value     = exp;
-
-  if (image) {
-    stoneImg.src = image;
+  const imgEl = document.getElementById("stoneImage");
+  if (s.image) {
+    imgEl.src = s.image;
   } else {
-    stoneImg.style.display = "none";
+    imgEl.style.display = "none";
   }
 };
 
-// ── 파일 선택 이벤트 ─────────────────────────────────────────
-imageInput.onchange = function () {
+// ── 파일 선택 ─────────────────────────────────────────────────
+document.getElementById("imageInput").onchange = function () {
   const file = this.files[0];
-
-  // 파일 없으면 명시적 초기화
   if (!file) {
     selectedFile = null;
-    document.getElementById("uploadBtn").classList.remove("ready"); // [IMP-5] dim 복원
+    document.getElementById("uploadBtn").classList.remove("ready");
     return;
   }
 
-  // 원본 크기 사전 차단 (50MB 초과 RAW 파일 등)
   if (file.size > MAX_RAW_SIZE) {
-    alert("파일이 너무 큽니다 (50MB 초과). 다른 이미지를 선택해 주세요.");
-    this.value   = "";
+    alert("파일이 너무 큽니다 (50MB 초과).");
+    this.value = "";
     selectedFile = null;
+    document.getElementById("uploadBtn").classList.remove("ready");
     return;
   }
 
   selectedFile = file;
+  document.getElementById("uploadBtn").classList.add("ready"); // dim 해제
 
-  // [IMP-5] 파일 선택 시 업로드 버튼 활성화
-  document.getElementById("uploadBtn").classList.add("ready");
-
-  // 미리보기 (로컬 DataURL — 서버 전송과 무관)
+  // 로컬 미리보기
   const reader = new FileReader();
   reader.onload = function (e) {
-    stoneImg.style.display = "";
-    stoneImg.src = e.target.result;
+    const imgEl = document.getElementById("stoneImage");
+    imgEl.style.display = "";
+    imgEl.src = e.target.result;
   };
   reader.onerror = function () {
     alert("미리보기 실패. 다시 선택해 주세요.");
-    selectedFile     = null;
-    imageInput.value = "";
-    document.getElementById("uploadBtn").classList.remove("ready"); // [IMP-5] dim 복원
+    selectedFile = null;
+    document.getElementById("imageInput").value = "";
+    document.getElementById("uploadBtn").classList.remove("ready");
   };
   reader.readAsDataURL(file);
 };
 
-// ── 이미지 자동 압축 (Canvas 방식) ───────────────────────────
-//
-// [FIX-B2] 내부 Image 객체 변수명을 imgEl로 사용 → 전역 stoneImg와 구분
-// [FIX-B3] reader.onerror / imgEl.onerror → reject 처리 (Promise 영구 pending 방지)
-// [FIX-B4] toBlob이 null 반환 시 reject 처리
-//
-// 흐름:
-//   File → FileReader(DataURL) → Image 로드 → Canvas 축소 렌더링
-//   → toBlob(JPEG, quality) → 압축된 Blob 반환
-//
-// 반환: Promise<Blob> — 항상 image/jpeg
-// ─────────────────────────────────────────────────────────────
+// ── 이미지 압축 (Canvas → JPEG) ──────────────────────────────
 function compressImage(file) {
   return new Promise(function (resolve, reject) {
-
     const reader = new FileReader();
-
-    // [FIX-B3] 파일 읽기 실패 → reject
-    reader.onerror = function () {
-      reject(new Error("파일을 읽을 수 없습니다. 손상된 파일이거나 접근이 거부되었습니다."));
-    };
-
-    reader.onload = function (e) {
-      // [FIX-B2] 전역 stoneImg와 이름 분리 → imgEl
+    reader.onerror = function () { reject(new Error("파일 읽기 실패")); };
+    reader.onload  = function (e) {
       const imgEl = new Image();
-
-      // [FIX-B3] 이미지 로드 실패 → reject
-      imgEl.onerror = function () {
-        reject(new Error("이미지를 불러올 수 없습니다. 지원하지 않는 형식이거나 손상된 파일입니다."));
-      };
-
-      imgEl.onload = function () {
-        // 자연 크기 유효성 확인
-        const origW = imgEl.naturalWidth;
-        const origH = imgEl.naturalHeight;
-
-        if (!origW || !origH) {
-          reject(new Error("이미지 크기를 읽을 수 없습니다."));
-          return;
-        }
-
-        // 축소 비율 계산 (원본보다 크게 확대 안 함)
-        let w = origW;
-        let h = origH;
+      imgEl.onerror = function () { reject(new Error("이미지 로드 실패")); };
+      imgEl.onload  = function () {
+        let w = imgEl.naturalWidth, h = imgEl.naturalHeight;
+        if (!w || !h) { reject(new Error("이미지 크기 읽기 실패")); return; }
         if (w > COMP_MAX_PX || h > COMP_MAX_PX) {
-          const ratio = Math.min(COMP_MAX_PX / w, COMP_MAX_PX / h);
-          w = Math.round(w * ratio);
-          h = Math.round(h * ratio);
+          const r = Math.min(COMP_MAX_PX / w, COMP_MAX_PX / h);
+          w = Math.round(w * r); h = Math.round(h * r);
         }
-
-        // Canvas 생성
         const canvas = document.createElement("canvas");
-        canvas.width  = w;
-        canvas.height = h;
-
+        canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          reject(new Error("Canvas 2D 컨텍스트를 사용할 수 없는 환경입니다."));
-          return;
-        }
-
-        // 흰 배경 채우기 (PNG 투명 → JPEG 변환 시 검은 배경 방지)
+        if (!ctx) { reject(new Error("Canvas 사용 불가")); return; }
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, w, h);
         ctx.drawImage(imgEl, 0, 0, w, h);
-
-        // JPEG 압축 출력
         canvas.toBlob(function (blob) {
-          // [FIX-B4] toBlob null 반환 시 reject
-          if (!blob) {
-            reject(new Error("이미지 압축에 실패했습니다. (toBlob 반환값 없음)"));
-            return;
-          }
+          if (!blob) { reject(new Error("압축 실패")); return; }
           resolve(blob);
         }, "image/jpeg", COMP_QUALITY);
       };
-
       imgEl.src = e.target.result;
     };
-
     reader.readAsDataURL(file);
   });
 }
 
 // ── 이미지 업로드 ─────────────────────────────────────────────
-//
-// [FIX-B5] try/catch 추가 → 네트워크 오류 시 unhandled rejection 방지
-// [FIX-B7] Content-Type: application/json 헤더 추가
-// [FIX-B8] 업로드 성공 후 data.url을 sessionStorage에 저장한 뒤 reload
-// [FIX-B12] 빈 nameKr 전송 방지 검증 추가
-//
-// Apps Script 수정 불필요:
-//   Utilities.newBlob(byteArray, mimeType, fileName) 은
-//   압축 전/후 구분 없이 동일하게 처리함
-// ─────────────────────────────────────────────────────────────
 async function uploadImage() {
+  const nameKr = getSelectedStone().nameKr;
+  if (!nameKr)       { alert("원석 정보가 없습니다. 목록으로 돌아가세요."); return; }
+  if (!selectedFile) { alert("이미지를 선택하세요."); return; }
 
-  // sessionStorage null 방어
-  const nameKr = sessionStorage.getItem("selectedNameKr") || "";
-  if (!nameKr) {
-    alert("원석 정보가 없습니다. 목록으로 돌아가세요.");
-    return;
-  }
-
-  if (!selectedFile) {
-    alert("이미지를 선택하세요.");
-    return;
-  }
-
-  showLoading("이미지 압축 중...");
-
-  // STEP 1. 압축
-  let compressedBlob;
   try {
-    compressedBlob = await compressImage(selectedFile);
-  } catch (compErr) {
-    hideLoading();
-    alert("이미지 압축 오류: " + compErr.message);
-    return;
-  }
+    showLoading("이미지 압축 중...");
+    const blob = await compressImage(selectedFile);
 
-  // STEP 2. 압축 후 크기 검증
-  if (compressedBlob.size > MAX_COMP_SIZE) {
-    hideLoading();
-    alert("압축 후에도 4MB를 초과합니다. 더 작은 이미지를 사용해 주세요.");
-    return;
-  }
+    if (blob.size > MAX_COMP_SIZE) {
+      alert("압축 후에도 4MB를 초과합니다. 더 작은 이미지를 사용해 주세요.");
+      return;
+    }
 
-  showLoading("이미지 업로드 중...");
-
-  // STEP 3. 전송
-  try {
-    const buffer    = await compressedBlob.arrayBuffer();
+    showLoading("이미지 업로드 중...");
+    const buffer    = await blob.arrayBuffer();
     const byteArray = Array.from(new Uint8Array(buffer));
+    const fileName  = selectedFile.name.replace(/\.[^.]+$/, "") + ".jpg";
 
-    // 파일명 확장자 .jpg 통일 (압축 출력이 항상 JPEG이므로)
-    const baseName = selectedFile.name.replace(/\.[^.]+$/, "");
-    const fileName = baseName + ".jpg";
-
-    // [FIX-B7] Content-Type 헤더 추가
-    const res = await fetch(WEBAPP_URL, {
-      method : "POST",
-      headers: { "Content-Type": "text/plain" },   // [CORS-FIX] text/plain → Simple Request (preflight 없음)
-      body   : JSON.stringify({
-        action   : "uploadImage",
-        nameKr   : nameKr,
-        fileName : fileName,
-        mimeType : "image/jpeg",   // 압축 출력은 항상 JPEG
-        byteArray: byteArray,
-      }),
+    // api.js apiPost → CONFIG.API_BASE, Content-Type: text/plain (CORS 해결)
+    const data = await apiPost({
+      action   : "uploadImage",
+      nameKr   : nameKr,
+      fileName : fileName,
+      mimeType : "image/jpeg",
+      byteArray: byteArray,
     });
 
-    if (!res.ok) throw new Error("서버 응답 오류: HTTP " + res.status);
-
-    const data = await res.json();
-
     if (data.success) {
-      // [FIX-B8] 새 URL을 sessionStorage에 저장한 뒤 reload → 구 이미지 재표시 방지
-      sessionStorage.setItem("selectedImage", data.url);
-      alert("이미지 업로드 완료");
+      // state.js로 image URL 갱신
+      const s = getSelectedStone();
+      setSelectedStone({ ...s, image: data.url });
+      alert("이미지 업로드 완료 ✓");
       location.reload();
     } else {
       alert("업로드 실패: " + (data.error || "알 수 없는 오류"));
     }
-
   } catch (err) {
-    // [FIX-B5] 네트워크/JSON 오류 메시지 표시
     alert("업로드 오류: " + err.message);
   } finally {
     hideLoading();
@@ -424,79 +238,37 @@ async function uploadImage() {
 }
 
 // ── 원석 정보 업데이트 ────────────────────────────────────────
-//
-// [FIX-B6]  try/catch 추가
-// [FIX-B7]  Content-Type 헤더 추가
-// [FIX-B9]  키명 수정 (Code.gs data.oldNameKr 일치)
-// [FIX-B10] payload.data 래퍼 추가 (Code.gs updateStoneInfo(payload.data) 일치)
-// [FIX-B11] 성공 후 sessionStorage 동기화
-// [FIX-B12] 빈 nameKr 전송 방지
-// ─────────────────────────────────────────────────────────────
 async function updateInfo() {
+  const oldNameKr = getSelectedStone().nameKr;
+  if (!oldNameKr) { alert("원석 정보가 없습니다. 목록으로 돌아가세요."); return; }
 
-  // sessionStorage null 방어
-  const oldNameKr = sessionStorage.getItem("selectedNameKr") || "";
-  if (!oldNameKr) {
-    alert("원석 정보가 없습니다. 목록으로 돌아가세요.");
-    return;
-  }
+  const newNameKr = document.getElementById("nameKr").value.trim();
+  const nameEng   = document.getElementById("nameEng").value.trim();
+  const exp       = document.getElementById("exp").value.trim();
 
-  const newNameKr = nameKrEl.value.trim();
-  const nameEng   = nameEngEl.value.trim();
-  const exp       = expEl.value.trim();
-
-  // [FIX-B12] 필수 필드 검증
-  if (!newNameKr) {
-    alert("원석명(NameKr)은 필수입니다.");
-    nameKrEl.focus();
-    return;
-  }
-
-  showLoading("정보 업데이트 중...");
+  if (!newNameKr) { alert("원석명(NameKr)은 필수입니다."); document.getElementById("nameKr").focus(); return; }
 
   try {
-    // [FIX-B7] Content-Type 헤더 추가
-    const res = await fetch(WEBAPP_URL, {
-      method : "POST",
-      headers: { "Content-Type": "text/plain" },   // [CORS-FIX] text/plain → Simple Request (preflight 없음)
-      body   : JSON.stringify({
-        action: "updateStoneInfo",
-        // [FIX-B10] data 래퍼 추가 → Code.gs: updateStoneInfo(payload.data)
-        data: {
-          oldNameKr: oldNameKr,
-          nameKr   : newNameKr,
-          nameEng  : nameEng,
-          exp      : exp,
-        },
-      }),
+    showLoading("정보 업데이트 중...");
+    const data = await apiPost({
+      action: "updateStoneInfo",
+      data  : { oldNameKr, nameKr: newNameKr, nameEng, exp },
     });
 
-    if (!res.ok) throw new Error("서버 응답 오류: HTTP " + res.status);
-
-    const data = await res.json();
-
     if (data.success) {
-      // [FIX-B11] 성공 후 sessionStorage 새 값으로 동기화
-      sessionStorage.setItem("selectedNameKr",  newNameKr);
-      sessionStorage.setItem("selectedNameEng", nameEng);
-      sessionStorage.setItem("selectedExp",     exp);
-      alert("정보 업데이트 완료");
+      setSelectedStone({ nameKr: newNameKr, nameEng, exp, image: getSelectedStone().image });
+      alert("정보 업데이트 완료 ✓");
     } else {
       alert("업데이트 실패: " + (data.error || "알 수 없는 오류"));
     }
-
   } catch (err) {
-    // [FIX-B6] 네트워크/JSON 오류 메시지 표시
     alert("업데이트 오류: " + err.message);
   } finally {
     hideLoading();
   }
 }
 
-// ── 페이지 이동 ───────────────────────────────────────────────
-function goHome()   { window.location.href = "index.html"; }
-function goBefore() { window.location.href = "inventory.html"; }
-
+function goBefore() { location.href = "inventory.html"; }
 </script>
 
 </body>
