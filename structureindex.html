@@ -1,147 +1,160 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="ko">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Structure Code Index</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      color: #2b1e08;
-      background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Structure Code Index</title>
 
-    /* 타이틀 이미지 */
-    .title-img {
-      width: 95%;
-      margin: 20px auto 30px auto; /* 상단 여백 + 아래 간격 */
-      display: block;
-    }
+<!-- ▼ 공통 JS -->
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/state.js"></script>
+<script src="js/ui.js"></script>
 
-    /* 입력 영역 */
-    .input-group {
-      display: flex;
-      flex-direction: column;
-      width: 400px;
-      margin-top: auto;
-      margin-bottom: auto; /* 화면 중간 배치 */
-    }
+<style>
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #2b1e08;
+  background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
 
-    .input-group input {
-      font-size: 16px;
-      padding: 10px;
-      margin-bottom: 10px;
-      border: 2px solid #d8ad3c;
-      border-radius: 4px;
-      text-transform: uppercase;
-    }
+.title-img {
+  width: 95%;
+  margin: 20px auto 0;
+  display: block;
+}
 
-    /* 하단 네비게이션 버튼 */
-    .bottom-nav {
-      position: absolute;
-      bottom: 5%;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 20px;
-    }
+/* 입력 영역 — 화면 중앙 */
+.input-group {
+  position: absolute;
+  top: 42%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  width: 35vw;
+  min-width: 260px;
+}
 
-    .bottom-nav img {
-      width: 90px;
-      cursor: pointer;
-      transition: 0.2s;
-    }
+.input-group input {
+  font-size: 18px;
+  padding: 12px;
+  border: 2px solid #d8ad3c;
+  border-radius: 6px;
+  text-align: center;
+  letter-spacing: 2px;
+  background: rgba(255,255,255,0.6);
+  outline: none;
+}
 
-    .bottom-nav img:hover {
-      transform: scale(1.08);
-    }
-  </style>
+.input-group input:focus {
+  border-color: #b8860b;
+  background: rgba(255,255,255,0.9);
+}
+
+/* 하단 버튼 */
+.bottom-nav {
+  position: absolute;
+  bottom: 5%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 20px;
+}
+
+.bottom-nav img {
+  width: 90px;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.bottom-nav img:hover { transform: scale(1.08); }
+</style>
 </head>
 
 <body>
 
-  <!-- 타이틀 이미지 (컨테이너 밖) -->
-  <img src="images/ttl_codeindex.png" alt="Structure Code Index" class="title-img">
+<img src="images/ttl_codeindex.png" alt="Structure Code Index" class="title-img">
 
-<!-- 입력창 -->
-  <div class="input-group">
-    <input type="text" id="structureCode" placeholder="S-00000-000000">
-  </div>
+<div class="input-group">
+  <!-- S-00000-000000 형식 자동 포맷 -->
+  <input type="text" id="codeInput" placeholder="S-00000-000000" maxlength="14">
+</div>
 
-  <style>
-    .input-group {
-      display: flex;
-      flex-direction: column;
-      width: 35vw; /* 화면 가로의 35% */
-      margin: 0 auto;
-      position: absolute;
-      top: 40%; /* 화면 세로 기준 3/6 지점 */
-      transform: translateY(-50%);
-    }
-  </style>
+<div class="bottom-nav">
+  <img src="images/btn_go_home.png" alt="홈"     onclick="goHome()">
+  <img src="images/btn_as.png"      alt="A/S 등록" onclick="setAS()">
+  <img src="images/btn_select.png"  alt="선택"   onclick="selectCode()">
+</div>
 
-  <!-- 하단 버튼 -->
-  <div class="bottom-nav">
-    <img src="images/btn_go_home.png" onclick="goHome()">
-    <img src="images/btn_as.png" onclick="setAS()">
-    <img src="images/btn_select.png" onclick="selectCode()">
-  </div>
+<script>
+// ── 입력 포맷: S-00000-000000 자동 변환 ────────────────────────
+const codeInput = document.getElementById("codeInput");
 
-  <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbxCuGnpk6WfSqQoGUUBUDe_Gc4exr95DNi-RuvDdmKJzXHPgIBB2j3m08Sf7roBPEThtA";
+codeInput.addEventListener("input", function () {
+  // 대문자 + 숫자만 허용
+  let raw = codeInput.value.toUpperCase().replace(/[^0-9A-Z\-]/g, "");
 
-    const input = document.getElementById("structureCode");
+  // 하이픈을 제거하고 순수 문자만 추출
+  const chars = raw.replace(/-/g, "");
 
-    // 자동 대문자 + S-00000-000000 형식
-    input.addEventListener("input", function () {
-      let val = input.value.toUpperCase().replace(/[^0-9A-Z]/g, '');
+  // S 보장
+  const s   = chars.length > 0 ? chars[0] : "";
+  const mid = chars.slice(1, 6);   // 최대 5자리
+  const end = chars.slice(6, 12);  // 최대 6자리
 
-      if (!val.startsWith('S')) val = 'S' + val.slice(1);
+  let formatted = s || "";
+  if (mid.length > 0) formatted += "-" + mid;
+  if (end.length > 0) formatted += "-" + end;
 
-      if (val.length > 1) val = val.slice(0, 1) + '-' + val.slice(1);
-      if (val.length > 7) val = val.slice(0, 7) + '-' + val.slice(7);
-      if (val.length > 14) val = val.slice(0, 14);
+  codeInput.value = formatted;
+});
 
-      input.value = val;
+// ── A/S 등록 ──────────────────────────────────────────────────
+// [B1 FIX] /exec 포함된 CONFIG.API_BASE 사용
+// [B2 FIX] api.js apiPost → Content-Type: text/plain
+// [B3 FIX] A/S → Code.gs VALID_STATUSES에 추가됨
+// [B4 FIX] setStructureCode → worksdesk 이동 시 state 유지
+async function setAS() {
+  const code = codeInput.value.trim();
+  if (!code) { alert("StructureCode를 입력해주세요."); return; }
+
+  try {
+    showLoading("A/S 상태 변경 중...");
+    // api.js apiPost 사용 — CONFIG.API_BASE 자동 참조
+    const result = await apiPost({
+      action: "updateStatus",
+      code  : code,      // Code.gs: payload.code || payload.structureCode
+      status: "A/S",     // Code.gs: payload.status || payload.newStatus
     });
 
-    async function setAS() {
-      const code = input.value;
-      if (!code) return alert("StructureCode를 입력해주세요.");
-
-      try {
-        const res = await fetch(API_URL, {
-          method: "POST",
-          body: JSON.stringify({ action: "updateStatus", structureCode: code, newStatus: "A/S" })
-        });
-        const result = await res.json();
-        if (result.success) {
-          alert(code + " 상태가 A/S로 변경되었습니다.");
-        } else {
-          alert("Error: " + result.error);
-        }
-      } catch (err) {
-        console.error(err);
-        alert("API 호출 중 오류가 발생했습니다.");
-      }
+    if (result.success) {
+      alert(code + " → A/S 상태로 변경되었습니다.");
+    } else {
+      alert("변경 실패: " + (result.error || "알 수 없는 오류"));
     }
+  } catch (err) {
+    alert("오류: " + err.message);
+  } finally {
+    hideLoading();
+  }
+}
 
-    function selectCode() {
-      const code = input.value;
-      if (!code) return alert("StructureCode를 입력해주세요.");
-      window.location.href = "structuredesign.html?code=" + code;
-    }
+// ── 코드 선택 → worksdesk 이동 ────────────────────────────────
+function selectCode() {
+  const code = codeInput.value.trim();
+  if (!code) { alert("StructureCode를 입력해주세요."); return; }
 
-    function goHome() {
-      window.location.href = "index.html";
-    }
-  </script>
+  // [B4 FIX] state.js setStructureCode → worksdesk에서 getStructureCode로 읽음
+  setStructureCode(code);
+  location.href = "worksdesk.html?code=" + encodeURIComponent(code);
+}
+</script>
 
 </body>
-
 </html>
+
