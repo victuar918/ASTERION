@@ -1,158 +1,359 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>New Listing</title>
-
-<!-- ▼ 공통 JS -->
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/state.js"></script>
-<script src="js/ui.js"></script>
-
-<style>
-body {
-  margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
-  min-height: 100vh;
-  color: #2b1e08;
-  text-align: center;
-}
-
-.title-img {
-  width: 90%;
-  margin-top: 20px;
-}
-
-.form-area {
-  margin-top: 30px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding-bottom: 100px;
-}
-
-input, textarea {
-  width: 80%;
-  max-width: 500px;
-  padding: 10px;
-  font-size: 15px;
-  border-radius: 6px;
-  border: none;
-  background: rgba(255,255,255,0.55);
-  box-sizing: border-box;
-  outline: none;
-}
-
-input:focus, textarea:focus {
-  background: rgba(255,255,255,0.85);
-}
-
-textarea {
-  height: 100px;
-  resize: none;
-}
-
-.field-label {
-  width: 80%;
-  max-width: 500px;
-  text-align: left;
-  font-size: 12px;
-  opacity: 0.65;
-  margin-bottom: -4px;
-}
-
-.bottom-nav {
-  position: fixed;
-  bottom: 15px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 15px;
-}
-
-.bottom-nav img {
-  width: 60px;
-  cursor: pointer;
-  transition: transform 0.15s;
-}
-
-.bottom-nav img:hover { transform: scale(1.1); }
-</style>
-</head>
-
-<body>
-
-<img src="images/ttl_newlisting.png" class="title-img" alt="New Listing">
-
-<div class="form-area">
-  <div class="field-label">한글명 NameKr *필수</div>
-  <input id="nameKr"  type="text" placeholder="예) 자수정">
-
-  <div class="field-label">영문명 NameEng</div>
-  <input id="nameEng" type="text" placeholder="예) Amethyst">
-
-  <div class="field-label">설명 Exp</div>
-  <textarea id="exp"  placeholder="원석에 대한 간단한 설명"></textarea>
-</div>
-
-<div class="bottom-nav">
-  <img src="images/btn_go_home.png"   alt="홈"   onclick="goHome()">
-  <img src="images/btn_go_before.png" alt="뒤로" onclick="goBefore()">
-  <img src="images/btn_register.png"  alt="등록"  onclick="registerStone()">
-</div>
-
-<script>
-// ── 원석 등록 ─────────────────────────────────────────────────
-// Code.gs doPost case "addStone"
-// payload: { action:"addStone", data:{ NameKr, NameEng, Exp } }
-// 응답:    { success:true } | { success:false, error }
-async function registerStone() {
-  const nameKr  = document.getElementById("nameKr").value.trim();
-  const nameEng = document.getElementById("nameEng").value.trim();
-  const exp     = document.getElementById("exp").value.trim();
-
-  if (!nameKr) {
-    alert("한글명(NameKr)은 필수입니다.");
-    document.getElementById("nameKr").focus();
-    return;
-  }
-
-  try {
-    showLoading("원석 등록 중...");
-    // ② apiPost → CONFIG.API_BASE, Content-Type:text/plain 자동 처리
-    const data = await apiPost({
-      action: "addStone",
-      data  : { NameKr: nameKr, NameEng: nameEng, Exp: exp },
-    });
-
-    if (data.success) {
-      alert(nameKr + " 등록 완료 ✓\n이미지는 Stone Info 페이지에서 등록할 수 있습니다.");
-      // 등록 성공 후 state에 저장 → 바로 stoneinfo로 이동 가능하도록
-      setSelectedStone({ NameKr: nameKr, NameEng: nameEng, Exp: exp, Image: "" });
-      clearForm();
-    } else {
-      alert("등록 실패: " + (data.error || "알 수 없는 오류"));
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <title>ASTERION – New Listing</title>
+  <script src="config.js"></script>
+  <script src="api_contract.js"></script>
+  <script src="state.js"></script>
+  <script src="api.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{
+      background:url('bg_main.png') center/cover no-repeat fixed;
+      font-family:'Arial',sans-serif; color:#fff;
+      min-height:100vh;
+      display:flex; flex-direction:column; align-items:center;
+      padding:14px 14px 100px;
     }
-  } catch (err) {
-    alert("등록 오류: " + err.message);
-  } finally {
-    hideLoading();
+
+    /* 타이틀 */
+    #title-img{width:260px;max-width:88vw;margin:12px auto 18px;display:block}
+
+    /* 공통 패널 */
+    .panel{
+      width:100%; max-width:400px;
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.11);
+      border-radius:12px; padding:14px 14px 16px;
+      margin-bottom:12px;
+    }
+    .panel-label{
+      font-size:10px; letter-spacing:1.8px; text-transform:uppercase;
+      color:rgba(255,255,255,0.38); margin-bottom:10px;
+    }
+
+    /* ── 이미지 선택 구역 (핵심) ── */
+    #img-panel{
+      width:100%; max-width:400px;
+      margin-bottom:12px;
+    }
+    /*
+     * 이미지 선택 박스:
+     * - 정사각형 (1:1 비율)
+     * - 클릭하면 파일 선택 다이얼로그
+     * - 미선택: + 아이콘 + 안내 문구
+     * - 선택 후: 이미지 미리보기 표시
+     */
+    #img-box{
+      width:100%; aspect-ratio:1/1;
+      max-width:400px; max-height:400px;
+      background:rgba(255,255,255,0.05);
+      border:2px dashed rgba(255,255,255,0.22);
+      border-radius:12px;
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      cursor:pointer; overflow:hidden; position:relative;
+      transition:border-color .15s, background .15s;
+      -webkit-tap-highlight-color:transparent;
+    }
+    #img-box:hover{
+      border-color:rgba(210,170,100,0.5);
+      background:rgba(255,255,255,0.07);
+    }
+    #img-box.has-image{
+      border-style:solid;
+      border-color:rgba(210,170,100,0.4);
+    }
+    /* 안내 아이콘/문구 (이미지 없을 때만 표시) */
+    #img-placeholder{
+      display:flex; flex-direction:column; align-items:center; gap:10px;
+      pointer-events:none;
+    }
+    #img-placeholder .plus-icon{
+      width:48px; height:48px;
+      border:2px solid rgba(255,255,255,0.3); border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-size:24px; color:rgba(255,255,255,0.4);
+    }
+    #img-placeholder .img-hint{
+      font-size:12px; color:rgba(255,255,255,0.35); text-align:center; line-height:1.5;
+    }
+    /* 미리보기 이미지 */
+    #img-preview{
+      display:none;  /* 기본 숨김, 이미지 선택 후 표시 */
+      position:absolute; inset:0;
+      width:100%; height:100%; object-fit:cover;
+    }
+    /* 교체 오버레이 (미리보기 위에 hover 시 표시) */
+    #img-overlay{
+      display:none;
+      position:absolute; inset:0;
+      background:rgba(0,0,0,0.45);
+      align-items:center; justify-content:center;
+      font-size:12px; color:#fff; letter-spacing:1px;
+    }
+    #img-box.has-image:hover #img-overlay{display:flex}
+    /* 파일 input (hidden) */
+    #file-input{
+      position:absolute; inset:0; opacity:0; cursor:pointer;
+      width:100%; height:100%;
+    }
+    /* 파일명 표시 */
+    #file-name{
+      font-size:11px; color:rgba(255,255,255,0.45);
+      margin-top:6px; text-align:center;
+      width:100%; max-width:400px;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+
+    /* 입력 필드 */
+    .input-wrap{margin-bottom:10px}
+    .input-label{
+      font-size:10px; letter-spacing:1.4px; text-transform:uppercase;
+      color:rgba(255,255,255,0.38); margin-bottom:5px; display:block;
+    }
+    .text-input{
+      width:100%; padding:10px 12px;
+      background:rgba(255,255,255,0.07);
+      border:1px solid rgba(255,255,255,0.14); border-radius:8px;
+      color:#fff; font-size:13px; outline:none;
+      transition:border-color .15s;
+    }
+    .text-input:focus{border-color:rgba(210,170,100,0.6)}
+    .text-input::placeholder{color:rgba(255,255,255,0.3)}
+    textarea.text-input{resize:vertical; min-height:72px; line-height:1.5}
+
+    /* 필수 표시 */
+    .req{color:rgba(200,100,100,0.9)}
+
+    /* 상태 메시지 */
+    #status-msg{
+      width:100%;max-width:400px;text-align:center;
+      font-size:12px;padding:4px 0;min-height:18px;
+    }
+    .err-msg{color:rgba(220,80,80,.9)}
+    .ok-msg {color:rgba(100,220,130,.9)}
+    .info-msg{color:rgba(220,188,128,.9)}
+
+    /* 하단 네비 */
+    #nav-bar{
+      position:fixed;bottom:0;left:0;right:0;
+      display:flex;justify-content:space-around;align-items:center;
+      padding:8px 10px env(safe-area-inset-bottom,10px);
+      background:rgba(8,6,4,.88);
+      border-top:1px solid rgba(255,255,255,0.07);z-index:50;
+    }
+    #nav-bar img{height:42px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+    #nav-bar img:active{opacity:.65}
+
+    /* 로딩 오버레이 */
+    #loading-overlay{
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,.55); z-index:200;
+      align-items:center; justify-content:center; flex-direction:column; gap:12px;
+    }
+    #loading-overlay.show{display:flex}
+    .loading-dots{display:flex;gap:6px}
+    .loading-dots span{
+      width:8px;height:8px;border-radius:50%;
+      background:rgba(220,188,128,.8);
+      animation:dp 1.2s ease-in-out infinite;
+    }
+    .loading-dots span:nth-child(2){animation-delay:.2s}
+    .loading-dots span:nth-child(3){animation-delay:.4s}
+    @keyframes dp{0%,80%,100%{transform:scale(.7);opacity:.4}40%{transform:scale(1);opacity:1}}
+    .loading-text{font-size:13px;letter-spacing:2px;color:rgba(220,188,128,1)}
+  </style>
+</head>
+<body>
+  <img id="title-img" src="ttl_newlisting.png" alt="New Listing"/>
+
+  <!-- ① 이미지 선택 구역 (항상 보임) -->
+  <div id="img-panel">
+    <div id="img-box">
+      <!-- hidden file input: img-box 전체 클릭 가능 -->
+      <input id="file-input" type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"/>
+
+      <!-- 미선택 상태 안내 -->
+      <div id="img-placeholder">
+        <div class="plus-icon">+</div>
+        <div class="img-hint">이미지를 선택하세요<br/><span style="font-size:10px;opacity:.7">JPG · PNG · WEBP · GIF · 최대 4MB</span></div>
+      </div>
+
+      <!-- 선택 후 미리보기 -->
+      <img id="img-preview" src="" alt="preview"/>
+
+      <!-- 교체 오버레이 -->
+      <div id="img-overlay">이미지 교체</div>
+    </div>
+    <div id="file-name"></div>
+  </div>
+
+  <!-- ② 원석 정보 입력 -->
+  <div class="panel">
+    <div class="panel-label">Stone Info</div>
+
+    <div class="input-wrap">
+      <label class="input-label" for="input-namekr">이름 (Korean) <span class="req">*</span></label>
+      <input id="input-namekr" class="text-input" type="text" placeholder="예: 자수정" maxlength="200"/>
+    </div>
+
+    <div class="input-wrap">
+      <label class="input-label" for="input-nameeng">이름 (English)</label>
+      <input id="input-nameeng" class="text-input" type="text" placeholder="예: Amethyst" maxlength="200"/>
+    </div>
+
+    <div class="input-wrap" style="margin-bottom:0">
+      <label class="input-label" for="input-exp">설명 (Exp)</label>
+      <textarea id="input-exp" class="text-input" placeholder="원석 설명, 특징 등..." maxlength="500"></textarea>
+    </div>
+  </div>
+
+  <!-- 상태 메시지 -->
+  <div id="status-msg"></div>
+
+  <!-- 하단 네비 -->
+  <div id="nav-bar">
+    <img src="btn_go_home.png"  alt="Home"    id="btn-home"/>
+    <img src="btn_go_before.png" alt="Before" id="btn-before"/>
+    <img src="btn_save.png"     alt="Save"    id="btn-save"/>
+  </div>
+
+  <!-- 로딩 -->
+  <div id="loading-overlay">
+    <div class="loading-dots"><span></span><span></span><span></span></div>
+    <div class="loading-text">SAVING</div>
+  </div>
+
+  <script>
+  "use strict";
+  var selectedFile = null;   // 선택된 File 객체
+  var isSaving     = false;
+
+  document.addEventListener("DOMContentLoaded", function(){
+    // 네비
+    document.getElementById("btn-home").addEventListener("click", function(){
+      window.location.href = "index.html";
+    });
+    document.getElementById("btn-before").addEventListener("click", function(){
+      window.location.href = "inventory.html";
+    });
+    document.getElementById("btn-save").addEventListener("click", onSave);
+
+    // 파일 선택
+    document.getElementById("file-input").addEventListener("change", onFileChange);
+  });
+
+  /* 파일 선택 처리 */
+  function onFileChange(e){
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    // 클라이언트 사이드 검증
+    if (file.size > 4 * 1024 * 1024){
+      setStatus("이미지는 4MB 이하여야 합니다.", "err");
+      e.target.value = "";
+      return;
+    }
+    var allowed = ["image/jpeg","image/jpg","image/png","image/webp","image/gif"];
+    if (allowed.indexOf(file.type.toLowerCase()) === -1){
+      setStatus("허용 형식: JPG, PNG, WEBP, GIF", "err");
+      e.target.value = "";
+      return;
+    }
+
+    selectedFile = file;
+    setStatus("", "");
+
+    // 미리보기
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var preview = document.getElementById("img-preview");
+      preview.src        = ev.target.result;
+      preview.style.display = "block";
+      document.getElementById("img-placeholder").style.display = "none";
+      document.getElementById("img-box").classList.add("has-image");
+    };
+    reader.readAsDataURL(file);
+
+    // 파일명 표시
+    document.getElementById("file-name").textContent = file.name;
   }
-}
 
-function clearForm() {
-  document.getElementById("nameKr").value  = "";
-  document.getElementById("nameEng").value = "";
-  document.getElementById("exp").value     = "";
-}
+  /* 저장 처리 */
+  async function onSave(){
+    if (isSaving) return;
 
-// goBefore 재정의 — inventory.html로 이동
-function goBefore() { location.href = "inventory.html"; }
-</script>
+    var nameKr  = document.getElementById("input-namekr").value.trim();
+    var nameEng = document.getElementById("input-nameeng").value.trim();
+    var exp     = document.getElementById("input-exp").value.trim();
 
+    // 필수 입력 검증
+    if (!nameKr){
+      setStatus("이름(Korean)을 입력하세요.", "err");
+      document.getElementById("input-namekr").focus();
+      return;
+    }
+
+    isSaving = true;
+    showLoading();
+    setStatus("", "");
+
+    try {
+      // Step 1: 원석 등록
+      await apiAddStone(nameKr, nameEng, exp);
+
+      // Step 2: 이미지 업로드 (선택한 경우에만)
+      if (selectedFile) {
+        setStatus("이미지 업로드 중...", "info");
+        await apiUploadStoneImage(nameKr, selectedFile);
+      }
+
+      hideLoading();
+      setStatus("등록 완료!", "ok");
+
+      // 폼 초기화
+      resetForm();
+      setTimeout(function(){ setStatus("", ""); }, 2500);
+
+    } catch(err){
+      hideLoading();
+      setStatus("저장 실패: " + err.message, "err");
+      console.error("[newlisting] 저장 실패:", err);
+    }
+
+    isSaving = false;
+  }
+
+  /* 폼 초기화 */
+  function resetForm(){
+    document.getElementById("input-namekr").value  = "";
+    document.getElementById("input-nameeng").value = "";
+    document.getElementById("input-exp").value     = "";
+    document.getElementById("file-input").value    = "";
+    document.getElementById("file-name").textContent = "";
+
+    var preview = document.getElementById("img-preview");
+    preview.src           = "";
+    preview.style.display = "none";
+    document.getElementById("img-placeholder").style.display = "flex";
+    document.getElementById("img-box").classList.remove("has-image");
+
+    selectedFile = null;
+  }
+
+  /* UI 헬퍼 */
+  function setStatus(msg, type){
+    var el = document.getElementById("status-msg");
+    el.textContent = msg;
+    el.className = type === "err"  ? "err-msg"
+                 : type === "ok"   ? "ok-msg"
+                 : type === "info" ? "info-msg" : "";
+  }
+  function showLoading(){ document.getElementById("loading-overlay").classList.add("show"); }
+  function hideLoading(){ document.getElementById("loading-overlay").classList.remove("show"); }
+  </script>
 </body>
 </html>
