@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Structure Design</title>
 
-<!-- ▼ 공통 JS -->
+<!-- 공통 JS -->
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/state.js"></script>
@@ -15,6 +15,7 @@
 
 <style>
 * { box-sizing: border-box; }
+
 body {
   margin: 0;
   font-family: Arial, sans-serif;
@@ -24,14 +25,14 @@ body {
   padding: 16px 12px 90px;
 }
 
-/* ── 타이틀 이미지 ── */
+/* ── 상단 타이틀 ── */
 #titleContainer {
   text-align: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 #titleContainer img {
-  width: 180px; /* 화면 다른 곳과 동일하게 확대 */
+  width: 220px; /* 다른 화면과 동일 크기 */
   max-width: 90%;
   height: auto;
   display: block;
@@ -42,23 +43,27 @@ body {
 #structureCodeDisplay {
   text-align: center;
   font-weight: bold;
-  font-size: 16px;
+  font-size: 18px;
   margin-bottom: 18px;
 }
 
-/* ── 원석 + Size 행 ── */
+/* ── 원석 + Size 버튼 행 ── */
+#stoneSelector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
 .stone-row {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin-bottom: 8px;
 }
 
 .stone-name {
+  font-weight: 600;
   min-width: 100px;
-  font-weight: bold;
-  font-size: 14px;
 }
 
 .size-btn {
@@ -81,21 +86,23 @@ body {
   background: rgba(255,255,255,0.4);
   border-radius: 8px;
   line-height: 2.2;
-  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.plus-btn, .detail-btn {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  margin: 0 2px;
+  font-size: 13px;
 }
 
 .plus-btn {
-  display: inline-block;
-  padding: 2px 7px;
-  border-radius: 4px;
   border: 2px dashed #bbb;
   background: transparent;
   color: #888;
-  font-size: 15px;
   font-weight: bold;
-  cursor: pointer;
-  transition: all 0.12s;
-  margin: 0 2px;
 }
 
 .plus-btn.active-plus {
@@ -105,29 +112,17 @@ body {
 }
 
 .detail-btn {
-  display: inline-block;
-  padding: 3px 9px;
-  border-radius: 5px;
   border: none;
   background: rgba(255,255,255,0.65);
-  font-size: 13px;
-  cursor: pointer;
-  margin: 0 2px;
-  transition: opacity 0.15s;
 }
 
 .detail-btn:hover { opacity: 0.6; }
 
 /* ── Total / Layout ── */
-#totalSize {
-  margin-top: 10px;
-  font-weight: bold;
-  font-size: 15px;
-}
+#totalSize { font-weight: bold; margin-bottom: 8px; }
 
 #layoutSummaryContainer {
-  margin-top: 10px;
-  padding: 8px 10px;
+  padding: 6px 10px;
   background: rgba(255,255,255,0.3);
   border-radius: 6px;
   font-size: 13px;
@@ -157,6 +152,7 @@ body {
 .bottom img:hover { opacity: 0.75; }
 </style>
 </head>
+
 <body>
 
 <!-- 타이틀 -->
@@ -164,13 +160,13 @@ body {
   <img src="images/ttl_structuredesign.png" alt="Structure Design">
 </div>
 
-<!-- StructureCode -->
+<!-- StructureCode (코드만 중앙) -->
 <div id="structureCodeDisplay"></div>
 
-<!-- Stone + Size 행 (JS에서 동적 생성) -->
-<div id="stoneSelectorContainer"></div>
+<!-- NameKr + Size 버튼 (JS에서 동적 생성) -->
+<div id="stoneSelector"></div>
 
-<!-- Details -->
+<!-- Details 영역 -->
 <div id="detailsContainer"></div>
 
 <!-- Total Size -->
