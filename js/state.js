@@ -1,16 +1,15 @@
 // ============================================================
 // ASTERION — STATE
-// structureCode / selectedStone 상태 관리
-// sessionStorage + URL param 이중 저장으로 새로고침에도 유지
+// StructureCode : sessionStorage + URL param (페이지 이동 시 유실 방지)
+// Stone 상태    : localStorage 단일 JSON (탭 닫아도 유지)
+//                 { nameKr, nameEng, exp, image,
+//                   analysis, memo, productImage }
 // ============================================================
 
-// ── Structure Code ─────────────────────────────────────────────
-// 우선순위: URL param → sessionStorage → ""
+const _STONE_KEY = "ASTERION_SELECTED_STONE";
 
-/**
- * StructureCode를 읽어 sessionStorage에도 저장하고 반환
- * @returns {string} structureCode 또는 ""
- */
+// ── StructureCode ──────────────────────────────────────────────
+
 function getStructureCode() {
   const params = new URLSearchParams(window.location.search);
   const code   = params.get("code")
@@ -20,38 +19,55 @@ function getStructureCode() {
   return code;
 }
 
-/**
- * StructureCode를 sessionStorage에 저장
- * @param {string} code
- */
 function setStructureCode(code) {
-  if (code) sessionStorage.setItem("structureCode", code);
+  if (code) sessionStorage.setItem("structureCode", String(code));
 }
 
-// ── Selected Stone ─────────────────────────────────────────────
+// ── Selected Stone (localStorage) ─────────────────────────────
 
-/**
- * 선택된 원석 정보를 sessionStorage에서 읽기
- * @returns {{ nameKr, nameEng, exp, image }}
- */
 function getSelectedStone() {
-  return {
-    nameKr  : sessionStorage.getItem("selectedNameKr")  || "",
-    nameEng : sessionStorage.getItem("selectedNameEng") || "",
-    exp     : sessionStorage.getItem("selectedExp")     || "",
-    image   : sessionStorage.getItem("selectedImage")   || "",
+  const defaults = {
+    nameKr: "", nameEng: "", exp: "", image: "",
+    analysis: "", memo: "", productImage: ""
   };
+  try {
+    const raw = localStorage.getItem(_STONE_KEY);
+    if (!raw) return defaults;
+    return { ...defaults, ...JSON.parse(raw) };
+  } catch (_) { return defaults; }
 }
 
-/**
- * 선택된 원석 정보를 sessionStorage에 저장
- * Code.gs getAllStones 반환 형식(NameKr 대문자)과 소문자 키 모두 허용
- * @param {{ NameKr?, NameEng?, Exp?, Image?, nameKr?, nameEng?, exp?, image? }} stone
- */
-function setSelectedStone(stone) {
-  sessionStorage.setItem("selectedNameKr",  stone.NameKr  || stone.nameKr  || "");
-  sessionStorage.setItem("selectedNameEng", stone.NameEng || stone.nameEng || "");
-  sessionStorage.setItem("selectedExp",     stone.Exp     || stone.exp     || "");
-  sessionStorage.setItem("selectedImage",   stone.Image   || stone.image   || "");
+function setSelectedStone(data) {
+  if (!data || typeof data !== "object") return;
+  const prev = getSelectedStone();
+  const merged = {
+    ...prev,
+    nameKr      : data.NameKr       || data.nameKr       || prev.nameKr,
+    nameEng     : data.NameEng      || data.nameEng      || prev.nameEng,
+    exp         : data.Exp          || data.exp          || prev.exp,
+    image       : data.Image        || data.image        || prev.image,
+    analysis    : data.analysis    !== undefined ? data.analysis    : prev.analysis,
+    memo        : data.memo        !== undefined ? data.memo        : prev.memo,
+    productImage: data.productImage !== undefined ? data.productImage : prev.productImage,
+  };
+  try { localStorage.setItem(_STONE_KEY, JSON.stringify(merged)); } catch (_) {}
 }
 
+function updateStoneField(field, value) {
+  const s = getSelectedStone();
+  s[field] = value;
+  try { localStorage.setItem(_STONE_KEY, JSON.stringify(s)); } catch (_) {}
+}
+
+function getSelectedImage(type) {
+  const s = getSelectedStone();
+  return type === "product" ? (s.productImage || "") : (s.image || "");
+}
+
+function setSelectedImage(src, type) {
+  updateStoneField(type === "product" ? "productImage" : "image", src || "");
+}
+
+function clearSelectedStone() {
+  try { localStorage.removeItem(_STONE_KEY); } catch (_) {}
+}
