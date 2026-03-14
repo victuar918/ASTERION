@@ -1,153 +1,325 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inventory</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <title>ASTERION – Inventory</title>
+  <script src="config.js"></script>
+  <script src="api_contract.js"></script>
+  <script src="state.js"></script>
+  <script src="api.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{
+      background:url('bg_main.png') center/cover no-repeat fixed;
+      font-family:'Arial',sans-serif; color:#fff;
+      min-height:100vh;
+      display:flex; flex-direction:column; align-items:center;
+      padding:14px 12px 100px;
+    }
+    #title-img{width:260px;max-width:88vw;margin:12px auto 16px;display:block}
 
-<!-- ▼ 공통 JS -->
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/state.js"></script>
-<script src="js/ui.js"></script>
+    /* 검색 */
+    #search-wrap{width:100%;max-width:480px;margin-bottom:10px;position:relative}
+    #search-input{
+      width:100%; padding:9px 14px 9px 36px;
+      background:rgba(255,255,255,0.07);
+      border:1px solid rgba(255,255,255,0.15); border-radius:8px;
+      color:#fff; font-size:13px; outline:none;
+    }
+    #search-input::placeholder{color:rgba(255,255,255,0.35)}
+    .search-icon{
+      position:absolute; left:11px; top:50%; transform:translateY(-50%);
+      font-size:14px; color:rgba(255,255,255,0.4); pointer-events:none;
+    }
 
-<style>
-body {
-  margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
-  min-height: 100vh;
-  color: #2b1e08;
-}
+    /* 매트릭스 패널 */
+    #matrix-wrap{
+      width:100%; max-width:480px;
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:12px; overflow:hidden;
+    }
 
-.title-img {
-  width: 95%;
-  display: block;
-  margin: 20px auto;
-}
+    /* 스크롤 가능한 테이블 컨테이너 */
+    #table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch}
 
-.stone-container {
-  max-width: 600px;
-  margin: 10px auto;
-  padding: 10px;
-  overflow-y: auto;
-  max-height: calc(100vh - 160px);
-}
+    table{border-collapse:collapse; width:100%; min-width:360px; font-size:12px}
+    thead th{
+      background:rgba(255,255,255,0.06);
+      padding:8px 10px; text-align:center;
+      font-size:10px; letter-spacing:1px;
+      color:rgba(255,255,255,0.5);
+      border-bottom:1px solid rgba(255,255,255,0.08);
+      white-space:nowrap; position:sticky; top:0; z-index:2;
+    }
+    thead th:first-child{text-align:left; position:sticky; left:0; z-index:3; background:rgba(20,16,10,.95)}
+    tbody tr:nth-child(even){background:rgba(255,255,255,0.02)}
+    tbody tr:hover{background:rgba(255,255,255,0.05)}
+    tbody td{
+      padding:7px 10px; border-bottom:1px solid rgba(255,255,255,0.05);
+      text-align:center; vertical-align:middle;
+    }
+    tbody td:first-child{
+      text-align:left; font-size:12px;
+      color:rgba(255,255,255,0.85);
+      white-space:nowrap;
+      position:sticky; left:0; z-index:1;
+      background:rgba(18,14,9,.9);
+    }
 
-/* [B5 FIX] .selected 하이라이트 추가 */
-.stone-item {
-  padding: 10px 15px;
-  margin-bottom: 5px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.2);
-  cursor: pointer;
-  font-size: 12px;
-  transition: background 0.2s;
-  border: 2px solid transparent;
-}
+    /* 재고 셀 */
+    .stock-cell{
+      min-width:44px; position:relative;
+    }
+    .stock-val{
+      display:inline-block; min-width:28px;
+      padding:2px 6px; border-radius:4px;
+      font-size:12px; font-weight:bold; cursor:pointer;
+      transition:background .15s;
+    }
+    .stock-val.zero {color:rgba(255,255,255,0.2)}
+    .stock-val.low  {color:rgba(255,180,80,0.9)}
+    .stock-val.ok   {color:rgba(100,220,130,0.9)}
+    .stock-val:hover{background:rgba(255,255,255,0.08)}
 
-.stone-item:hover    { background: rgba(255,255,255,0.35); }
-.stone-item.selected { background: rgba(255,255,255,0.55); border-color: #d8ad3c; font-weight: 600; }
+    /* 인라인 편집 input */
+    .stock-input{
+      width:48px; padding:2px 4px; font-size:12px; text-align:center;
+      background:rgba(255,255,255,0.12);
+      border:1px solid rgba(210,170,100,0.7); border-radius:4px;
+      color:#fff; outline:none;
+    }
 
-/* 하단 버튼 */
-.bottom-nav {
-  position: fixed;
-  bottom: 15px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 15px;
-  z-index: 1000;
-}
+    /* 저장 플로팅 버튼 */
+    #save-fab{
+      display:none; position:fixed; bottom:72px; right:18px;
+      background:rgba(170,130,75,.9);
+      border:none; border-radius:50px; color:#fff;
+      font-size:13px; font-weight:bold; padding:10px 20px;
+      cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,.5);
+      z-index:60; -webkit-tap-highlight-color:transparent;
+    }
+    #save-fab.show{display:block}
 
-.bottom-nav img {
-  width: 60px;
-  cursor: pointer;
-  transition: transform 0.15s;
-}
+    /* 상태 메시지 */
+    #status-msg{
+      width:100%;max-width:480px;text-align:center;
+      font-size:12px;color:rgba(255,255,255,0.4);
+      padding:6px 0;min-height:20px;
+    }
+    .err-msg{color:rgba(220,80,80,.9)!important}
+    .ok-msg {color:rgba(100,220,130,.9)!important}
 
-.bottom-nav img:hover { transform: scale(1.1); }
-</style>
+    /* 하단 네비 */
+    #nav-bar{
+      position:fixed;bottom:0;left:0;right:0;
+      display:flex;justify-content:space-around;align-items:center;
+      padding:8px 10px env(safe-area-inset-bottom,10px);
+      background:rgba(8,6,4,.88);
+      border-top:1px solid rgba(255,255,255,0.07);z-index:50;
+    }
+    #nav-bar img{height:42px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+    #nav-bar img:active{opacity:.65}
+  </style>
 </head>
-
 <body>
+  <img id="title-img" src="ttl_inventory.png" alt="Inventory"/>
 
-<img src="images/ttl_inventory.png" alt="Inventory" class="title-img">
+  <div id="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input id="search-input" type="text" placeholder="원석명 검색..."/>
+  </div>
 
-<div class="stone-container" id="stoneListContainer"></div>
+  <div id="status-msg">Loading...</div>
 
-<div class="bottom-nav">
-  <img src="images/btn_go_home.png"      alt="홈"        onclick="goHome()">
-  <img src="images/btn_management.png"   alt="재고관리"  onclick="goManage()">
-  <img src="images/btn_information.png"  alt="원석정보"  onclick="goInformation()">
-  <img src="images/btn_stonelisting.png" alt="원석등록"  onclick="goNewListing()">
-</div>
+  <div id="matrix-wrap">
+    <div id="table-scroll">
+      <table id="inv-table">
+        <thead><tr><th>Stone</th></tr></thead>
+        <tbody id="inv-body"></tbody>
+      </table>
+    </div>
+  </div>
 
-<script>
-window.onload = loadStones;
+  <!-- 변경 사항 저장 FAB -->
+  <button id="save-fab">저장</button>
 
-async function loadStones() {
-  const container = document.getElementById("stoneListContainer");
-  container.innerHTML = "<p style='opacity:0.6; text-align:center;'>불러오는 중...</p>";
+  <!-- 하단 네비 -->
+  <div id="nav-bar">
+    <img src="btn_go_home.png"     alt="Home"    id="btn-home"/>
+    <img src="btn_go_newlisting.png" alt="New"   id="btn-new"/>
+    <img src="btn_reload.png"      alt="Reload"  id="btn-reload"/>
+  </div>
 
-  try {
-    showLoading("원석 목록 불러오는 중...");
-    // getAllStones → { success, stones:[{NameKr,NameEng,Exp,Image}] }
-    const data = await apiGet("getStones");
+  <script>
+  "use strict";
+  var matrixData  = null;  // { stones, sizes, matrix }
+  var pendingEdit = {};    // { "stone\x00size": newQty }
+  var searchQ     = "";
 
-    if (!data.success || !Array.isArray(data.stones) || !data.stones.length) {
-      container.innerHTML = "<p style='text-align:center; opacity:0.6;'>등록된 원석이 없습니다.</p>";
+  document.addEventListener("DOMContentLoaded", async function(){
+    document.getElementById("btn-home").addEventListener("click", function(){
+      window.location.href = "index.html";
+    });
+    document.getElementById("btn-new").addEventListener("click", function(){
+      window.location.href = "newlisting.html";
+    });
+    document.getElementById("btn-reload").addEventListener("click", function(){
+      pendingEdit = {};
+      document.getElementById("save-fab").classList.remove("show");
+      loadInventory();
+    });
+    document.getElementById("save-fab").addEventListener("click", saveEdits);
+    document.getElementById("search-input").addEventListener("input", function(){
+      searchQ = this.value.trim().toLowerCase();
+      renderTable();
+    });
+
+    await loadInventory();
+  });
+
+  async function loadInventory(){
+    setStatus("Loading...", "");
+    try {
+      matrixData = await apiGetInventory();
+      renderTable();
+      setStatus("", "");
+    } catch(err){
+      console.error("[inventory] 로드 실패:", err);
+      setStatus("원석 데이터를 불러올 수 없습니다: " + err.message, "err");
+    }
+  }
+
+  function renderTable(){
+    if (!matrixData) return;
+    var stones = matrixData.stones || [];
+    var sizes  = matrixData.sizes  || [];
+    var matrix = matrixData.matrix || {};
+
+    // 검색 필터
+    var filtered = searchQ
+      ? stones.filter(function(s){ return s.toLowerCase().indexOf(searchQ) !== -1; })
+      : stones;
+
+    // 헤더 재구성
+    var thead = document.querySelector("#inv-table thead tr");
+    thead.innerHTML = "<th>Stone</th>";
+    sizes.forEach(function(sz){
+      var th = document.createElement("th");
+      th.textContent = sz;
+      thead.appendChild(th);
+    });
+
+    // 바디 재구성
+    var tbody = document.getElementById("inv-body");
+    tbody.innerHTML = "";
+    if (!filtered.length){
+      var empty = document.createElement("tr");
+      empty.innerHTML = '<td colspan="' + (sizes.length + 1) + '" style="text-align:center;padding:24px;color:rgba(255,255,255,0.3)">항목 없음</td>';
+      tbody.appendChild(empty);
       return;
     }
 
-    container.innerHTML = "";
+    filtered.forEach(function(stone){
+      var tr = document.createElement("tr");
+      var tdName = document.createElement("td");
+      tdName.textContent = stone;
+      tr.appendChild(tdName);
 
-    data.stones.forEach(function (stone) {
-      const div = document.createElement("div");
-      div.className = "stone-item";
-      div.textContent = stone.NameKr + (stone.NameEng ? "  (" + stone.NameEng + ")" : "");
+      sizes.forEach(function(sz){
+        var td = document.createElement("td");
+        td.className = "stock-cell";
+        var key      = stone + "\x00" + sz;
+        var rawStock = (matrix[stone] && matrix[stone][sz] !== undefined) ? matrix[stone][sz] : 0;
+        var cur      = (pendingEdit[key] !== undefined) ? pendingEdit[key] : rawStock;
 
-      div.onclick = function () {
-        // [B5 FIX] 선택 하이라이트
-        document.querySelectorAll(".stone-item").forEach(function (el) {
-          el.classList.remove("selected");
+        var span = document.createElement("span");
+        span.className = "stock-val " + stockClass(cur);
+        span.textContent = cur;
+        span.setAttribute("data-stone", stone);
+        span.setAttribute("data-size", sz);
+        span.setAttribute("data-key", key);
+
+        span.addEventListener("click", function(){
+          startEdit(span, stone, sz, key, cur);
         });
-        div.classList.add("selected");
 
-        // [B6 FIX] Image null → '' 처리 후 state.js setSelectedStone 사용
-        setSelectedStone({
-          NameKr  : stone.NameKr,
-          NameEng : stone.NameEng  || "",
-          Exp     : stone.Exp      || "",
-          Image   : stone.Image    || "",
-        });
-      };
+        td.appendChild(span);
+        tr.appendChild(td);
+      });
 
-      container.appendChild(div);
+      tbody.appendChild(tr);
     });
-
-  } catch (err) {
-    container.innerHTML = "<p style='text-align:center; color:#c0392b;'>원석 데이터를 불러올 수 없습니다.</p>";
-    console.error("loadStones 오류:", err);
-  } finally {
-    hideLoading();
   }
-}
 
-function goManage() {
-  if (!getSelectedStone().nameKr) { alert("원석을 선택해주세요."); return; }
-  location.href = "invenmanage.html";
-}
+  function startEdit(span, stone, sz, key, cur){
+    // 이미 input이면 무시
+    if (span.parentNode.querySelector(".stock-input")) return;
 
-function goInformation() {
-  if (!getSelectedStone().nameKr) { alert("원석을 선택해주세요."); return; }
-  location.href = "stoneinfo.html";
-}
+    span.style.display = "none";
+    var input = document.createElement("input");
+    input.type      = "number";
+    input.className = "stock-input";
+    input.value     = cur;
+    input.min       = 0;
+    span.parentNode.appendChild(input);
+    input.focus(); input.select();
 
-function goNewListing() {
-  location.href = "newlisting.html";
-}
-</script>
+    function commit(){
+      var val = parseInt(input.value, 10);
+      if (isNaN(val) || val < 0) val = cur;
+      input.remove();
+      span.style.display = "";
+      if (val !== cur){
+        pendingEdit[key] = val;
+        span.textContent = val;
+        span.className = "stock-val " + stockClass(val);
+        document.getElementById("save-fab").classList.add("show");
+      }
+    }
+    input.addEventListener("blur",  commit);
+    input.addEventListener("keydown", function(e){
+      if (e.key === "Enter")  { input.blur(); }
+      if (e.key === "Escape") { input.value = cur; input.blur(); }
+    });
+  }
 
+  async function saveEdits(){
+    if (!Object.keys(pendingEdit).length) return;
+    setStatus("저장 중...", "");
+    try {
+      // pendingEdit를 { stone: { size: qty } } 형태로 변환
+      var stockObj = {};
+      Object.keys(pendingEdit).forEach(function(k){
+        var parts = k.split("\x00");
+        var stone = parts[0], sz = parts[1], qty = pendingEdit[k];
+        if (!stockObj[stone]) stockObj[stone] = {};
+        stockObj[stone][sz] = qty;
+      });
+      await apiUpdateStock(stockObj);
+      // 캐시 무효화 후 재로드
+      pendingEdit = {};
+      document.getElementById("save-fab").classList.remove("show");
+      await loadInventory();
+      setStatus("저장 완료!", "ok");
+      setTimeout(function(){ setStatus("", ""); }, 2000);
+    } catch(err){
+      setStatus("저장 실패: " + err.message, "err");
+    }
+  }
+
+  function stockClass(n){
+    if (n <= 0)  return "zero";
+    if (n <= 3)  return "low";
+    return "ok";
+  }
+
+  function setStatus(msg, type){
+    var el = document.getElementById("status-msg");
+    el.textContent = msg;
+    el.className   = type === "err" ? "err-msg" : (type === "ok" ? "ok-msg" : "");
+  }
+  </script>
 </body>
 </html>
