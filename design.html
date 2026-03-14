@@ -32,23 +32,23 @@ body {
   margin: 0 auto 24px auto; /* 가운데 정렬 및 하단 여백 추가 */
 }
 
-/* StructureCode 표시 (HTML의 class와 이름 맞춤) */
-.structure-code {
+/* StructureCode 표시 (원래 클래스명 복구 및 간격 확대) */
+.structureCodeDisplay, .structure-code {
   font-weight: bold;
   font-size: 16px;
   margin-bottom: 24px; /* 다음 요소와의 간격 넓힘 */
   text-align: center;
 }
 
-/* 원석 + Size 버튼 행 (HTML의 id와 이름 맞춤) */
-#stoneSelector {
+/* 원석 + Size 버튼 행 (원래 클래스명 복구 및 간격 확대) */
+.stoneSelector, #stoneSelector {
   display: flex;
   flex-direction: column;
   gap: 12px; /* 행 사이 간격 넓힘 */
   margin-bottom: 24px; /* 다음 요소와의 간격 넓힘 */
 }
 
-#stoneSelector div { 
+.stoneSelector div, #stoneSelector div { 
   display: flex; 
   align-items: center; 
   gap: 8px; 
