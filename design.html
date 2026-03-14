@@ -24,11 +24,17 @@ body {
   padding: 16px 12px 90px;
 }
 
-/* StructureCode 표시 */
-#structureCodeDisplay {
-  font-weight: bold;
-  font-size: 16px;
-  margin-bottom: 12px;
+.title-img {
+  display: block;
+  width: 95%;
+  max-width: 1400px;
+  margin-top: 10px;
+}
+
+.structure-code {
+  margin-top: 4vh;
+  font-size: 22px;
+  font-weight: 600;
 }
 
 /* 원석 + Size 버튼 행 */
@@ -123,7 +129,9 @@ body {
 </head>
 
 <body>
-<div id="structureCodeDisplay">StructureCode: </div>
+<img src="images/ttl_stoneselect.png" class="title-img" alt="Select Stone">
+
+<div id="structureCodeLabel" class="structure-code"></div>
 
 <!-- 원석 + Size 버튼 행 -->
 <div id="stoneSelector"></div>
