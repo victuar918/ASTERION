@@ -1,104 +1,107 @@
 // ============================================================
-// ASTERION — design.js
-// design.html 전용 로직
-// 공통: config.js / api.js / state.js / ui.js / layoutFormatter.js
+// ASTERION — design.js  v3
+// isButton 방식 details 배열 (user 선호 구조 유지)
+// 다중 원석 선택 지원 (activeStoneName)
+//
+// 의존: config.js → api.js → state.js → ui.js → layoutFormatter.js
+// DOM:  #structureCodeDisplay / #stoneSelector / #sizeButtons
+//       #detailsContainer / #totalSize / #layoutSummary
 // ============================================================
 
 // ── 전역 상태 ─────────────────────────────────────────────────
-// [D6 FIX] activePlusIndex 초기값 null (클릭 전 사이즈 선택 방지)
-let details        = [{ isButton: true }];  // 항상 [+]로 시작
-let activePlusIdx  = null;                  // 현재 활성 [+] 위치
-let activeStone    = null;                  // 현재 선택된 원석 NameKr
+// [DJ1] activeStoneName: inventory용 getSelectedStone()과 완전 분리
+let details         = [{ isButton: true }]; // 항상 [+] 로 시작
+let activePlusIndex = null;                 // [DJ3] null 초기화
+let activeStoneName = "";                   // [DJ1] 현재 삽입 대상 원석
+let availableStones = [];                   // getUsedSizes().stones
+let availableSizes  = [];                   // getUsedSizes().sizes
+let structureCode   = "";
 
-// [D1 FIX] state.js 함수 사용 — 구 selectedStone.nameKr 단일 원석 의존 제거
-let structureCode  = getStructureCode();
-let availableSizes = [];
-let selectedStones = []; // selectstone.html에서 저장한 다중 원석 배열
-
-// ── 초기화 ─────────────────────────────────────────────────────
+// ── 초기화 ────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async function() {
-  // structureCode 없으면 worksdesk로
+  structureCode = getStructureCode();
+
   if (!structureCode) {
     alert("Structure 정보가 없습니다.");
     location.href = "worksdesk.html";
     return;
   }
 
-  // [D5 FIX] sessionStorage에서 다중 원석 배열 로드
-  try {
-    const raw = sessionStorage.getItem("selectedStones");
-    selectedStones = raw ? JSON.parse(raw) : [];
-  } catch (_) {
-    selectedStones = [];
-  }
+  document.getElementById("structureCodeDisplay").textContent =
+    "StructureCode: " + structureCode;
 
   try {
-    showLoading("사이즈 로드 중...");
+    showLoading("Loading...");
 
-    // [D1 FIX] getUsedSizes: Archive.UsedStones → Inventory 기반 Size 목록
+    // 1. 사이즈 + 원석 목록 로드
     const res = await apiPost({ action: "getUsedSizes", structureCode: structureCode });
-    if (!res.success) throw new Error(res.error || "사이즈 로드 실패");
 
-    availableSizes = res.sizes || [];
+    // success:false 이거나 빈 배열이면 SizeMaster 폴백
+    availableSizes = (res.sizes && res.sizes.length)
+      ? res.sizes
+      : ["2mm", "4mm", "6mm", "8mm", "10mm", "12mm"];
 
-    // [D5 FIX] 서버에서 돌아온 stones로 selectedStones 보완
-    if (!selectedStones.length && res.stones && res.stones.length) {
-      selectedStones = res.stones;
-    }
+    availableStones = (res.stones && res.stones.length)
+      ? res.stones
+      : [];
 
-    // 폴백: 그래도 없으면 SizeMaster 전체 (빈 경우 드물게 발생)
-    if (!availableSizes.length) {
-      const szRes = await apiGet("getSizes");
-      availableSizes = (szRes.success && szRes.sizes) ? szRes.sizes : ["2mm","4mm","6mm","8mm","10mm","12mm"];
-    }
-
-    // 첫 번째 원석을 기본 선택
-    if (selectedStones.length) activeStone = selectedStones[0];
+    // [DJ1] 첫 번째 원석을 기본 활성값으로 설정
+    activeStoneName = availableStones.length ? availableStones[0] : "";
 
     renderStoneSelector();
     renderSizeButtons();
 
-    showLoading("이전 디자인 불러오는 중...");
-
-    // [D2 FIX] getDetails: Details 시트 + Inventory 조인, SHEET.DETAILS 상수 사용
+    // 2. 기존 Details 로드
     const existing = await apiPost({ action: "getDetails", structureCode: structureCode });
     if (existing.success && existing.details && existing.details.length) {
       details = [];
       existing.details.forEach(function(d) {
         details.push({ isButton: true });
-        details.push({ isButton: false, nameKr: d.NameKr, size: d.Size, qty: d.Qty });
+        // [DJ7] NameKr(대) → nameKr(소) 명시적 매핑
+        details.push({
+          isButton: false,
+          nameKr  : String(d.NameKr || ""),
+          size    : String(d.Size   || ""),
+          qty     : Number(d.Qty)   || 1
+        });
       });
       details.push({ isButton: true });
     }
 
     renderDetails();
+
   } catch (err) {
-    alert("초기화 실패: " + err.message);
+    alert("Init failed: " + err.message);
   } finally {
     hideLoading();
   }
 });
 
-// ── 원석 선택 버튼 렌더링 ─────────────────────────────────────
-// [D5 FIX] 다중 원석 지원 — 클릭으로 activeStone 변경
+// ── Stone 선택 버튼 ───────────────────────────────────────────
+// [DJ1] 원석을 클릭해 activeStoneName 변경 → 이후 사이즈 선택 시 해당 원석 사용
 function renderStoneSelector() {
-  let el = document.getElementById("stoneSelector");
-  if (!el) return; // HTML에 없으면 스킵
-
+  const el = document.getElementById("stoneSelector");
+  if (!el) return;
   el.innerHTML = "";
-  selectedStones.forEach(function(name) {
+
+  if (!availableStones.length) {
+    el.innerHTML = '<span style="opacity:.5;font-size:13px;">선택된 원석 없음</span>';
+    return;
+  }
+
+  availableStones.forEach(function(name) {
     const btn = document.createElement("button");
     btn.textContent = name;
-    btn.className   = "stone-btn" + (name === activeStone ? " active" : "");
+    btn.className   = "stone-select-btn" + (name === activeStoneName ? " active-stone" : "");
     btn.onclick     = function() {
-      activeStone = name;
+      activeStoneName = name;
       renderStoneSelector(); // 하이라이트 갱신
     };
     el.appendChild(btn);
   });
 }
 
-// ── Size 버튼 렌더링 ─────────────────────────────────────────
+// ── Size 버튼 ─────────────────────────────────────────────────
 function renderSizeButtons() {
   const container = document.getElementById("sizeButtons");
   if (!container) return;
@@ -106,12 +109,13 @@ function renderSizeButtons() {
   availableSizes.forEach(function(size) {
     const btn = document.createElement("button");
     btn.textContent = size;
+    btn.className   = "size-btn";
     btn.onclick     = function() { selectSize(size); };
     container.appendChild(btn);
   });
 }
 
-// ── Details 렌더링 ───────────────────────────────────────────
+// ── Details 렌더링 ────────────────────────────────────────────
 function renderDetails() {
   const container = document.getElementById("detailsContainer");
   if (!container) return;
@@ -119,23 +123,27 @@ function renderDetails() {
 
   details.forEach(function(d, idx) {
     const btn = document.createElement("button");
+
     if (d.isButton) {
       btn.textContent = "+";
-      btn.className   = "plus-btn" + (idx === activePlusIdx ? " active-plus" : "");
+      btn.className   = "plus-btn" + (activePlusIndex === idx ? " active-plus" : "");
+      // [DJ3] [+] 클릭 시 activePlusIndex 설정 + 하이라이트
       btn.onclick     = (function(i) {
         return function() {
-          activePlusIdx = i;
-          renderDetails(); // 하이라이트 갱신
+          activePlusIndex = i;
+          renderDetails();
         };
       })(idx);
     } else {
+      // [DJ9] 중복 textContent 제거 — 단일 할당
       btn.textContent = d.nameKr + "(" + d.size + "," + d.qty + "pcs)";
       btn.className   = "detail-btn";
-      btn.title       = "클릭하면 제거";
+      btn.title       = "클릭하면 1개 제거 / 0이면 삭제";
       btn.onclick     = (function(i) {
         return function() { removeDetail(i); };
       })(idx);
     }
+
     container.appendChild(btn);
   });
 
@@ -143,159 +151,183 @@ function renderDetails() {
   updateLayoutSummary();
 }
 
-// ── [+] 클릭 후 Size 선택 ───────────────────────────────────
-// [D5 FIX] activeStone 기반 (다중 원석 지원)
-// [D6 FIX] activePlusIdx null 체크
+// ── Size 선택 → Details 삽입 ─────────────────────────────────
 function selectSize(size) {
-  // [+] 를 먼저 클릭해야 함
-  if (activePlusIdx === null) {
-    alert("[+] 버튼을 먼저 클릭하세요.");
-    return;
-  }
-  // 원석이 선택되어 있어야 함
-  if (!activeStone) {
+  // [DJ1] activeStoneName 사용 (getSelectedStone() 불사용)
+  if (!activeStoneName) {
     alert("원석을 먼저 선택하세요.");
     return;
   }
 
-  const insertAfter = activePlusIdx; // [+] 위치
-  const nextIdx     = insertAfter + 1;
-  const existing    = details[nextIdx];
+  // [DJ3] activePlusIndex가 null이면 details 끝 [+] 앞에 삽입(폴백)
+  // details의 마지막 요소는 항상 isButton:true이므로 length-1이 마지막 [+] 위치
+  let plusIdx = (activePlusIndex !== null)
+    ? activePlusIndex
+    : details.length - 1;
 
-  // 동일 원석+사이즈가 바로 뒤에 있으면 qty 증가
-  if (existing && !existing.isButton && existing.nameKr === activeStone && existing.size === size) {
-    existing.qty += 1;
-  } else {
-    // 새 항목 삽입: [원석항목] + [+]
-    details.splice(nextIdx, 0,
-      { isButton: false, nameKr: activeStone, size: size, qty: 1 },
-      { isButton: true }
-    );
-    // activePlusIdx를 새로 삽입된 [+] 위치로 자동 이동
-    activePlusIdx = nextIdx + 1;
+  // 범위 방어: 항상 isButton인 위치를 가리켜야 함
+  if (plusIdx < 0 || plusIdx >= details.length || !details[plusIdx].isButton) {
+    plusIdx = details.length - 1;
   }
 
-  // [D7 FIX] 연속 isButton 병합: [+][+][+] → [+]
-  compactButtons();
-  renderDetails();
-}
+  const nextIdx = plusIdx + 1;
 
-// ── 연속 isButton 병합 ───────────────────────────────────────
-// [D7 FIX] removeDetail 후 [+][+] 발생 방지
-function compactButtons() {
-  let i = 0;
-  while (i < details.length) {
-    if (details[i].isButton && i + 1 < details.length && details[i + 1].isButton) {
-      details.splice(i + 1, 1); // 연속된 두 번째 [+] 제거
-      // activePlusIdx 조정
-      if (activePlusIdx !== null && activePlusIdx > i) activePlusIdx--;
-    } else {
-      i++;
+  // 바로 다음 항목이 동일 nameKr+size이면 qty++ (연속 추가)
+  // [DJ4] selectedStone.nameKr → activeStoneName
+  const existing = details[nextIdx];
+  if (existing && !existing.isButton &&
+      existing.nameKr === activeStoneName && existing.size === size) {
+    existing.qty++;
+  } else {
+    // 새 원석 항목 삽입
+    details.splice(nextIdx, 0, {
+      isButton: false,
+      nameKr  : activeStoneName,
+      size    : size,
+      qty     : 1
+    });
+
+    // [DJ5] 새 [+] 삽입: 바로 뒤가 이미 isButton이면 중복 삽입 방지
+    const afterNew = details[nextIdx + 1];
+    if (!afterNew || !afterNew.isButton) {
+      details.splice(nextIdx + 1, 0, { isButton: true });
     }
   }
-  // 마지막이 [+]가 아니면 추가
-  if (!details.length || !details[details.length - 1].isButton) {
-    details.push({ isButton: true });
+
+  // 삽입 후 activePlusIndex를 새 항목 뒤의 [+]로 이동 (연속 삽입 편의)
+  activePlusIndex = nextIdx + 1;
+  if (activePlusIndex >= details.length || !details[activePlusIndex].isButton) {
+    activePlusIndex = details.length - 1;
   }
-  // 첫 번째가 [+]가 아니면 앞에 추가
-  if (!details[0].isButton) {
-    details.unshift({ isButton: true });
-    if (activePlusIdx !== null) activePlusIdx++;
-  }
+
+  renderDetails();
 }
 
 // ── Detail 항목 제거 ─────────────────────────────────────────
 function removeDetail(idx) {
-  if (details[idx] && !details[idx].isButton) {
-    details.splice(idx, 1);
-    // [D7 FIX] 제거 후 연속 [+] 병합
+  if (!details[idx] || details[idx].isButton) return;
+
+  details[idx].qty--;
+
+  if (details[idx].qty <= 0) {
+    details.splice(idx, 1); // 원석 항목 삭제
+
+    // [DJ6] 삭제 후 [+][+] 연속 병합
     compactButtons();
-    // activePlusIdx 범위 조정
-    if (activePlusIdx !== null && activePlusIdx >= details.length) {
-      activePlusIdx = details.length - 1;
+
+    // activePlusIndex 범위 보정
+    if (activePlusIndex !== null && activePlusIndex >= details.length) {
+      activePlusIndex = details.length - 1;
     }
-    renderDetails();
+  }
+
+  renderDetails();
+}
+
+// ── [+][+] 연속 병합 ─────────────────────────────────────────
+// [DJ5][DJ6] 원석 삭제 또는 삽입 후 연속 isButton 정리
+function compactButtons() {
+  // 1. 연속 isButton 제거
+  let i = 0;
+  while (i < details.length - 1) {
+    if (details[i].isButton && details[i + 1].isButton) {
+      details.splice(i + 1, 1);
+      if (activePlusIndex !== null && activePlusIndex > i) activePlusIndex--;
+    } else {
+      i++;
+    }
+  }
+
+  // 2. 첫 요소가 isButton이 아니면 앞에 추가
+  if (!details.length || !details[0].isButton) {
+    details.unshift({ isButton: true });
+    if (activePlusIndex !== null) activePlusIndex++;
+  }
+
+  // 3. 마지막 요소가 isButton이 아니면 뒤에 추가
+  if (!details[details.length - 1].isButton) {
+    details.push({ isButton: true });
   }
 }
 
-// ── Total Size 계산 ──────────────────────────────────────────
+// ── Total Size ────────────────────────────────────────────────
+// [DJ8] parseInt → parseFloat (소수점 mm 지원)
 function updateTotalSize() {
-  // layoutFormatter.js calcTotalSize 사용
   const total = typeof calcTotalSize === "function"
-    ? calcTotalSize(details)
-    : details.filter(function(d) { return !d.isButton; })
+    ? calcTotalSize(details)  // layoutFormatter.js 사용 (isButton 필터 내장)
+    : details
+        .filter(function(d) { return !d.isButton; })
         .reduce(function(sum, d) {
-          return sum + (parseFloat(String(d.size).replace("mm","")) || 0) * (d.qty || 0);
+          return sum + (parseFloat(String(d.size).replace("mm", "")) || 0) * (d.qty || 0);
         }, 0);
+
   const el = document.getElementById("totalSize");
   if (el) el.textContent = "Total Size " + total + "mm";
 }
 
-// ── Layout Summary 계산 ──────────────────────────────────────
+// ── Layout Summary ────────────────────────────────────────────
+// [LF1~6 FIX] layoutFormatter.detailsToLayout 사용 (isButton 자동 필터)
 function updateLayoutSummary() {
-  // layoutFormatter.js detailsToLayout 사용
-  const layout = typeof detailsToLayout === "function"
-    ? detailsToLayout(details)
-    : details.map(function(d) {
-        return d.isButton ? "+" : d.nameKr + "(" + d.size + "," + d.qty + "pcs)";
-      }).join(" ");
   const el = document.getElementById("layoutSummary");
-  if (el) el.textContent = layout;
+  if (!el) return;
+
+  el.textContent = typeof detailsToLayout === "function"
+    ? detailsToLayout(details)
+    : details
+        .filter(function(d) { return !d.isButton; })
+        .map(function(d) { return d.nameKr + "(" + d.size + "," + d.qty + "pcs)"; })
+        .join(" + ");
 }
 
 // ── 페이지 이동 ──────────────────────────────────────────────
-// [D9 확인] goPage는 ui.js 함수, head에서 ui.js가 먼저 로드됨 → 정상
 function goBeforeDesign() { goPage("selectstone.html"); }
 function goNextDesign()   { goPage("analysismemo.html"); }
 
-// ── Save 처리 ────────────────────────────────────────────────
+// ── Save ─────────────────────────────────────────────────────
 async function saveDesign() {
   if (!structureCode) { alert("StructureCode 없음"); return; }
 
-  const detailsOnly = details.filter(function(d) { return !d.isButton; });
-  if (!detailsOnly.length) { alert("저장할 디자인이 없습니다."); return; }
+  const dataItems = details.filter(function(d) { return !d.isButton; });
+  if (!dataItems.length) { alert("저장할 항목이 없습니다."); return; }
 
-  const confirmDeduct = confirm("재고를 차감하시겠습니까?\n(아니오: 디자인만 저장)");
+  const confirmDeduct = confirm("Deduct from stock?");
 
   try {
-    showLoading("저장 중...");
+    showLoading("Saving...");
 
-    const detailsData = detailsOnly.map(function(d) {
+    // [DJ7] details 필드: nameKr/size/qty(소) → NameKr/Size/Qty(대) 변환
+    const detailsData = dataItems.map(function(d) {
       return { NameKr: d.nameKr, Size: d.size, Qty: d.qty };
     });
 
-    // [D2/D3 FIX] saveDetails — Stock 컬럼 사용, Details 시트 자동 생성
     const saveRes = await apiPost({
       action       : "saveDetails",
       structureCode: structureCode,
       details      : detailsData,
-      deduct       : confirmDeduct,
+      deduct       : confirmDeduct
     });
+
     if (!saveRes.success) throw new Error(saveRes.error || "Details 저장 실패");
 
-    // [D8 FIX] updateLayoutSummaryGs — LayoutSummary 컬럼 자동 생성
+    // [LF1~3 FIX] layoutFormatter 사용 — 항상 올바른 포맷 보장
     const layoutSummary = typeof detailsToLayout === "function"
       ? detailsToLayout(details)
-      : detailsOnly.map(function(d) {
+      : dataItems.map(function(d) {
           return d.nameKr + "(" + d.size + "," + d.qty + "pcs)";
         }).join(" + ");
 
-    const layoutRes = await apiPost({
+    await apiPost({
       action       : "updateLayoutSummary",
       structureCode: structureCode,
-      layoutSummary: layoutSummary,
+      layoutSummary: layoutSummary
     });
-    if (!layoutRes.success) {
-      // Layout 업데이트 실패는 경고만 (Details 저장은 성공)
-      console.warn("LayoutSummary 업데이트 실패:", layoutRes.error);
-    }
 
-    alert("저장 완료 ✓\n저장: " + saveRes.saved + "건" +
+    alert("Saved successfully ✓\n저장: " + saveRes.saved + "건" +
       (confirmDeduct ? "\n차감: " + saveRes.deducted + "건" : ""));
+
   } catch (err) {
-    alert("저장 실패: " + err.message);
+    alert("Save failed: " + err.message);
   } finally {
     hideLoading();
   }
 }
-
