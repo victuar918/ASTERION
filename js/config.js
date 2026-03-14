@@ -1,9 +1,11 @@
-// ============================================================
-// ASTERION — CONFIG
-// 배포 URL 변경 시 이 파일 한 곳만 수정
-// ============================================================
-
+/**
+ * config.js — ASTERION 전역 설정
+ *
+ * ⚠️ API_BASE: GAS 배포 URL로 반드시 교체할 것
+ *    GAS 편집기 → 배포 → 새 배포 → 웹 앱
+ *    실행: 나, 액세스: 모든 사용자
+ *    배포 후 URL 복사 → 아래 값 교체
+ */
 const CONFIG = {
-  API_BASE: "https://script.google.com/macros/s/AKfycbw0wDvkPTO0eO0zcRD0FeuNrw33g5oXAeJEE6eoxf3ZbqtZHrkISrgtM6wPdVj-hIf_CA/exec"
+  API_BASE: "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID_HERE/exec"
 };
-
