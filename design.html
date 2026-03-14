@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Structure Design</title>
 
-<!-- ▼ 공통 JS (순서 고정) -->
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/state.js"></script>
@@ -18,41 +17,52 @@
 body {
   margin: 0;
   font-family: Arial, sans-serif;
-  background: linear-gradient(135deg,#fff6da 0%,#f5d97a 40%,#eac45a 70%,#d8ad3c 100%);
+  background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
   min-height: 100vh;
   color: #2b1e08;
-  padding: 16px 12px 90px;
+  /* 하단 고정 버튼 높이를 고려해 하단 패딩을 100px로 넉넉하게 확보 */
+  padding: 20px 16px 100px; 
 }
 
+/* 타이틀 이미지 */
 .title-img {
   display: block;
   width: 95%;
   max-width: 1400px;
-  margin-top: 10px;
+  margin: 0 auto 24px auto; /* 가운데 정렬 및 하단 여백 추가 */
 }
-/* StructureCode 표시 */
-.structureCodeDisplay {
+
+/* StructureCode 표시 (HTML의 class와 이름 맞춤) */
+.structure-code {
   font-weight: bold;
   font-size: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 24px; /* 다음 요소와의 간격 넓힘 */
+  text-align: center;
 }
 
-/* 원석 + Size 버튼 행 */
-.stoneSelector {
+/* 원석 + Size 버튼 행 (HTML의 id와 이름 맞춤) */
+#stoneSelector {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 12px; /* 행 사이 간격 넓힘 */
+  margin-bottom: 24px; /* 다음 요소와의 간격 넓힘 */
 }
 
-.stoneSelector div { display: flex; align-items: center; gap: 6px; }
+#stoneSelector div { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+}
 
 /* NameKr 라벨 */
-.stone-name { font-weight: 600; min-width: 90px; }
+.stone-name { 
+  font-weight: 600; 
+  min-width: 90px; 
+}
 
 /* Size 버튼 */
 .size-btn {
-  padding: 6px 12px;
+  padding: 8px 14px; /* 버튼 터치 영역 살짝 확대 */
   border-radius: 6px;
   border: none;
   background: #f5c542;
@@ -65,19 +75,19 @@ body {
 
 /* Details 영역 */
 #detailsContainer {
-  min-height: 50px;
-  padding: 8px;
+  min-height: 60px;
+  padding: 12px;
   background: rgba(255,255,255,0.4);
   border-radius: 8px;
   line-height: 2.2;
-  margin-bottom: 12px;
+  margin-bottom: 20px; /* 다음 요소와의 간격 넓힘 */
 }
 .plus-btn, .detail-btn {
   display: inline-block;
-  padding: 3px 9px;
+  padding: 4px 10px;
   border-radius: 5px;
   cursor: pointer;
-  margin: 0 2px;
+  margin: 2px;
   font-size: 13px;
 }
 .plus-btn {
@@ -98,18 +108,26 @@ body {
 .detail-btn:hover { opacity: 0.6; }
 
 /* Total / Layout */
-#totalSize { font-weight: bold; margin-bottom: 8px; }
+#totalSize { 
+  font-weight: bold; 
+  margin-bottom: 12px; 
+  font-size: 15px;
+}
 #layoutSummaryContainer {
-  padding: 6px 10px;
+  padding: 10px 12px;
   background: rgba(255,255,255,0.3);
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 14px;
   word-break: break-all;
-  min-height: 32px;
+  min-height: 40px;
+  line-height: 1.5;
 }
-#layoutSummaryContainer strong { display: block; margin-bottom: 4px; }
+#layoutSummaryContainer strong { 
+  display: block; 
+  margin-bottom: 6px; 
+}
 
-/* 하단 버튼 */
+/* 하단 버튼 (고정 영역) */
 .bottom {
   position: fixed;
   bottom: 16px;
@@ -117,12 +135,17 @@ body {
   width: 100%;
   display: flex;
   justify-content: center;
-  gap: 14px;
+  gap: 16px;
+  background: linear-gradient(to top, rgba(216, 173, 60, 0.9) 30%, transparent 100%); /* 스크롤 시 버튼이 잘 보이도록 살짝 배경 효과 추가 (선택사항) */
+  padding-top: 20px;
 }
 .bottom img {
   width: 50px;
+  height: 50px; /* 이미지 비율 찌그러짐 방지 */
   cursor: pointer;
   transition: opacity 0.15s;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* 버튼에 입체감 추가 */
+  border-radius: 50%;
 }
 .bottom img:hover { opacity: 0.75; }
 </style>
@@ -133,22 +156,17 @@ body {
 
 <div id="structureCodeLabel" class="structure-code"></div>
 
-<!-- 원석 + Size 버튼 행 -->
 <div id="stoneSelector"></div>
 
-<!-- Details 영역 -->
 <div id="detailsContainer"></div>
 
-<!-- Total Size -->
 <div id="totalSize">Total Size 0mm</div>
 
-<!-- Layout Summary -->
 <div id="layoutSummaryContainer">
   <strong>Layout:</strong>
   <span id="layoutSummary"></span>
 </div>
 
-<!-- 하단 버튼 -->
 <div class="bottom">
   <img src="images/btn_go_home.png"   alt="홈"    onclick="goHome()">
   <img src="images/btn_go_before.png" alt="뒤로"  onclick="goBeforeDesign()">
