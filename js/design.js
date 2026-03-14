@@ -1,53 +1,46 @@
-// ============================================================
-// ASTERION — design.js v4
-// NameKr+Size 버튼 행 방식 + isButton Details 배열
-// ============================================================
-
-let details         = [{ isButton: true }];
+// 전역 상태
+let details = [{ isButton:true }];
 let activePlusIndex = null;
 let availableStones = [];
 let availableSizes  = [];
-let structureCode   = "";
+let structureCode = "";
 
-// ── 초기화 ─────────────────────────────────
-document.addEventListener("DOMContentLoaded", async function() {
+// 초기화
+document.addEventListener("DOMContentLoaded", async function(){
   structureCode = getStructureCode();
-  if (!structureCode) { alert("StructureCode 없음"); location.href="worksdesk.html"; return; }
-  document.getElementById("structureCodeDisplay").textContent = "StructureCode: " + structureCode;
+  if(!structureCode){ alert("StructureCode 없음"); location.href="worksdesk.html"; return; }
+  document.getElementById("structureCodeDisplay").textContent = "StructureCode: "+structureCode;
 
-  try {
+  try{
     showLoading("Loading...");
 
-    // 1. 사이즈 + 원석
     const res = await apiPost({ action:"getUsedSizes", structureCode });
-    availableSizes  = (res.sizes && res.sizes.length) ? res.sizes : ["2mm","4mm","6mm","8mm","10mm","12mm"];
-    availableStones = (res.stones && res.stones.length) ? res.stones : [];
+    availableSizes  = (res.sizes && res.sizes.length)? res.sizes:["2mm","4mm","6mm","8mm","10mm","12mm"];
+    availableStones = (res.stones && res.stones.length)? res.stones:[];
 
-    // 2. 기존 Details 로드
     const existing = await apiPost({ action:"getDetails", structureCode });
     if(existing.success && existing.details && existing.details.length){
       details = [];
       existing.details.forEach(d=>{
         details.push({isButton:true});
-        details.push({isButton:false, nameKr:d.NameKr, size:d.Size, qty:Number(d.Qty)||1});
+        details.push({isButton:false,nameKr:d.NameKr,size:d.Size,qty:Number(d.Qty)||1});
       });
       details.push({isButton:true});
     }
 
     renderStoneSelectorAndSizes();
     renderDetails();
-
-  } catch(err){ alert("Init failed: "+err.message); }
+  }catch(err){ alert("Init failed: "+err.message); }
   finally{ hideLoading(); }
 });
 
-// ── NameKr+Size 버튼 렌더링 ─────────────────────
-function renderStoneSelectorAndSizes() {
+// NameKr+Size 버튼 렌더링
+function renderStoneSelectorAndSizes(){
   const container = document.getElementById("stoneSelector");
   container.innerHTML = "";
-  if (!availableStones.length) { container.innerHTML = '<span style="opacity:.5;font-size:13px;">선택된 원석 없음</span>'; return; }
+  if(!availableStones.length){ container.innerHTML='<span style="opacity:.5;font-size:13px;">선택된 원석 없음</span>'; return; }
 
-  availableStones.forEach(function(name) {
+  availableStones.forEach(name=>{
     const row = document.createElement("div");
 
     const nameLabel = document.createElement("span");
@@ -55,11 +48,11 @@ function renderStoneSelectorAndSizes() {
     nameLabel.className = "stone-name";
     row.appendChild(nameLabel);
 
-    availableSizes.forEach(function(size){
+    availableSizes.forEach(size=>{
       const btn = document.createElement("button");
       btn.textContent = size;
       btn.className = "size-btn";
-      btn.onclick = function(){ addDetail(name,size); };
+      btn.onclick = ()=> addDetail(name,size);
       row.appendChild(btn);
     });
 
@@ -67,17 +60,17 @@ function renderStoneSelectorAndSizes() {
   });
 }
 
-// ── Details 렌더링 ─────────────────────────────
-function renderDetails() {
+// Details 렌더링
+function renderDetails(){
   const container = document.getElementById("detailsContainer");
   container.innerHTML = "";
 
-  details.forEach((d, idx)=>{
+  details.forEach((d,idx)=>{
     const btn = document.createElement("button");
     if(d.isButton){
       btn.textContent = "+";
       btn.className = "plus-btn"+(activePlusIndex===idx?" active-plus":"");
-      btn.onclick = ()=> { activePlusIndex=idx; renderDetails(); };
+      btn.onclick = ()=>{ activePlusIndex=idx; renderDetails(); };
     } else {
       btn.textContent = `${d.nameKr} (${d.size},${d.qty}pcs)`;
       btn.className = "detail-btn";
@@ -91,23 +84,37 @@ function renderDetails() {
   updateLayoutSummary();
 }
 
-// ── Details 추가 ───────────────────────────────
+// Details 추가 (동일 NameKr+Size 합산)
 function addDetail(nameKr,size){
   if(activePlusIndex===null) activePlusIndex = details.length-1;
   let idx = activePlusIndex+1;
+
   const existing = details[idx];
   if(existing && !existing.isButton && existing.nameKr===nameKr && existing.size===size){
     existing.qty++;
   } else {
-    details.splice(idx,0,{isButton:false,nameKr,size,qty:1});
-    const after = details[idx+1];
-    if(!after || !after.isButton) details.splice(idx+1,0,{isButton:true});
+    // 삽입 전에 연속된 같은 NameKr+Size 찾기
+    let merged=false;
+    for(let i=0;i<details.length;i++){
+      const d=details[i];
+      if(!d.isButton && d.nameKr===nameKr && d.size===size){
+        d.qty++;
+        merged=true;
+        break;
+      }
+    }
+    if(!merged){
+      details.splice(idx,0,{isButton:false,nameKr,size,qty:1});
+      const after=details[idx+1];
+      if(!after || !after.isButton) details.splice(idx+1,0,{isButton:true});
+    }
   }
+
   activePlusIndex = idx+1;
   renderDetails();
 }
 
-// ── Details 제거 ───────────────────────────────
+// Details 제거
 function removeDetail(idx){
   if(!details[idx]||details[idx].isButton) return;
   details[idx].qty--;
@@ -119,7 +126,7 @@ function removeDetail(idx){
   renderDetails();
 }
 
-// ── [+][+] 연속 병합 ─────────────────────────
+// [+][+] 연속 병합
 function compactButtons(){
   let i=0;
   while(i<details.length-1){
@@ -132,38 +139,36 @@ function compactButtons(){
   if(!details[details.length-1].isButton) details.push({isButton:true});
 }
 
-// ── Total Size ───────────────────────────────
+// Total Size
 function updateTotalSize(){
-  const total = details.filter(d=>!d.isButton).reduce((sum,d)=>{
-    return sum + (parseFloat(String(d.size).replace("mm",""))||0)*d.qty;
-  },0);
-  document.getElementById("totalSize").textContent = "Total Size "+total+"mm";
+  const total=details.filter(d=>!d.isButton).reduce((sum,d)=>sum+(parseFloat(d.size)||0)*d.qty,0);
+  document.getElementById("totalSize").textContent="Total Size "+total+"mm";
 }
 
-// ── Layout Summary ───────────────────────────
+// Layout Summary (연속 NameKr 합산)
 function updateLayoutSummary(){
-  const el = document.getElementById("layoutSummary");
+  const el=document.getElementById("layoutSummary");
   if(!el) return;
 
-  const summary = [];
+  const summary=[];
   let i=0;
   while(i<details.length){
-    const d = details[i];
+    const d=details[i];
     if(d.isButton){ i++; continue; }
-    const name = d.nameKr;
+    const name=d.nameKr;
     let qtySum=0,j=i;
     while(j<details.length && !details[j].isButton && details[j].nameKr===name){ qtySum+=details[j].qty; j++; }
     summary.push(`${name} (${qtySum}pcs)`);
     i=j;
   }
-  el.textContent = summary.join(" - ");
+  el.textContent=summary.join(" - ");
 }
 
-// ── 페이지 이동 ───────────────────────────────
+// 페이지 이동
 function goBeforeDesign(){ goPage("selectstone.html"); }
 function goNextDesign(){ goPage("analysismemo.html"); }
 
-// ── Save ─────────────────────────────────────
+// Save
 async function saveDesign(){
   if(!structureCode){ alert("StructureCode 없음"); return; }
   const dataItems = details.filter(d=>!d.isButton);
@@ -172,15 +177,14 @@ async function saveDesign(){
   const confirmDeduct = confirm("Deduct from stock?");
   try{
     showLoading("Saving...");
-    const detailsData = dataItems.map(d=>({ NameKr:d.nameKr, Size:d.size, Qty:d.qty }));
-    const saveRes = await apiPost({ action:"saveDetails", structureCode, details:detailsData, deduct:confirmDeduct });
+    const detailsData = dataItems.map(d=>({NameKr:d.nameKr, Size:d.size, Qty:d.qty}));
+    const saveRes = await apiPost({action:"saveDetails", structureCode, details:detailsData, deduct:confirmDeduct});
     if(!saveRes.success) throw new Error(saveRes.error||"Details 저장 실패");
 
-    const layoutSummary = updateLayoutSummary(); // PDF용 업데이트
-
-    await apiPost({ action:"updateLayoutSummary", structureCode, layoutSummary });
+    updateLayoutSummary(); // PDF용 Layout Summary 업데이트
+    await apiPost({action:"updateLayoutSummary", structureCode, layoutSummary:document.getElementById("layoutSummary").textContent});
 
     alert("Saved successfully ✓\n저장: "+saveRes.saved+"건"+(confirmDeduct?`\n차감: ${saveRes.deducted}건`:""));
-  }catch(err){ alert("Save failed: "+err.message); }
+  }catch(err){ alert("Save failed: "+err.message);}
   finally{ hideLoading(); }
 }
