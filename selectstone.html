@@ -1,255 +1,268 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-  <title>ASTERION – Select Stone</title>
-  <script src="config.js"></script>
-  <script src="api_contract.js"></script>
-  <script src="state.js"></script>
-  <script src="api.js"></script>
-  <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    body{
-      background:url('bg_main.png') center/cover no-repeat fixed;
-      font-family:'Arial',sans-serif; color:#fff;
-      min-height:100vh;
-      display:flex; flex-direction:column; align-items:center;
-      padding:14px 14px 100px;
-    }
-    #title-img{width:260px;max-width:88vw;margin:12px auto 6px;display:block}
-    #code-display{
-      font-size:12px; color:rgba(220,188,128,.8);
-      letter-spacing:1px; text-align:center; margin-bottom:14px;
-    }
 
-    /* 검색 */
-    #search-wrap{width:100%;max-width:480px;margin-bottom:10px;position:relative}
-    #search-input{
-      width:100%;padding:9px 14px 9px 36px;
-      background:rgba(255,255,255,0.07);
-      border:1px solid rgba(255,255,255,0.14);border-radius:8px;
-      color:#fff;font-size:13px;outline:none;
-    }
-    #search-input::placeholder{color:rgba(255,255,255,.3)}
-    .s-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:14px;color:rgba(255,255,255,.4);pointer-events:none}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 
-    /* 원석 그리드 */
-    #stone-grid{
-      width:100%;max-width:480px;
-      display:grid; grid-template-columns:repeat(3,1fr); gap:8px;
-      margin-bottom:14px;
-    }
-    .stone-card{
-      background:rgba(255,255,255,0.05);
-      border:1px solid rgba(255,255,255,0.12);
-      border-radius:10px; overflow:hidden;
-      cursor:pointer; transition:background .15s, border-color .15s;
-      -webkit-tap-highlight-color:transparent;
-    }
-    .stone-card.selected{
-      background:rgba(170,130,75,0.35);
-      border-color:rgba(210,170,100,0.8);
-    }
-    .stone-card .thumb{
-      width:100%; aspect-ratio:1/1;
-      background:rgba(255,255,255,0.04);
-      display:flex; align-items:center; justify-content:center;
-      overflow:hidden;
-    }
-    .stone-card .thumb img{width:100%;height:100%;object-fit:cover}
-    .stone-card .thumb .no-img{
-      font-size:22px; color:rgba(255,255,255,0.15);
-    }
-    .stone-card .stone-label{
-      font-size:11px; padding:5px 6px; text-align:center;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-      color:rgba(255,255,255,0.82);
-    }
-    .stone-card.selected .stone-label{color:#fff; font-weight:bold}
+<title>Gemstone Select</title>
 
-    /* 선택 카운터 */
-    #selected-info{
-      width:100%;max-width:480px;
-      font-size:12px; color:rgba(220,188,128,.8);
-      letter-spacing:.5px; margin-bottom:8px;
-      text-align:right;
-    }
+<script src="config.js"></script>
+<script src="api_contract.js"></script>
+<script src="state.js"></script>
+<script src="api.js"></script>
 
-    /* 선택된 목록 칩 */
-    #selected-chips{
-      width:100%;max-width:480px;
-      display:flex; flex-wrap:wrap; gap:5px; margin-bottom:12px;
-      min-height:28px;
-    }
-    .chip{
-      background:rgba(170,130,75,0.4);
-      border:1px solid rgba(210,170,100,0.5);
-      border-radius:20px; padding:4px 10px;
-      font-size:11px; color:#fff;
-    }
+<style>
 
-    /* 상태 메시지 */
-    #status-msg{font-size:12px;text-align:center;min-height:18px;margin-bottom:4px;width:100%;max-width:480px}
-    .err-msg{color:rgba(220,80,80,.9)} .ok-msg{color:rgba(100,220,130,.9)}
+body{
+margin:0;
+height:100vh;
 
-    /* 하단 네비 */
-    #nav-bar{
-      position:fixed;bottom:0;left:0;right:0;
-      display:flex;justify-content:space-around;align-items:center;
-      padding:8px 10px env(safe-area-inset-bottom,10px);
-      background:rgba(8,6,4,.88);
-      border-top:1px solid rgba(255,255,255,0.07);z-index:50;
-    }
-    #nav-bar img{height:42px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
-    #nav-bar img:active{opacity:.65}
+background:url("images/bg_sub.jpg");
+background-size:cover;
+background-position:center;
 
-    /* 로딩 */
-    #loading-overlay{
-      display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;
-      align-items:center;justify-content:center;
-    }
-    #loading-overlay.show{display:flex}
-    .loading-text{font-size:13px;letter-spacing:2px;color:rgba(220,188,128,1)}
-  </style>
+display:flex;
+flex-direction:column;
+align-items:center;
+
+font-family:sans-serif;
+color:white;
+}
+
+/* Title */
+
+#title-img{
+width:260px;
+margin-top:15px;
+}
+
+/* Container */
+
+#stone-area{
+
+flex:1;
+
+width:90%;
+max-width:420px;
+
+display:flex;
+flex-direction:column;
+
+margin-top:10px;
+}
+
+/* Stone List */
+
+#stone-list{
+
+flex:1;
+
+overflow-y:auto;
+
+background:rgba(255,255,255,0.1);
+
+border-radius:6px;
+
+margin-bottom:8px;
+}
+
+/* Selected List */
+
+#selected-list{
+
+flex:1;
+
+overflow-y:auto;
+
+background:transparent;
+
+border-radius:6px;
+
+}
+
+/* Item */
+
+.stone-item{
+
+padding:12px;
+
+text-align:center;
+
+border-bottom:1px solid rgba(255,255,255,0.2);
+
+cursor:pointer;
+
+}
+
+/* Buttons */
+
+#nav-bar{
+
+width:100%;
+
+display:flex;
+justify-content:space-around;
+
+padding:10px;
+
+}
+
+#nav-bar img{
+
+width:70px;
+cursor:pointer;
+
+}
+
+</style>
 </head>
+
+
 <body>
-  <img id="title-img" src="ttl_selectstone.png" alt="Select Stone"/>
-  <div id="code-display">—</div>
 
-  <div id="search-wrap">
-    <span class="s-icon">🔍</span>
-    <input id="search-input" type="text" placeholder="원석명 검색..."/>
-  </div>
+<img id="title-img" src="images/ttl_stoneselect.png">
 
-  <div id="selected-info">선택됨: 0개</div>
-  <div id="selected-chips"></div>
+<div id="stone-area">
 
-  <div id="stone-grid">
-    <div style="grid-column:1/-1;text-align:center;padding:24px;font-size:12px;color:rgba(255,255,255,.3)">Loading...</div>
-  </div>
+<div id="stone-list"></div>
 
-  <div id="status-msg"></div>
+<div id="selected-list"></div>
 
-  <div id="nav-bar">
-    <img src="btn_go_home.png"    alt="Home"   id="btn-home"/>
-    <img src="btn_go_before.png"  alt="Before" id="btn-before"/>
-    <img src="btn_go_design.png"  alt="Design" id="btn-design"/>
-  </div>
+</div>
 
-  <div id="loading-overlay">
-    <div class="loading-text">SAVING...</div>
-  </div>
 
-  <script>
-  "use strict";
-  var structureCode  = null;
-  var allStones      = [];
-  var selectedStones = new Set();  // nameKr 집합
-  var searchQ        = "";
+<div id="nav-bar">
 
-  document.addEventListener("DOMContentLoaded", async function(){
-    structureCode = requireStructureCode();
-    if (!structureCode) return;
-    document.getElementById("code-display").textContent = structureCode;
+<img src="images/btn_go_home.png" onclick="goHome()">
 
-    document.getElementById("btn-home").addEventListener("click", function(){ window.location.href = "index.html"; });
-    document.getElementById("btn-before").addEventListener("click", function(){ goPage("worksdesk.html"); });
-    document.getElementById("btn-design").addEventListener("click", onGoDesign);
-    document.getElementById("search-input").addEventListener("input", function(){
-      searchQ = this.value.trim().toLowerCase();
-      renderGrid();
-    });
+<img src="images/btn_go_before.png" onclick="goPage('worksdesk.html')">
 
-    await loadStones();
-  });
+<img src="images/btn_design.png" onclick="goDesign()">
 
-  async function loadStones(){
-    try {
-      allStones = await apiGetAllStones();
-      renderGrid();
-    } catch(err){
-      console.error("[selectstone] 로드 실패:", err);
-      document.getElementById("stone-grid").innerHTML =
-        '<div style="grid-column:1/-1;text-align:center;padding:24px;font-size:12px;color:rgba(220,80,80,.8)">로드 실패: ' + err.message + '</div>';
-    }
-  }
+</div>
 
-  function renderGrid(){
-    var grid = document.getElementById("stone-grid");
-    var filtered = searchQ
-      ? allStones.filter(function(s){ return s.nameKr.toLowerCase().indexOf(searchQ) !== -1; })
-      : allStones;
 
-    if (!filtered.length){
-      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:24px;font-size:12px;color:rgba(255,255,255,.3)">항목 없음</div>';
-      return;
-    }
 
-    grid.innerHTML = "";
-    filtered.forEach(function(stone){
-      var card = document.createElement("div");
-      card.className = "stone-card" + (selectedStones.has(stone.nameKr) ? " selected" : "");
-      card.setAttribute("data-name", stone.nameKr);
+<script>
 
-      var thumbHtml = stone.image
-        ? '<img src="' + escHtml(stone.image) + '" alt="" loading="lazy"/>'
-        : '<div class="no-img">◈</div>';
+"use strict";
 
-      card.innerHTML =
-        '<div class="thumb">' + thumbHtml + '</div>' +
-        '<div class="stone-label">' + escHtml(stone.nameKr) + '</div>';
+var structureCode=null
+var allStones=[]
+var selectedStones=[]
 
-      card.addEventListener("click", function(){ toggleStone(stone.nameKr, card); });
-      grid.appendChild(card);
-    });
-  }
+document.addEventListener("DOMContentLoaded",init)
 
-  function toggleStone(nameKr, card){
-    if (selectedStones.has(nameKr)){
-      selectedStones.delete(nameKr);
-      card.classList.remove("selected");
-    } else {
-      selectedStones.add(nameKr);
-      card.classList.add("selected");
-    }
-    updateChips();
-  }
 
-  function updateChips(){
-    var chips = document.getElementById("selected-chips");
-    var info  = document.getElementById("selected-info");
-    var arr   = Array.from(selectedStones);
-    info.textContent = "선택됨: " + arr.length + "개";
-    chips.innerHTML  = arr.map(function(n){
-      return '<span class="chip">' + escHtml(n) + '</span>';
-    }).join("");
-  }
+async function init(){
 
-  async function onGoDesign(){
-    if (selectedStones.size === 0){
-      setStatus("원석을 1개 이상 선택하세요.", "err"); return;
-    }
-    document.getElementById("loading-overlay").classList.add("show");
-    setStatus("", "");
-    try {
-      await apiSaveUsedStones(structureCode, Array.from(selectedStones));
-      goPage("design.html");
-    } catch(err){
-      document.getElementById("loading-overlay").classList.remove("show");
-      setStatus("저장 실패: " + err.message, "err");
-    }
-  }
+structureCode=requireStructureCode()
 
-  function setStatus(msg, type){
-    var el = document.getElementById("status-msg");
-    el.textContent = msg;
-    el.className = type === "err" ? "err-msg" : (type === "ok" ? "ok-msg" : "");
-  }
+if(!structureCode)return
 
-  function escHtml(s){
-    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-  }
-  </script>
+await loadStones()
+
+}
+
+
+async function loadStones(){
+
+allStones=await apiGetAllStones()
+
+render()
+
+}
+
+
+function render(){
+
+const list=document.getElementById("stone-list")
+const selected=document.getElementById("selected-list")
+
+list.innerHTML=""
+selected.innerHTML=""
+
+allStones.forEach(stone=>{
+
+if(selectedStones.includes(stone.nameKr)){
+
+const div=document.createElement("div")
+
+div.className="stone-item"
+div.textContent=stone.nameKr
+
+div.onclick=()=>removeStone(stone.nameKr)
+
+selected.appendChild(div)
+
+}else{
+
+const div=document.createElement("div")
+
+div.className="stone-item"
+div.textContent=stone.nameKr
+
+div.onclick=()=>addStone(stone.nameKr)
+
+list.appendChild(div)
+
+}
+
+})
+
+}
+
+
+function addStone(name){
+
+selectedStones.push(name)
+
+render()
+
+}
+
+
+function removeStone(name){
+
+selectedStones=selectedStones.filter(n=>n!==name)
+
+render()
+
+}
+
+
+function goHome(){
+
+location.href="index.html"
+
+}
+
+
+async function goDesign(){
+
+if(selectedStones.length===0){
+
+alert("원석을 선택하세요")
+return
+
+}
+
+try{
+
+await apiSaveUsedStones(structureCode,selectedStones)
+
+goPage("design.html")
+
+}catch(err){
+
+alert("저장 실패 "+err.message)
+
+}
+
+}
+
+</script>
+
 </body>
 </html>
