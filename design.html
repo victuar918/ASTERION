@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Structure Design</title>
 
+<!-- ▼ 공통 JS -->
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/state.js"></script>
@@ -13,6 +14,7 @@
 <script src="js/design.js" defer></script>
 
 <style>
+* { box-sizing: border-box; }
 body {
   margin: 0;
   font-family: Arial, sans-serif;
@@ -20,16 +22,16 @@ body {
   min-height: 100vh;
   color: #2b1e08;
   padding: 16px 12px 90px;
-  text-align: center;
 }
 
+/* 상단 타이틀 */
 #titleContainer {
-  margin-bottom: 8px;
+  text-align: center;
+  margin-bottom: 12px;
 }
-#titleContainer img {
-  max-width: 180px;
-}
+#titleContainer img { max-width: 180px; }
 
+/* StructureCode 값만 중앙정렬 */
 #structureCodeDisplay {
   text-align: center;
   font-weight: bold;
@@ -37,32 +39,15 @@ body {
   margin-bottom: 12px;
 }
 
-/* ── 원석 + Size 버튼 ── */
-#stoneSelector, #sizeButtons {
+/* 원석 + Size 버튼 행 */
+#stoneSelector {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  margin-bottom: 12px;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
 }
-
-.stone-select-btn {
-  padding: 5px 12px;
-  border-radius: 20px;
-  border: 2px solid #c9a830;
-  background: rgba(255,255,255,0.35);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.15s;
-  color: #2b1e08;
-}
-.stone-select-btn.active-stone {
-  background: #2b1e08;
-  color: #f5d97a;
-  border-color: #2b1e08;
-  font-weight: 600;
-}
-
+#stoneSelector div { display: flex; align-items: center; gap: 6px; }
+.stone-name { font-weight: 600; min-width: 90px; }
 .size-btn {
   padding: 6px 12px;
   border-radius: 6px;
@@ -75,58 +60,45 @@ body {
 }
 .size-btn:hover { opacity: 0.72; }
 
-/* ── Details ── */
+/* Details 영역 */
 #detailsContainer {
-  min-height: 180px;
+  min-height: 50px;
   padding: 8px;
-  background: rgba(255,255,255,0.0); /* 완전 투명 */
+  background: rgba(255,255,255,0.4);
   border-radius: 8px;
   line-height: 2.2;
+  margin-bottom: 12px;
 }
-
-.plus-btn {
+.plus-btn, .detail-btn {
   display: inline-block;
-  padding: 2px 7px;
-  border-radius: 4px;
+  padding: 3px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  margin: 0 2px;
+  font-size: 13px;
+}
+.plus-btn {
   border: 2px dashed #bbb;
   background: transparent;
   color: #888;
-  font-size: 15px;
   font-weight: bold;
-  cursor: pointer;
-  transition: all 0.12s;
-  margin: 0 2px;
 }
 .plus-btn.active-plus {
   border-color: #d8ad3c;
   background: rgba(248,197,66,0.25);
   color: #2b1e08;
 }
-
 .detail-btn {
-  display: inline-block;
-  padding: 3px 9px;
-  border-radius: 5px;
   border: none;
-  background: rgba(255,255,255,0.6); /* 60% 투명 */
-  font-size: 13px;
-  cursor: pointer;
-  margin: 0 2px;
-  transition: opacity 0.15s;
+  background: rgba(255,255,255,0.65);
 }
 .detail-btn:hover { opacity: 0.6; }
 
-/* ── Total / Layout ── */
-#totalSize {
-  margin-top: 10px;
-  font-weight: bold;
-  font-size: 15px;
-}
-
+/* Total / Layout */
+#totalSize { font-weight: bold; margin-bottom: 8px; }
 #layoutSummaryContainer {
-  margin-top: 10px;
-  padding: 8px 10px;
-  background: rgba(255,255,255,0.0); /* 완전 투명 */
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.3);
   border-radius: 6px;
   font-size: 13px;
   word-break: break-all;
@@ -134,7 +106,7 @@ body {
 }
 #layoutSummaryContainer strong { display: block; margin-bottom: 4px; }
 
-/* ── 하단 버튼 ── */
+/* 하단 버튼 */
 .bottom {
   position: fixed;
   bottom: 16px;
@@ -152,24 +124,33 @@ body {
 .bottom img:hover { opacity: 0.75; }
 </style>
 </head>
+
 <body>
 
+<!-- 타이틀 -->
 <div id="titleContainer">
   <img src="images/ttl_structuredesign.png" alt="Structure Design">
 </div>
 
+<!-- StructureCode 값만 중앙 표시 -->
 <div id="structureCodeDisplay"></div>
 
+<!-- 원석 + Size 버튼 행 -->
 <div id="stoneSelector"></div>
-<div id="sizeButtons"></div>
+
+<!-- Details 영역 -->
 <div id="detailsContainer"></div>
+
+<!-- Total Size -->
 <div id="totalSize">Total Size 0mm</div>
 
+<!-- Layout Summary -->
 <div id="layoutSummaryContainer">
   <strong>Layout:</strong>
   <span id="layoutSummary"></span>
 </div>
 
+<!-- 하단 버튼 -->
 <div class="bottom">
   <img src="images/btn_go_home.png"   alt="홈"    onclick="goHome()">
   <img src="images/btn_go_before.png" alt="뒤로"  onclick="goBeforeDesign()">
