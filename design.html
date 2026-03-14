@@ -1,178 +1,384 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Structure Design</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ASTERION – Structure Design</title>
 
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/state.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/layoutFormatter.js"></script>
-<script src="js/design.js" defer></script>
+  <!-- 공통 스크립트: 반드시 이 순서로 로드 -->
+  <script src="config.js"></script>
+  <script src="state.js"></script>
+  <script src="api.js"></script>
 
-<style>
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
-  min-height: 100vh;
-  color: #2b1e08;
-  /* 하단 고정 버튼 높이를 고려해 하단 패딩을 100px로 넉넉하게 확보 */
-  padding: 20px 16px 100px; 
-}
+  <style>
+    /* ── 리셋 ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* 타이틀 이미지 */
-.title-img {
-  display: block;
-  width: 95%;
-  max-width: 1400px;
-  margin: 0 auto 24px auto; /* 가운데 정렬 및 하단 여백 추가 */
-}
+    html, body {
+      min-height: 100%;
+      -webkit-text-size-adjust: 100%;
+    }
 
-/* StructureCode 표시 (원래 클래스명 복구 및 간격 확대) */
-.structureCodeDisplay, .structure-code {
-  font-weight: bold;
-  font-size: 16px;
-  margin-bottom: 24px; /* 다음 요소와의 간격 넓힘 */
-  text-align: center;
-}
+    body {
+      background: url('bg_main.png') center center / cover no-repeat fixed;
+      font-family: 'Arial', sans-serif;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px 108px; /* 하단 네비 높이 + 여유 */
+      overflow-x: hidden;
+    }
 
-/* 원석 + Size 버튼 행 (원래 클래스명 복구 및 간격 확대) */
-.stoneSelector, #stoneSelector {
-  display: flex;
-  flex-direction: column;
-  gap: 12px; /* 행 사이 간격 넓힘 */
-  margin-bottom: 24px; /* 다음 요소와의 간격 넓힘 */
-}
+    /* ── 타이틀 이미지 ── */
+    #title-img {
+      width: 280px;
+      max-width: 88vw;
+      margin: 12px auto 18px;
+      display: block;
+    }
 
-.stoneSelector div, #stoneSelector div { 
-  display: flex; 
-  align-items: center; 
-  gap: 8px; 
-}
+    /* ── 공통 투명 패널 ── */
+    .panel {
+      width: 100%;
+      max-width: 480px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 12px 12px 14px;
+      margin-bottom: 12px;
+    }
 
-/* NameKr 라벨 */
-.stone-name { 
-  font-weight: 600; 
-  min-width: 90px; 
-}
+    .panel-label {
+      font-size: 10px;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.38);
+      margin-bottom: 10px;
+    }
 
-/* Size 버튼 */
-.size-btn {
-  padding: 8px 14px; /* 버튼 터치 영역 살짝 확대 */
-  border-radius: 6px;
-  border: none;
-  background: #f5c542;
-  font-weight: bold;
-  font-size: 13px;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-.size-btn:hover { opacity: 0.72; }
+    /* ── Used Items (stone 행 목록) ── */
+    #used-container {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
 
-/* Details 영역 */
-#detailsContainer {
-  min-height: 60px;
-  padding: 12px;
-  background: rgba(255,255,255,0.4);
-  border-radius: 8px;
-  line-height: 2.2;
-  margin-bottom: 20px; /* 다음 요소와의 간격 넓힘 */
-}
-.plus-btn, .detail-btn {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 5px;
-  cursor: pointer;
-  margin: 2px;
-  font-size: 13px;
-}
-.plus-btn {
-  border: 2px dashed #bbb;
-  background: transparent;
-  color: #888;
-  font-weight: bold;
-}
-.plus-btn.active-plus {
-  border-color: #d8ad3c;
-  background: rgba(248,197,66,0.25);
-  color: #2b1e08;
-}
-.detail-btn {
-  border: none;
-  background: rgba(255,255,255,0.65);
-}
-.detail-btn:hover { opacity: 0.6; }
+    .stone-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 5px;
+      min-height: 30px;
+    }
 
-/* Total / Layout */
-#totalSize { 
-  font-weight: bold; 
-  margin-bottom: 12px; 
-  font-size: 15px;
-}
-#layoutSummaryContainer {
-  padding: 10px 12px;
-  background: rgba(255,255,255,0.3);
-  border-radius: 6px;
-  font-size: 14px;
-  word-break: break-all;
-  min-height: 40px;
-  line-height: 1.5;
-}
-#layoutSummaryContainer strong { 
-  display: block; 
-  margin-bottom: 6px; 
-}
+    .stone-name {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.80);
+      min-width: 72px;
+      max-width: 100px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
 
-/* 하단 버튼 (고정 영역) */
-.bottom {
-  position: fixed;
-  bottom: 16px;
-  left: 0;
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  background: linear-gradient(to top, rgba(216, 173, 60, 0.9) 30%, transparent 100%); /* 스크롤 시 버튼이 잘 보이도록 살짝 배경 효과 추가 (선택사항) */
-  padding-top: 20px;
-}
-.bottom img {
-  width: 50px;
-  height: 50px; /* 이미지 비율 찌그러짐 방지 */
-  cursor: pointer;
-  transition: opacity 0.15s;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* 버튼에 입체감 추가 */
-  border-radius: 50%;
-}
-.bottom img:hover { opacity: 0.75; }
-</style>
+    /* Size 선택 버튼 */
+    .btn-size {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 5px;
+      color: #fff;
+      font-size: 11px;
+      padding: 4px 9px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .btn-size:active,
+    .btn-size.flash {
+      background: rgba(180, 140, 90, 0.6);
+      border-color: rgba(210, 170, 100, 0.9);
+    }
+
+    /* ── Details 영역 ── */
+    #details-scroll {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
+      min-height: 40px;
+    }
+
+    /* [+] 삽입 버튼 */
+    .btn-insert {
+      width: 26px;
+      height: 26px;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px dashed rgba(255, 255, 255, 0.28);
+      border-radius: 5px;
+      color: rgba(255, 255, 255, 0.50);
+      font-size: 15px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .btn-insert.selected {
+      background: rgba(170, 130, 75, 0.55);
+      border: 1px solid rgba(210, 170, 100, 0.9);
+      color: #fff;
+    }
+    .btn-insert.hint-shake {
+      border-color: rgba(220, 80, 80, 0.8);
+      color: rgba(220, 80, 80, 0.8);
+    }
+
+    /* Detail 아이템 버튼 */
+    .btn-item {
+      background: rgba(90, 68, 38, 0.50);
+      border: 1px solid rgba(190, 150, 90, 0.48);
+      border-radius: 7px;
+      color: #fff;
+      font-size: 11px;
+      padding: 5px 9px;
+      cursor: pointer;
+      line-height: 1.45;
+      text-align: center;
+      flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      transition: background 0.12s;
+    }
+    .btn-item:active { background: rgba(190, 150, 90, 0.45); }
+    .btn-item.move-target {
+      border-color: rgba(100, 200, 130, 0.8);
+      background: rgba(40, 110, 60, 0.45);
+    }
+    .btn-item .item-sub {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.58);
+      display: block;
+    }
+
+    /* 힌트 문구 */
+    #insert-hint {
+      font-size: 11px;
+      color: rgba(210, 170, 100, 0.8);
+      letter-spacing: 0.5px;
+      min-height: 16px;
+      margin-top: 2px;
+      text-align: center;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    /* ── Total Size ── */
+    #total-display {
+      font-size: 15px;
+      font-weight: bold;
+      letter-spacing: 1.2px;
+      text-align: center;
+      color: rgba(220, 188, 128, 1);
+      padding: 6px 0 4px;
+    }
+
+    /* ── Layout for PDF ── */
+    #layout-title {
+      font-size: 10px;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.38);
+      margin-bottom: 7px;
+    }
+    #layout-preview {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.70);
+      line-height: 1.75;
+      white-space: pre-wrap;
+      word-break: break-all;
+      min-height: 20px;
+    }
+
+    /* ── Save 팝업 ── */
+    #popup-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.62);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #popup-overlay.show { display: flex; }
+
+    #popup-box {
+      background: rgba(22, 18, 13, 0.96);
+      border: 1px solid rgba(200, 160, 100, 0.45);
+      border-radius: 14px;
+      padding: 26px 26px 20px;
+      width: 270px;
+      text-align: center;
+    }
+    #popup-box .popup-q {
+      font-size: 14px;
+      color: rgba(220, 188, 128, 1);
+      line-height: 1.55;
+      margin-bottom: 20px;
+    }
+    .popup-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+    .popup-row button {
+      flex: 1;
+      padding: 10px 0;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      border: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #btn-popup-yes {
+      background: rgba(170, 130, 75, 0.85);
+      color: #fff;
+    }
+    #btn-popup-no {
+      background: rgba(255, 255, 255, 0.09);
+      color: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(255, 255, 255, 0.20) !important;
+    }
+
+    /* ── 하단 네비게이션 ── */
+    #nav-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 8px 10px env(safe-area-inset-bottom, 10px);
+      background: rgba(8, 6, 4, 0.88);
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      z-index: 50;
+    }
+    #nav-bar img {
+      height: 42px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      transition: opacity 0.15s;
+    }
+    #nav-bar img:active { opacity: 0.65; }
+
+    /* ── 로딩 오버레이 ── */
+    #loading-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #loading-overlay.show { display: flex; }
+    #loading-overlay .loading-text {
+      font-size: 13px;
+      letter-spacing: 2.5px;
+      color: rgba(220, 188, 128, 1);
+    }
+    .loading-dots {
+      display: flex;
+      gap: 6px;
+    }
+    .loading-dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(220, 188, 128, 0.8);
+      animation: dotPulse 1.2s ease-in-out infinite;
+    }
+    .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dotPulse {
+      0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
+      40%           { transform: scale(1.0); opacity: 1.0; }
+    }
+  </style>
 </head>
-
 <body>
-<img src="images/ttl_structuredesign.png" class="title-img" alt="Select Stone">
 
-<div id="structureCodeLabel" class="structure-code"></div>
+  <!-- 타이틀 -->
+  <img id="title-img" src="ttl_structuredesign.png" alt="Structure Design" />
 
-<div id="stoneSelector"></div>
+  <!-- ① Used Items 패널 -->
+  <div class="panel">
+    <div class="panel-label">Select Stone &amp; Size</div>
+    <div id="used-container">
+      <div style="font-size:12px;color:rgba(255,255,255,0.35);">Loading...</div>
+    </div>
+  </div>
 
-<div id="detailsContainer"></div>
+  <!-- ② Details 패널 -->
+  <div class="panel">
+    <div class="panel-label">Details</div>
+    <div id="details-scroll"><!-- JS 렌더링 --></div>
+  </div>
 
-<div id="totalSize">Total Size 0mm</div>
+  <!-- 삽입 힌트 문구 -->
+  <div id="insert-hint"></div>
 
-<div id="layoutSummaryContainer">
-  <strong>Layout:</strong>
-  <span id="layoutSummary"></span>
-</div>
+  <!-- ③ Total Size -->
+  <div class="panel" style="padding:9px 12px;">
+    <div id="total-display">Total Size 0mm</div>
+  </div>
 
-<div class="bottom">
-  <img src="images/btn_go_home.png"   alt="홈"    onclick="goHome()">
-  <img src="images/btn_go_before.png" alt="뒤로"  onclick="goBeforeDesign()">
-  <img src="images/btn_analysis.png"  alt="Next"  onclick="goNextDesign()">
-  <img src="images/btn_save.png"      alt="Save"  onclick="saveDesign()">
-</div>
+  <!-- ④ Layout for PDF -->
+  <div class="panel">
+    <div id="layout-title">Layout for PDF</div>
+    <div id="layout-preview">—</div>
+  </div>
+
+  <!-- 하단 네비게이션 -->
+  <div id="nav-bar">
+    <img src="btn_go_home.png"   alt="Home"     id="btn-home"     />
+    <img src="btn_go_before.png" alt="Before"   id="btn-before"   />
+    <img src="btn_analysis.png"  alt="Analysis" id="btn-analysis" />
+    <img src="btn_save.png"      alt="Save"     id="btn-save"     />
+  </div>
+
+  <!-- Save 팝업 -->
+  <div id="popup-overlay">
+    <div id="popup-box">
+      <div class="popup-q">Deduct from stock?</div>
+      <div class="popup-row">
+        <button id="btn-popup-yes">Yes</button>
+        <button id="btn-popup-no">No</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 로딩 오버레이 -->
+  <div id="loading-overlay">
+    <div class="loading-dots">
+      <span></span><span></span><span></span>
+    </div>
+    <div class="loading-text">SAVING</div>
+  </div>
+
+  <!-- design.js는 맨 마지막에 로드 (DOM 완성 후) -->
+  <script src="design.js"></script>
 
 </body>
 </html>
