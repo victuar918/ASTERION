@@ -15,7 +15,6 @@
 
 <style>
 * { box-sizing: border-box; }
-
 body {
   margin: 0;
   font-family: Arial, sans-serif;
@@ -25,33 +24,30 @@ body {
   padding: 16px 12px 90px;
 }
 
-/* ── 상단 타이틀 ── */
+/* 상단 타이틀 */
 #titleContainer {
   text-align: center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
-
 #titleContainer img {
-  width: 220px; /* 다른 화면과 동일 크기 */
+  width: 220px;  /* 충분히 크게 */
   max-width: 90%;
   height: auto;
-  display: block;
-  margin: 0 auto;
 }
 
-/* ── StructureCode 중앙 표시 ── */
+/* StructureCode 중앙 표시 */
 #structureCodeDisplay {
   text-align: center;
   font-weight: bold;
   font-size: 18px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
-/* ── 원석 + Size 버튼 행 ── */
+/* Stone + Size 버튼 행 */
 #stoneSelector {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 14px;
 }
 
@@ -76,10 +72,9 @@ body {
   cursor: pointer;
   transition: opacity 0.15s;
 }
-
 .size-btn:hover { opacity: 0.72; }
 
-/* ── Details 영역 ── */
+/* Details 영역 */
 #detailsContainer {
   min-height: 50px;
   padding: 8px;
@@ -97,30 +92,28 @@ body {
   margin: 0 2px;
   font-size: 13px;
 }
-
 .plus-btn {
   border: 2px dashed #bbb;
   background: transparent;
   color: #888;
   font-weight: bold;
 }
-
 .plus-btn.active-plus {
   border-color: #d8ad3c;
   background: rgba(248,197,66,0.25);
   color: #2b1e08;
 }
-
 .detail-btn {
   border: none;
   background: rgba(255,255,255,0.65);
 }
-
 .detail-btn:hover { opacity: 0.6; }
 
-/* ── Total / Layout ── */
-#totalSize { font-weight: bold; margin-bottom: 8px; }
-
+/* Total / Layout */
+#totalSize {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
 #layoutSummaryContainer {
   padding: 6px 10px;
   background: rgba(255,255,255,0.3);
@@ -129,10 +122,9 @@ body {
   word-break: break-all;
   min-height: 32px;
 }
-
 #layoutSummaryContainer strong { display: block; margin-bottom: 4px; }
 
-/* ── 하단 버튼 ── */
+/* 하단 버튼 */
 .bottom {
   position: fixed;
   bottom: 16px;
@@ -142,13 +134,11 @@ body {
   justify-content: center;
   gap: 14px;
 }
-
 .bottom img {
   width: 50px;
   cursor: pointer;
   transition: opacity 0.15s;
 }
-
 .bottom img:hover { opacity: 0.75; }
 </style>
 </head>
@@ -160,10 +150,10 @@ body {
   <img src="images/ttl_structuredesign.png" alt="Structure Design">
 </div>
 
-<!-- StructureCode (코드만 중앙) -->
+<!-- StructureCode -->
 <div id="structureCodeDisplay"></div>
 
-<!-- NameKr + Size 버튼 (JS에서 동적 생성) -->
+<!-- 원석 + Size 버튼 행 -->
 <div id="stoneSelector"></div>
 
 <!-- Details 영역 -->
