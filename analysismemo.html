@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <title>ASTERION – Analysis Memo</title>
+  <script src="config.js"></script>
+  <script src="api_contract.js"></script>
+  <script src="state.js"></script>
+  <script src="api.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{
+      background:url('bg_main.png') center/cover no-repeat fixed;
+      font-family:'Arial',sans-serif; color:#fff;
+      min-height:100vh;
+      display:flex; flex-direction:column; align-items:center;
+      padding:14px 14px 100px;
+    }
+    #title-img{width:260px;max-width:88vw;margin:12px auto 6px;display:block}
+    #code-display{font-size:12px;color:rgba(220,188,128,.8);letter-spacing:1px;text-align:center;margin-bottom:14px}
+
+    .panel{
+      width:100%;max-width:480px;
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.11);
+      border-radius:12px;padding:14px;margin-bottom:12px;
+    }
+    .panel-label{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:rgba(255,255,255,.38);margin-bottom:10px}
+
+    textarea.memo-area{
+      width:100%;min-height:130px;
+      background:rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.13);border-radius:8px;
+      color:#fff;font-size:13px;line-height:1.6;padding:10px 12px;
+      outline:none;resize:vertical;
+      transition:border-color .15s;
+    }
+    textarea.memo-area:focus{border-color:rgba(210,170,100,0.6)}
+    textarea.memo-area::placeholder{color:rgba(255,255,255,.3)}
+
+    /* Status 선택 */
+    #status-select-wrap{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+    .btn-status{
+      padding:5px 12px;border-radius:20px;font-size:11px;cursor:pointer;
+      border:1px solid rgba(255,255,255,.2);
+      background:rgba(255,255,255,.06);color:rgba(255,255,255,.7);
+      transition:background .15s;-webkit-tap-highlight-color:transparent;
+    }
+    .btn-status.active{background:rgba(170,130,75,.5);border-color:rgba(210,170,100,.9);color:#fff}
+
+    #status-msg{font-size:12px;text-align:center;min-height:18px;margin-bottom:4px;width:100%;max-width:480px}
+    .err-msg{color:rgba(220,80,80,.9)} .ok-msg{color:rgba(100,220,130,.9)}
+
+    #nav-bar{
+      position:fixed;bottom:0;left:0;right:0;
+      display:flex;justify-content:space-around;align-items:center;
+      padding:8px 10px env(safe-area-inset-bottom,10px);
+      background:rgba(8,6,4,.88);border-top:1px solid rgba(255,255,255,0.07);z-index:50;
+    }
+    #nav-bar img{height:42px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+    #nav-bar img:active{opacity:.65}
+
+    #loading-overlay{
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;
+      align-items:center;justify-content:center;
+    }
+    #loading-overlay.show{display:flex}
+    .loading-text{font-size:13px;letter-spacing:2px;color:rgba(220,188,128,1)}
+  </style>
+</head>
+<body>
+  <img id="title-img" src="ttl_analysismemo.png" alt="Analysis Memo"/>
+  <div id="code-display">—</div>
+
+  <div class="panel">
+    <div class="panel-label">Analysis</div>
+    <textarea id="analysis-input" class="memo-area" placeholder="분석 내용을 입력하세요..." rows="5"></textarea>
+  </div>
+
+  <div class="panel">
+    <div class="panel-label">Memo</div>
+    <textarea id="memo-input" class="memo-area" placeholder="메모를 입력하세요..." rows="4"></textarea>
+  </div>
+
+  <div class="panel">
+    <div class="panel-label">Status</div>
+    <div id="status-select-wrap">
+      <button class="btn-status" data-st="Pending">Pending</button>
+      <button class="btn-status" data-st="Tasking">Tasking</button>
+      <button class="btn-status" data-st="Forwarding">Forwarding</button>
+      <button class="btn-status" data-st="A/S">A/S</button>
+      <button class="btn-status" data-st="Approved">Approved</button>
+      <button class="btn-status" data-st="Rejected">Rejected</button>
+      <button class="btn-status" data-st="Archived">Archived</button>
+    </div>
+  </div>
+
+  <div id="status-msg"></div>
+
+  <div id="nav-bar">
+    <img src="btn_go_home.png"    alt="Home"     id="btn-home"/>
+    <img src="btn_go_before.png"  alt="Before"   id="btn-before"/>
+    <img src="btn_productimage.png" alt="Product" id="btn-product"/>
+    <img src="btn_save.png"       alt="Save"      id="btn-save"/>
+  </div>
+
+  <div id="loading-overlay">
+    <div class="loading-text">SAVING...</div>
+  </div>
+
+  <script>
+  "use strict";
+  var structureCode = null;
+  var selectedStatus = null;
+
+  document.addEventListener("DOMContentLoaded", function(){
+    structureCode = requireStructureCode();
+    if (!structureCode) return;
+    document.getElementById("code-display").textContent = structureCode;
+
+    document.getElementById("btn-home").addEventListener("click", function(){ window.location.href = "index.html"; });
+    document.getElementById("btn-before").addEventListener("click", function(){ goPage("design.html"); });
+    document.getElementById("btn-product").addEventListener("click", function(){ goPage("productimage.html"); });
+    document.getElementById("btn-save").addEventListener("click", onSave);
+
+    // Status 버튼
+    document.querySelectorAll(".btn-status").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        document.querySelectorAll(".btn-status").forEach(function(b){ b.classList.remove("active"); });
+        btn.classList.add("active");
+        selectedStatus = btn.getAttribute("data-st");
+      });
+    });
+  });
+
+  async function onSave(){
+    var analysis = document.getElementById("analysis-input").value.trim();
+    var memo     = document.getElementById("memo-input").value.trim();
+    setStatus("", "");
+    document.getElementById("loading-overlay").classList.add("show");
+    try {
+      await apiUpdateAnalysisMemo(structureCode, analysis, memo);
+      if (selectedStatus){
+        await apiUpdateStatus(structureCode, selectedStatus);
+      }
+      document.getElementById("loading-overlay").classList.remove("show");
+      setStatus("저장 완료!", "ok");
+      setTimeout(function(){ setStatus("",""); }, 2500);
+    } catch(err){
+      document.getElementById("loading-overlay").classList.remove("show");
+      setStatus("저장 실패: " + err.message, "err");
+    }
+  }
+
+  function setStatus(msg, type){
+    var el = document.getElementById("status-msg");
+    el.textContent = msg;
+    el.className = type === "err" ? "err-msg" : (type === "ok" ? "ok-msg" : "");
+  }
+  </script>
+</body>
+</html>
