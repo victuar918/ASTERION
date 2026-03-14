@@ -1,206 +1,244 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-  <title>ASTERION – Works Desk</title>
-  <script src="config.js"></script>
-  <script src="api_contract.js"></script>
-  <script src="state.js"></script>
-  <script src="api.js"></script>
-  <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    body{
-      background:url('bg_main.png') center/cover no-repeat fixed;
-      font-family:'Arial',sans-serif; color:#fff;
-      min-height:100vh;
-      display:flex; flex-direction:column; align-items:center;
-      padding:16px 14px 100px;
-    }
-    /* 타이틀 */
-    #title-img{width:260px;max-width:88vw;margin:14px auto 18px;display:block}
 
-    /* 필터 탭 */
-    #filter-bar{
-      display:flex; flex-wrap:wrap; gap:6px;
-      width:100%; max-width:480px; margin-bottom:12px;
-    }
-    .btn-filter{
-      padding:5px 12px; border-radius:20px; font-size:11px; cursor:pointer;
-      border:1px solid rgba(255,255,255,0.25);
-      background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.75);
-      transition:background .15s; -webkit-tap-highlight-color:transparent;
-    }
-    .btn-filter.active{
-      background:rgba(180,140,90,0.55); border-color:rgba(210,170,100,.9); color:#fff;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 
-    /* 목록 패널 */
-    #list-panel{
-      width:100%; max-width:480px;
-      background:rgba(255,255,255,0.04);
-      border:1px solid rgba(255,255,255,0.10);
-      border-radius:12px; overflow:hidden;
-    }
-    .list-empty{
-      padding:32px; text-align:center;
-      font-size:13px; color:rgba(255,255,255,0.35);
-    }
+<title>Works Desk</title>
 
-    /* 목록 아이템 */
-    .work-item{
-      display:flex; align-items:center;
-      padding:12px 14px; gap:12px;
-      border-bottom:1px solid rgba(255,255,255,0.06);
-      cursor:pointer;
-      transition:background .15s; -webkit-tap-highlight-color:transparent;
-    }
-    .work-item:last-child{border-bottom:none}
-    .work-item:active{background:rgba(255,255,255,0.06)}
+<style>
 
-    .work-code{
-      font-size:14px; font-weight:bold; flex:1;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-    }
-    .work-status{
-      font-size:10px; padding:3px 9px; border-radius:10px;
-      font-weight:bold; letter-spacing:.5px; flex-shrink:0;
-      white-space:nowrap;
-    }
-    /* Status 색상 */
-    .st-Pending   {background:rgba(150,150,150,.35); color:#ccc}
-    .st-Approved  {background:rgba(60,160,90,.4);    color:#9ef5b0}
-    .st-Rejected  {background:rgba(200,60,60,.4);    color:#ffaaaa}
-    .st-Archived  {background:rgba(100,80,50,.4);    color:#d4b97a}
-    .st-Tasking   {background:rgba(60,120,200,.4);   color:#a0c4ff}
-    .st-Forwarding{background:rgba(160,80,200,.4);   color:#d9aaff}
-    .st-AS        {background:rgba(200,130,50,.4);   color:#ffd59a}
+body{
+margin:0;
+height:100vh;
 
-    .work-arrow{
-      font-size:14px; color:rgba(255,255,255,0.28); flex-shrink:0;
-    }
+background-image:url("images/bg_sub.jpg");
+background-size:cover;
+background-position:center;
 
-    /* 하단 네비 */
-    #nav-bar{
-      position:fixed; bottom:0; left:0; right:0;
-      display:flex; justify-content:space-around; align-items:center;
-      padding:8px 10px env(safe-area-inset-bottom,10px);
-      background:rgba(8,6,4,.88);
-      border-top:1px solid rgba(255,255,255,0.07); z-index:50;
-    }
-    #nav-bar img{height:42px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
-    #nav-bar img:active{opacity:.65}
+display:flex;
+flex-direction:column;
+align-items:center;
 
-    /* 로딩 */
-    #loading{
-      width:100%;max-width:480px;text-align:center;
-      padding:32px; font-size:13px; color:rgba(255,255,255,0.4);
-    }
-    /* 에러 */
-    .err-msg{color:rgba(220,80,80,.9);font-size:12px;padding:6px 0;text-align:center}
-  </style>
+font-family:sans-serif;
+color:white;
+}
+
+/* 타이틀 */
+
+.title{
+margin-top:20px;
+margin-bottom:10px;
+}
+
+.title img{
+width:240px;
+}
+
+/* Structure 리스트 */
+
+.structure-list{
+
+width:90%;
+max-width:420px;
+
+flex:1;
+
+background:rgba(0,0,0,0.35);
+
+border-radius:10px;
+
+overflow-y:auto;
+
+padding:10px;
+}
+
+.structure-item{
+
+padding:12px;
+
+border-bottom:1px solid rgba(255,255,255,0.2);
+
+cursor:pointer;
+}
+
+.structure-item.selected{
+
+background:rgba(255,255,255,0.15);
+
+}
+
+/* 버튼 영역 */
+
+.button-area{
+
+width:100%;
+
+padding:15px;
+
+display:flex;
+flex-direction:column;
+gap:10px;
+
+}
+
+/* 1행 */
+
+.row1{
+
+display:flex;
+justify-content:space-around;
+
+}
+
+/* 2행 */
+
+.row2{
+
+display:flex;
+justify-content:space-around;
+
+}
+
+/* 버튼 */
+
+.button-area img{
+
+width:70px;
+cursor:pointer;
+
+}
+
+</style>
+
 </head>
+
+
 <body>
-  <img id="title-img" src="ttl_worksdesk.png" alt="Works Desk"/>
 
-  <!-- 필터 탭 -->
-  <div id="filter-bar">
-    <button class="btn-filter active" data-status="ALL">ALL</button>
-    <button class="btn-filter" data-status="Tasking">Tasking</button>
-    <button class="btn-filter" data-status="Pending">Pending</button>
-    <button class="btn-filter" data-status="Forwarding">Forwarding</button>
-    <button class="btn-filter" data-status="A/S">A/S</button>
-    <button class="btn-filter" data-status="Approved">Approved</button>
-    <button class="btn-filter" data-status="Archived">Archived</button>
-  </div>
+<div class="title">
+<img src="images/ttl_worksdesk.png">
+</div>
 
-  <!-- 목록 -->
-  <div id="list-panel">
-    <div id="loading">Loading...</div>
-  </div>
 
-  <!-- 하단 네비 -->
-  <div id="nav-bar">
-    <img src="btn_go_home.png"  alt="Home"     id="btn-home"/>
-    <img src="btn_reload.png"   alt="Reload"   id="btn-reload"/>
-  </div>
+<!-- Structure 리스트 (JS가 채움) -->
+<div id="structureList" class="structure-list">
 
-  <script>
-  "use strict";
-  var allItems   = [];   // 전체 목록
-  var curFilter  = "ALL";
+<!-- 예시 -->
+<!--
+<div class="structure-item" data-code="ST24050101">
+ST24050101
+</div>
+-->
 
-  document.addEventListener("DOMContentLoaded", async function(){
-    document.getElementById("btn-home").addEventListener("click", function(){
-      window.location.href = "index.html";
-    });
-    document.getElementById("btn-reload").addEventListener("click", function(){
-      loadList();
-    });
+</div>
 
-    // 필터 탭 이벤트
-    document.querySelectorAll(".btn-filter").forEach(function(btn){
-      btn.addEventListener("click", function(){
-        document.querySelectorAll(".btn-filter").forEach(function(b){ b.classList.remove("active"); });
-        btn.classList.add("active");
-        curFilter = btn.getAttribute("data-status");
-        renderList();
-      });
-    });
 
-    await loadList();
-  });
+<div class="button-area">
 
-  async function loadList(){
-    var panel = document.getElementById("list-panel");
-    panel.innerHTML = '<div id="loading">Loading...</div>';
-    try {
-      allItems = await apiGetTaskingList();
-      renderList();
-    } catch(err){
-      console.error("[worksdesk] 목록 로드 실패:", err);
-      panel.innerHTML = '<div class="list-empty err-msg">목록 로드 실패: ' + err.message + '</div>';
-    }
-  }
+<div class="row1">
 
-  function renderList(){
-    var panel = document.getElementById("list-panel");
-    var items = (curFilter === "ALL")
-      ? allItems
-      : allItems.filter(function(i){ return i.status === curFilter; });
+<a href="index.html">
+<img src="images/btn_go_home.png">
+</a>
 
-    if (!items.length){
-      panel.innerHTML = '<div class="list-empty">항목 없음</div>';
-      return;
-    }
+<a href="selectstone.html">
+<img src="images/btn_stoneselect.png">
+</a>
 
-    var html = "";
-    items.forEach(function(item){
-      var code   = String(item.structureCode || item.StructureCode || "");
-      var status = String(item.status        || item.Status        || "");
-      var stClass = "st-" + status.replace("/","");
-      html += '<div class="work-item" data-code="' + escHtml(code) + '">'
-            +   '<span class="work-code">' + escHtml(code) + '</span>'
-            +   '<span class="work-status ' + escHtml(stClass) + '">' + escHtml(status) + '</span>'
-            +   '<span class="work-arrow">›</span>'
-            + '</div>';
-    });
-    panel.innerHTML = html;
+<a href="design.html">
+<img src="images/btn_go_design.png">
+</a>
 
-    panel.querySelectorAll(".work-item").forEach(function(el){
-      el.addEventListener("click", function(){
-        var code = el.getAttribute("data-code");
-        setStructureCode(code);
-        goPage("selectstone.html", code);
-      });
-    });
-  }
+</div>
 
-  function escHtml(s){
-    return String(s)
-      .replace(/&/g,"&amp;").replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-  }
-  </script>
+
+<div class="row2">
+
+<a href="analysismemo.html">
+<img src="images/btn_analysis.png">
+</a>
+
+<a href="productimage.html">
+<img src="images/btn_productimage.png">
+</a>
+
+<a href="booklet.html">
+<img src="images/btn_booklet.png">
+</a>
+
+<a href="forwarding.html">
+<img src="images/btn_forwarding.png">
+</a>
+
+</div>
+
+</div>
+
+
+<!-- 시스템 JS 유지 -->
+<script src="js/config.js"></script>
+<script src="js/state.js"></script>
+<script src="js/api.js"></script>
+
+
+<script>
+
+/* Structure 목록 로드 */
+
+async function loadStructures(){
+
+if(!API || !API.getStructures) return
+
+const list = document.getElementById("structureList")
+
+const data = await API.getStructures()
+
+list.innerHTML=""
+
+data
+.filter(s =>
+s.Status==="Tasking" ||
+s.Status==="A/S" ||
+s.Status==="Forwarding"
+)
+.forEach(s=>{
+
+const div=document.createElement("div")
+
+div.className="structure-item"
+
+div.textContent=s.StructureCode
+
+div.onclick=()=>selectStructure(s.StructureCode,div)
+
+list.appendChild(div)
+
+})
+
+}
+
+
+/* Structure 선택 */
+
+function selectStructure(code,element){
+
+STATE.activeStructure=code
+
+document.querySelectorAll(".structure-item")
+.forEach(i=>i.classList.remove("selected"))
+
+element.classList.add("selected")
+
+}
+
+
+/* 페이지 시작 */
+
+document.addEventListener("DOMContentLoaded",loadStructures)
+
+</script>
+
 </body>
 </html>
