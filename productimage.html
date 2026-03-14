@@ -1,156 +1,286 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-  <title>ASTERION – Product Image</title>
-  <script src="config.js"></script>
-  <script src="api_contract.js"></script>
-  <script src="state.js"></script>
-  <script src="api.js"></script>
-  <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    body{
-      background:url('bg_main.png') center/cover no-repeat fixed;
-      font-family:'Arial',sans-serif;color:#fff;
-      min-height:100vh;display:flex;flex-direction:column;align-items:center;
-      padding:14px 14px 100px;
-    }
-    #title-img{width:260px;max-width:88vw;margin:12px auto 6px;display:block}
-    #code-display{font-size:12px;color:rgba(220,188,128,.8);letter-spacing:1px;text-align:center;margin-bottom:14px}
 
-    /* 이미지 업로드 구역 (newlisting과 동일 구조) */
-    #img-panel{width:100%;max-width:400px;margin-bottom:14px}
-    #img-box{
-      width:100%;aspect-ratio:1/1;max-width:400px;max-height:400px;
-      background:rgba(255,255,255,0.05);
-      border:2px dashed rgba(255,255,255,0.22);border-radius:12px;
-      display:flex;flex-direction:column;align-items:center;justify-content:center;
-      cursor:pointer;overflow:hidden;position:relative;
-      transition:border-color .15s,background .15s;-webkit-tap-highlight-color:transparent;
-    }
-    #img-box:hover{border-color:rgba(210,170,100,0.5);background:rgba(255,255,255,0.07)}
-    #img-box.has-image{border-style:solid;border-color:rgba(210,170,100,0.4)}
-    #img-placeholder{display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none}
-    #img-placeholder .plus-icon{
-      width:48px;height:48px;border:2px solid rgba(255,255,255,0.3);border-radius:50%;
-      display:flex;align-items:center;justify-content:center;font-size:24px;color:rgba(255,255,255,0.4);
-    }
-    #img-placeholder .img-hint{font-size:12px;color:rgba(255,255,255,.35);text-align:center;line-height:1.5}
-    #img-preview{display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-    #img-overlay{
-      display:none;position:absolute;inset:0;background:rgba(0,0,0,.45);
-      align-items:center;justify-content:center;font-size:12px;color:#fff;letter-spacing:1px;
-    }
-    #img-box.has-image:hover #img-overlay{display:flex}
-    #file-input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-    #file-name{font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;text-align:center;width:100%;max-width:400px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    #status-msg{font-size:12px;text-align:center;min-height:18px;margin-bottom:4px;width:100%;max-width:400px}
-    .err-msg{color:rgba(220,80,80,.9)} .ok-msg{color:rgba(100,220,130,.9)}
+<title>ASTERION – Product Image</title>
 
-    #nav-bar{
-      position:fixed;bottom:0;left:0;right:0;
-      display:flex;justify-content:space-around;align-items:center;
-      padding:8px 10px env(safe-area-inset-bottom,10px);
-      background:rgba(8,6,4,.88);border-top:1px solid rgba(255,255,255,0.07);z-index:50;
-    }
-    #nav-bar img{height:42px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
-    #nav-bar img:active{opacity:.65}
+<script src="config.js"></script>
+<script src="state.js"></script>
+<script src="api.js"></script>
 
-    #loading-overlay{
-      display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;
-      align-items:center;justify-content:center;
-    }
-    #loading-overlay.show{display:flex}
-    .loading-text{font-size:13px;letter-spacing:2px;color:rgba(220,188,128,1)}
-  </style>
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+}
+
+body{
+
+background:url('images/bg_main.jpg') center/cover no-repeat fixed;
+font-family:Arial;
+color:white;
+
+height:100vh;
+
+display:flex;
+flex-direction:column;
+align-items:center;
+
+padding-bottom:110px;
+
+}
+
+#title{
+
+margin-top:20px;
+
+}
+
+#title img{
+
+width:280px;
+
+}
+
+#image-area{
+
+flex:1;
+
+display:flex;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+
+}
+
+#image-button{
+
+position:relative;
+
+width:240px;
+height:240px;
+
+cursor:pointer;
+
+}
+
+#image-button img{
+
+position:absolute;
+
+width:100%;
+height:100%;
+
+object-fit:contain;
+
+}
+
+#preview{
+
+z-index:2;
+
+}
+
+#button-base{
+
+z-index:1;
+
+}
+
+#structure-code{
+
+margin-top:12px;
+
+font-size:16px;
+letter-spacing:1px;
+
+}
+
+#nav{
+
+position:fixed;
+
+bottom:0;
+left:0;
+right:0;
+
+display:flex;
+
+justify-content:space-around;
+
+padding:10px;
+
+background:rgba(0,0,0,0.8);
+
+}
+
+#nav img{
+
+height:48px;
+cursor:pointer;
+
+}
+
+#file-input{
+
+display:none;
+
+}
+
+</style>
+
 </head>
+
 <body>
-  <img id="title-img" src="ttl_productimage.png" alt="Product Image"/>
-  <div id="code-display">—</div>
 
-  <div id="img-panel">
-    <div id="img-box">
-      <input id="file-input" type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"/>
-      <div id="img-placeholder">
-        <div class="plus-icon">+</div>
-        <div class="img-hint">제품 이미지를 선택하세요<br/><span style="font-size:10px;opacity:.7">JPG · PNG · WEBP · GIF · 최대 4MB</span></div>
-      </div>
-      <img id="img-preview" src="" alt="preview"/>
-      <div id="img-overlay">이미지 교체</div>
-    </div>
-    <div id="file-name"></div>
-  </div>
+<div id="title">
 
-  <div id="status-msg"></div>
+<img src="images/ttl_productimage.png">
 
-  <div id="nav-bar">
-    <img src="btn_go_home.png"    alt="Home"    id="btn-home"/>
-    <img src="btn_go_before.png"  alt="Before"  id="btn-before"/>
-    <img src="btn_booklet.png"    alt="Booklet" id="btn-booklet"/>
-    <img src="btn_save.png"       alt="Save"    id="btn-save"/>
-  </div>
+</div>
 
-  <div id="loading-overlay">
-    <div class="loading-text">UPLOADING...</div>
-  </div>
+<div id="image-area">
 
-  <script>
-  "use strict";
-  var structureCode = null;
-  var selectedFile  = null;
+<div id="image-button">
 
-  document.addEventListener("DOMContentLoaded", function(){
-    structureCode = requireStructureCode();
-    if (!structureCode) return;
-    document.getElementById("code-display").textContent = structureCode;
+<img id="preview">
 
-    document.getElementById("btn-home").addEventListener("click", function(){ window.location.href = "index.html"; });
-    document.getElementById("btn-before").addEventListener("click", function(){ goPage("analysismemo.html"); });
-    document.getElementById("btn-booklet").addEventListener("click", function(){ goPage("booklet.html"); });
-    document.getElementById("btn-save").addEventListener("click", onSave);
-    document.getElementById("file-input").addEventListener("change", onFileChange);
-  });
+<img id="button-base" src="images/btn_proimageselec.png">
 
-  function onFileChange(e){
-    var file = e.target.files && e.target.files[0];
-    if (!file) return;
-    if (file.size > 4 * 1024 * 1024){ setStatus("이미지는 4MB 이하여야 합니다.","err"); e.target.value=""; return; }
-    var allowed = ["image/jpeg","image/jpg","image/png","image/webp","image/gif"];
-    if (allowed.indexOf(file.type.toLowerCase()) === -1){ setStatus("허용 형식: JPG, PNG, WEBP, GIF","err"); e.target.value=""; return; }
-    selectedFile = file;
-    setStatus("","");
-    var reader = new FileReader();
-    reader.onload = function(ev){
-      var p = document.getElementById("img-preview");
-      p.src = ev.target.result; p.style.display="block";
-      document.getElementById("img-placeholder").style.display="none";
-      document.getElementById("img-box").classList.add("has-image");
-    };
-    reader.readAsDataURL(file);
-    document.getElementById("file-name").textContent = file.name;
-  }
+</div>
 
-  async function onSave(){
-    if (!selectedFile){ setStatus("이미지를 먼저 선택하세요.","err"); return; }
-    document.getElementById("loading-overlay").classList.add("show");
-    try {
-      await apiUploadProductImage(structureCode, selectedFile);
-      document.getElementById("loading-overlay").classList.remove("show");
-      setStatus("업로드 완료!","ok");
-      setTimeout(function(){ setStatus("",""); }, 2500);
-    } catch(err){
-      document.getElementById("loading-overlay").classList.remove("show");
-      setStatus("업로드 실패: " + err.message,"err");
-    }
-  }
+<div id="structure-code"></div>
 
-  function setStatus(msg,type){
-    var el=document.getElementById("status-msg");
-    el.textContent=msg;
-    el.className=type==="err"?"err-msg":(type==="ok"?"ok-msg":"");
-  }
-  </script>
+</div>
+
+<input type="file" id="file-input" accept="image/png,image/jpeg">
+
+<div id="nav">
+
+<img src="images/btn_go_home.png" id="btn-home">
+
+<img src="images/btn_go_before.png" id="btn-before">
+
+<img src="images/btn_update.png" id="btn-update">
+
+<img src="images/btn_booklet.png" id="btn-next">
+
+</div>
+
+<script>
+
+let structureCode=null
+let selectedFile=null
+
+document.addEventListener("DOMContentLoaded",init)
+
+function init(){
+
+structureCode=requireStructureCode()
+
+if(!structureCode)return
+
+document.getElementById("structure-code").innerText=structureCode
+
+document.getElementById("btn-home").onclick=()=>{
+
+location.href="index.html"
+
+}
+
+document.getElementById("btn-before").onclick=()=>{
+
+goPage("analysismemo.html")
+
+}
+
+document.getElementById("btn-next").onclick=()=>{
+
+goPage("booklet.html")
+
+}
+
+document.getElementById("image-button").onclick=()=>{
+
+document.getElementById("file-input").click()
+
+}
+
+document.getElementById("file-input").onchange=previewImage
+
+document.getElementById("btn-update").onclick=uploadImage
+
+loadSavedImage()
+
+}
+
+function previewImage(e){
+
+selectedFile=e.target.files[0]
+
+if(!selectedFile)return
+
+let reader=new FileReader()
+
+reader.onload=function(evt){
+
+document.getElementById("preview").src=evt.target.result
+
+}
+
+reader.readAsDataURL(selectedFile)
+
+}
+
+async function uploadImage(){
+
+if(!selectedFile){
+
+alert("Select Image")
+
+return
+
+}
+
+try{
+
+await apiUploadProductImage(structureCode,selectedFile)
+
+alert("Uploaded")
+
+}catch(e){
+
+alert("Upload Failed")
+
+}
+
+}
+
+async function loadSavedImage(){
+
+try{
+
+let url=await apiGetProductImage(structureCode)
+
+if(url){
+
+document.getElementById("preview").src=url
+
+}
+
+}catch(e){
+
+}
+
+}
+
+</script>
+
 </body>
+
 </html>
