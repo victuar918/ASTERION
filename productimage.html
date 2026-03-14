@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Product Image</title>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/state.js"></script>
+<script src="js/ui.js"></script>
+
+<style>
+body {
+margin: 0;
+font-family: Arial;
+background: linear-gradient(135deg,#fff6da 0%,#f5d97a 40%,#eac45a 70%,#d8ad3c 100%);
+text-align: center;
+padding-bottom: 90px;
+}
+
+.title { width: 90%; margin-top: 20px; display: block; margin-left: auto; margin-right: auto; }
+
+.structureCode { margin-top: 10px; font-size: 14px; font-weight: 600; opacity: 0.8; }
+
+/* 이미지 영역 */
+.image-area { margin-top: 30px; }
+#productImage {
+width: 320px;
+height: 320px;
+object-fit: contain;
+cursor: pointer;
+display: block;
+margin: 0 auto;
+border-radius: 8px;
+transition: opacity 0.2s;
+}
+
+#productImage:hover { opacity: 0.82; }
+
+input[type=file] { display:none; }
+
+/* 하단 버튼 */
+.bottom {
+position: fixed;
+bottom: 18px;
+width: 100%;
+display: flex;
+justify-content: center;
+gap: 15px;
+}
+
+.bottom img {
+width: 68px;
+cursor: pointer;
+transition: opacity 0.15s;
+}
+
+.bottom img:hover { opacity: 0.78; }
+</style>
+</head>
+<body>
+
+<img src="images/ttl_productimage.png" class="title" alt="Product Image">
+<div class="structureCode" id="structureCodeDisplay">StructureCode: </div>
+
+<div class="image-area">
+<img id="productImage" src="images/btn_proimageselec.png" alt="이미지 선택">
+<input type="file" id="imageInput" accept="image/png">
+</div>
+
+<div class="bottom">
+<img src="images/btn_go_home.png" alt="홈" onclick="goHome()">
+<img src="images/btn_go_before.png" alt="뒤로" onclick="goBefore()">
+<img src="images/btn_update.png" alt="업데이트" onclick="updateProductImage()">
+<img src="images/btn_booklet.png" alt="Booklet" onclick="goBooklet()">
+</div>
+
+<script>
+let selectedFile = null;
+
+window.onload = function() {
+const state = getSelectedStone();
+document.getElementById("structureCodeDisplay").textContent = "StructureCode: " + state.StructureCode || "";
+
+if (state.productImage) {
+document.getElementById("productImage").src = state.productImage;
+}
+
+document.getElementById("productImage").onclick = function() {
+document.getElementById("imageInput").click();
+};
+};
+
+document.getElementById("imageInput").onchange = function() {
+const file = this.files[0];
+if (!file) return;
+selectedFile = file;
+
+const reader = new FileReader();
+reader.onload = function(e) {
+document.getElementById("productImage").src = e.target.result;
+};
+reader.readAsDataURL(file);
+};
+
+function goHome() { location.href = "home.html"; }
+function goBefore() { location.href = "analysismemo.html"; }
+
+async function updateProductImage() {
+if (!selectedFile) { alert("이미지를 선택하세요."); return; }
+
+const state = getSelectedStone();
+const folderId = "19-712Gf2aX3YLP23JvcQ_snUbhGBvJ9v"; // Product image folder
+
+const reader = new FileReader();
+reader.onload = async function(e) {
+const bytes = Array.from(new Uint8Array(e.target.result));
+const data = await apiPost({
+action: "uploadProductImage",
+StructureCode: state.StructureCode,
+folderId: folderId,
+fileName: state.StructureCode + ".png",
+byteArray: bytes,
+mimeType: "image/png"
+});
+
+if (data.success) {
+setSelectedStone({ ...state, productImage: data.url });
+alert("업데이트 완료 ✓");
+} else {
+alert("업데이트 실패: " + (data.error || "알 수 없는 오류"));
+}
+};
+reader.readAsArrayBuffer(selectedFile);
+}
+
+function goBooklet() {
+const state = getSelectedStone();
+location.href = "booklet.html?StructureCode=" + encodeURIComponent(state.StructureCode);
+}
+</script>
+</body>
+</html>
