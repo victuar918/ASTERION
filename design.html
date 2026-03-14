@@ -1,384 +1,229 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>ASTERION – Structure Design</title>
 
-  <!-- 공통 스크립트: 반드시 이 순서로 로드 -->
-  <script src="config.js"></script>
-  <script src="state.js"></script>
-  <script src="api.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 
-  <style>
-    /* ── 리셋 ── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+<title>Structure Design</title>
 
-    html, body {
-      min-height: 100%;
-      -webkit-text-size-adjust: 100%;
-    }
+<script src="config.js"></script>
+<script src="state.js"></script>
+<script src="api.js"></script>
 
-    body {
-      background: url('bg_main.png') center center / cover no-repeat fixed;
-      font-family: 'Arial', sans-serif;
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px 16px 108px; /* 하단 네비 높이 + 여유 */
-      overflow-x: hidden;
-    }
+<style>
 
-    /* ── 타이틀 이미지 ── */
-    #title-img {
-      width: 280px;
-      max-width: 88vw;
-      margin: 12px auto 18px;
-      display: block;
-    }
+body{
+margin:0;
+height:100vh;
 
-    /* ── 공통 투명 패널 ── */
-    .panel {
-      width: 100%;
-      max-width: 480px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 12px;
-      padding: 12px 12px 14px;
-      margin-bottom: 12px;
-    }
+background:url("images/bg_sub.jpg");
+background-size:cover;
+background-position:center;
 
-    .panel-label {
-      font-size: 10px;
-      letter-spacing: 1.8px;
-      text-transform: uppercase;
-      color: rgba(255, 255, 255, 0.38);
-      margin-bottom: 10px;
-    }
+display:flex;
+flex-direction:column;
+align-items:center;
 
-    /* ── Used Items (stone 행 목록) ── */
-    #used-container {
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-    }
+font-family:sans-serif;
+color:white;
+}
 
-    .stone-row {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 5px;
-      min-height: 30px;
-    }
+/* Title */
 
-    .stone-name {
-      font-size: 12px;
-      color: rgba(255, 255, 255, 0.80);
-      min-width: 72px;
-      max-width: 100px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
+#title-img{
+width:260px;
+margin-top:10px;
+}
 
-    /* Size 선택 버튼 */
-    .btn-size {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.22);
-      border-radius: 5px;
-      color: #fff;
-      font-size: 11px;
-      padding: 4px 9px;
-      cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none;
-      transition: background 0.12s, border-color 0.12s;
-    }
-    .btn-size:active,
-    .btn-size.flash {
-      background: rgba(180, 140, 90, 0.6);
-      border-color: rgba(210, 170, 100, 0.9);
-    }
+/* Main Layout */
 
-    /* ── Details 영역 ── */
-    #details-scroll {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 4px;
-      min-height: 40px;
-    }
+#main-area{
 
-    /* [+] 삽입 버튼 */
-    .btn-insert {
-      width: 26px;
-      height: 26px;
-      background: rgba(255, 255, 255, 0.07);
-      border: 1px dashed rgba(255, 255, 255, 0.28);
-      border-radius: 5px;
-      color: rgba(255, 255, 255, 0.50);
-      font-size: 15px;
-      line-height: 1;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none;
-      transition: background 0.12s, border-color 0.12s;
-    }
-    .btn-insert.selected {
-      background: rgba(170, 130, 75, 0.55);
-      border: 1px solid rgba(210, 170, 100, 0.9);
-      color: #fff;
-    }
-    .btn-insert.hint-shake {
-      border-color: rgba(220, 80, 80, 0.8);
-      color: rgba(220, 80, 80, 0.8);
-    }
+flex:1;
 
-    /* Detail 아이템 버튼 */
-    .btn-item {
-      background: rgba(90, 68, 38, 0.50);
-      border: 1px solid rgba(190, 150, 90, 0.48);
-      border-radius: 7px;
-      color: #fff;
-      font-size: 11px;
-      padding: 5px 9px;
-      cursor: pointer;
-      line-height: 1.45;
-      text-align: center;
-      flex-shrink: 0;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none;
-      transition: background 0.12s;
-    }
-    .btn-item:active { background: rgba(190, 150, 90, 0.45); }
-    .btn-item.move-target {
-      border-color: rgba(100, 200, 130, 0.8);
-      background: rgba(40, 110, 60, 0.45);
-    }
-    .btn-item .item-sub {
-      font-size: 10px;
-      color: rgba(255, 255, 255, 0.58);
-      display: block;
-    }
+width:90%;
+max-width:420px;
 
-    /* 힌트 문구 */
-    #insert-hint {
-      font-size: 11px;
-      color: rgba(210, 170, 100, 0.8);
-      letter-spacing: 0.5px;
-      min-height: 16px;
-      margin-top: 2px;
-      text-align: center;
-      width: 100%;
-      max-width: 480px;
-    }
+display:flex;
+flex-direction:column;
 
-    /* ── Total Size ── */
-    #total-display {
-      font-size: 15px;
-      font-weight: bold;
-      letter-spacing: 1.2px;
-      text-align: center;
-      color: rgba(220, 188, 128, 1);
-      padding: 6px 0 4px;
-    }
+}
 
-    /* ── Layout for PDF ── */
-    #layout-title {
-      font-size: 10px;
-      letter-spacing: 1.8px;
-      text-transform: uppercase;
-      color: rgba(255, 255, 255, 0.38);
-      margin-bottom: 7px;
-    }
-    #layout-preview {
-      font-size: 12px;
-      color: rgba(255, 255, 255, 0.70);
-      line-height: 1.75;
-      white-space: pre-wrap;
-      word-break: break-all;
-      min-height: 20px;
-    }
+/* Selected List */
 
-    /* ── Save 팝업 ── */
-    #popup-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.62);
-      z-index: 100;
-      align-items: center;
-      justify-content: center;
-    }
-    #popup-overlay.show { display: flex; }
+#used-panel{
 
-    #popup-box {
-      background: rgba(22, 18, 13, 0.96);
-      border: 1px solid rgba(200, 160, 100, 0.45);
-      border-radius: 14px;
-      padding: 26px 26px 20px;
-      width: 270px;
-      text-align: center;
-    }
-    #popup-box .popup-q {
-      font-size: 14px;
-      color: rgba(220, 188, 128, 1);
-      line-height: 1.55;
-      margin-bottom: 20px;
-    }
-    .popup-row {
-      display: flex;
-      gap: 12px;
-      justify-content: center;
-    }
-    .popup-row button {
-      flex: 1;
-      padding: 10px 0;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: bold;
-      cursor: pointer;
-      border: none;
-      -webkit-tap-highlight-color: transparent;
-    }
-    #btn-popup-yes {
-      background: rgba(170, 130, 75, 0.85);
-      color: #fff;
-    }
-    #btn-popup-no {
-      background: rgba(255, 255, 255, 0.09);
-      color: rgba(255, 255, 255, 0.78);
-      border: 1px solid rgba(255, 255, 255, 0.20) !important;
-    }
+flex:4;
 
-    /* ── 하단 네비게이션 ── */
-    #nav-bar {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      display: flex;
-      justify-content: space-around;
-      align-items: center;
-      padding: 8px 10px env(safe-area-inset-bottom, 10px);
-      background: rgba(8, 6, 4, 0.88);
-      border-top: 1px solid rgba(255, 255, 255, 0.07);
-      z-index: 50;
-    }
-    #nav-bar img {
-      height: 42px;
-      cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-      user-select: none;
-      transition: opacity 0.15s;
-    }
-    #nav-bar img:active { opacity: 0.65; }
+overflow-y:auto;
 
-    /* ── 로딩 오버레이 ── */
-    #loading-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.55);
-      z-index: 200;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      gap: 12px;
-    }
-    #loading-overlay.show { display: flex; }
-    #loading-overlay .loading-text {
-      font-size: 13px;
-      letter-spacing: 2.5px;
-      color: rgba(220, 188, 128, 1);
-    }
-    .loading-dots {
-      display: flex;
-      gap: 6px;
-    }
-    .loading-dots span {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: rgba(220, 188, 128, 0.8);
-      animation: dotPulse 1.2s ease-in-out infinite;
-    }
-    .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-    .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes dotPulse {
-      0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
-      40%           { transform: scale(1.0); opacity: 1.0; }
-    }
-  </style>
+background:transparent;
+
+}
+
+/* Stone Row */
+
+.stone-row{
+
+margin-bottom:6px;
+
+}
+
+.stone-name{
+
+display:inline-block;
+
+width:90px;
+
+}
+
+.size-btn{
+
+margin:2px;
+
+padding:4px 8px;
+
+background:rgba(255,255,255,0.15);
+
+border-radius:4px;
+
+cursor:pointer;
+
+}
+
+/* Details */
+
+#details-panel{
+
+flex:3;
+
+display:flex;
+
+flex-wrap:wrap;
+
+align-items:center;
+
+gap:5px;
+
+}
+
+/* Insert button */
+
+.insert-btn{
+
+width:28px;
+height:28px;
+
+border:1px dashed white;
+
+display:flex;
+align-items:center;
+justify-content:center;
+
+cursor:pointer;
+
+}
+
+/* Item */
+
+.detail-item{
+
+background:rgba(150,110,60,0.5);
+
+padding:5px 8px;
+
+border-radius:6px;
+
+cursor:pointer;
+
+}
+
+/* Total */
+
+#total-panel{
+
+flex:1;
+
+display:flex;
+
+align-items:center;
+
+justify-content:center;
+
+font-weight:bold;
+
+}
+
+/* Layout */
+
+#layout-panel{
+
+flex:2;
+
+overflow-y:auto;
+
+}
+
+/* Bottom Buttons */
+
+#nav-bar{
+
+display:flex;
+
+justify-content:space-around;
+
+width:100%;
+
+padding:10px;
+
+}
+
+#nav-bar img{
+
+width:70px;
+
+cursor:pointer;
+
+}
+
+</style>
+
 </head>
+
+
 <body>
 
-  <!-- 타이틀 -->
-  <img id="title-img" src="ttl_structuredesign.png" alt="Structure Design" />
+<img id="title-img" src="images/ttl_structuredesign.png">
 
-  <!-- ① Used Items 패널 -->
-  <div class="panel">
-    <div class="panel-label">Select Stone &amp; Size</div>
-    <div id="used-container">
-      <div style="font-size:12px;color:rgba(255,255,255,0.35);">Loading...</div>
-    </div>
-  </div>
 
-  <!-- ② Details 패널 -->
-  <div class="panel">
-    <div class="panel-label">Details</div>
-    <div id="details-scroll"><!-- JS 렌더링 --></div>
-  </div>
+<div id="main-area">
 
-  <!-- 삽입 힌트 문구 -->
-  <div id="insert-hint"></div>
+<div id="used-panel"></div>
 
-  <!-- ③ Total Size -->
-  <div class="panel" style="padding:9px 12px;">
-    <div id="total-display">Total Size 0mm</div>
-  </div>
+<div id="details-panel"></div>
 
-  <!-- ④ Layout for PDF -->
-  <div class="panel">
-    <div id="layout-title">Layout for PDF</div>
-    <div id="layout-preview">—</div>
-  </div>
+<div id="total-panel">Total Size 0mm</div>
 
-  <!-- 하단 네비게이션 -->
-  <div id="nav-bar">
-    <img src="btn_go_home.png"   alt="Home"     id="btn-home"     />
-    <img src="btn_go_before.png" alt="Before"   id="btn-before"   />
-    <img src="btn_analysis.png"  alt="Analysis" id="btn-analysis" />
-    <img src="btn_save.png"      alt="Save"     id="btn-save"     />
-  </div>
+<div id="layout-panel"></div>
 
-  <!-- Save 팝업 -->
-  <div id="popup-overlay">
-    <div id="popup-box">
-      <div class="popup-q">Deduct from stock?</div>
-      <div class="popup-row">
-        <button id="btn-popup-yes">Yes</button>
-        <button id="btn-popup-no">No</button>
-      </div>
-    </div>
-  </div>
+</div>
 
-  <!-- 로딩 오버레이 -->
-  <div id="loading-overlay">
-    <div class="loading-dots">
-      <span></span><span></span><span></span>
-    </div>
-    <div class="loading-text">SAVING</div>
-  </div>
 
-  <!-- design.js는 맨 마지막에 로드 (DOM 완성 후) -->
-  <script src="design.js"></script>
+<div id="nav-bar">
+
+<img src="images/btn_go_home.png" onclick="location.href='index.html'">
+
+<img src="images/btn_go_before.png" onclick="goPage('selectstone.html')">
+
+<img src="images/btn_save.png" id="btn-save">
+
+<img src="images/btn_analysis.png" onclick="goPage('analysismemo.html')">
+
+</div>
+
+
+<script src="design.js"></script>
 
 </body>
 </html>
