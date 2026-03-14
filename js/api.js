@@ -1,192 +1,225 @@
 /**
- * api.js — ASTERION API Layer (Contract 기반)
+ * api.js — ASTERION API Layer
+ * 로드 순서: config.js → api_contract.js → state.js → api.js
  *
- * 이 파일은 api_contract.js의 A(action 상수)와 F(field 상수)를
- * 사용하므로 반드시 api_contract.js 이후에 로드되어야 합니다.
- *
- * 로드 순서:
- *   config.js → api_contract.js → state.js → api.js
+ * [FIX] apiGet() 추가 — worksdesk.html, inventory.html "not defined" 해결
+ * [FIX] 모든 페이지 전용 API 함수 완비
  */
-
 "use strict";
 
-// ══════════════════════════════════════════════
-// 1. 핵심 POST 함수
-// ══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
+// 1. 기반 통신 함수
+// ══════════════════════════════════════════════════════
 
-/**
- * GAS에 POST 요청
- * Content-Type: text/plain → CORS preflight 없음
- *
- * @param {Object} data    - { action, ...fields }
- * @param {number} retries - 재시도 횟수 (기본 2)
- */
-async function apiPost(data, retries = 2) {
-  const url = (typeof CONFIG !== "undefined" && CONFIG.API_BASE)
-    ? CONFIG.API_BASE : null;
-
-  if (!url || url.includes("YOUR_DEPLOYMENT_ID")) {
-    const msg = "CONFIG.API_BASE 미설정. config.js를 확인하세요.";
-    alert(msg);
-    throw new Error(msg);
+async function apiPost(data, retries) {
+  if (retries === undefined) retries = 2;
+  var url = (typeof CONFIG !== "undefined" && CONFIG.API_BASE) ? CONFIG.API_BASE : null;
+  if (!url || url.indexOf("YOUR_DEPLOYMENT_ID") !== -1) {
+    var msg0 = "CONFIG.API_BASE 미설정. config.js를 확인하세요.";
+    alert(msg0); throw new Error(msg0);
   }
-
-  let lastError;
-
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  var lastError;
+  for (var attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(url, {
+      var res = await fetch(url, {
         method : "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body   : JSON.stringify(data)
       });
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-      const text = await res.text();
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      var text = await res.text();
       if (!text || !text.trim()) throw new Error("빈 응답");
-
-      let json;
+      var json;
       try { json = JSON.parse(text); }
       catch (e) { throw new Error("JSON 파싱 실패: " + text.slice(0, 80)); }
-
       if (json.success === false)
         throw new Error(json.error || "서버 오류 (success:false)");
-
       return json;
-
     } catch (err) {
       lastError = err;
-      console.warn(`[API] "${data.action}" attempt ${attempt + 1} 실패:`, err.message);
-      if (attempt < retries)
-        await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+      console.warn("[API POST] \"" + data.action + "\" attempt " + (attempt + 1) + " 실패:", err.message);
+      if (attempt < retries) await new Promise(function(r){ setTimeout(r, 600 * (attempt + 1)); });
     }
   }
-
-  const msg = `통신 오류 (${data.action}): ${lastError.message}`;
-  alert(msg);
-  throw lastError;
+  var msg1 = "통신 오류 (" + data.action + "): " + lastError.message;
+  alert(msg1); throw lastError;
 }
 
-// ══════════════════════════════════════════════
-// 2. design.html 전용
-// ══════════════════════════════════════════════
-
 /**
- * 원석별 Size 목록 조회
- * @returns {Array} [{ nameKr, sizes }]
+ * apiGet — GAS doGet 호환 래퍼
+ * 실제로는 doPost에 동일 action이 등록되어 있으므로 POST로 처리
+ * worksdesk.html, inventory.html, selectstone.html 등 호출 대응
+ *
+ * @param {string} action
+ * @param {Object} [params]
  */
-async function apiGetUsedItems(structureCode) {
-  const cacheKey = `usedItems_${structureCode}`;
-  const cached   = cacheGet(cacheKey);
+async function apiGet(action, params) {
+  var payload = Object.assign({ action: action }, params || {});
+  return await apiPost(payload);
+}
+
+// ══════════════════════════════════════════════════════
+// 2. worksdesk.html
+// ══════════════════════════════════════════════════════
+
+async function apiGetTaskingList() {
+  var cacheKey = "taskingList";
+  var cached   = cacheGet(cacheKey);
   if (cached) return cached;
+  var res  = await apiPost({ action: A.GET_TASKING_LIST });
+  var list = Array.isArray(res.data) ? res.data : [];
+  if (list.length) cacheSet(cacheKey, list, 60000);
+  return list;
+}
 
-  const res    = await apiPost({ [F.ACTION]: A.GET_USED_ITEMS, [F.STRUCTURE_CODE]: structureCode });
-  const result = validateGetUsedItems(res);
+async function apiUpdateStatus(structureCode, status) {
+  cacheClear("taskingList");
+  return await apiPost({ action: A.UPDATE_STATUS, structureCode: structureCode, status: status });
+}
 
-  if (result.items.length)
-    cacheSet(cacheKey, result.items, 600000);
+// ══════════════════════════════════════════════════════
+// 3. inventory.html
+// ══════════════════════════════════════════════════════
 
+async function apiGetAllStones() {
+  var cacheKey = "allStones";
+  var cached   = cacheGet(cacheKey);
+  if (cached) return cached;
+  var res    = await apiPost({ action: A.GET_ALL_STONES });
+  var stones = Array.isArray(res.stones) ? res.stones : [];
+  if (stones.length) cacheSet(cacheKey, stones, 300000);
+  return stones;
+}
+
+async function apiGetInventory() {
+  var cacheKey = "inventoryMatrix";
+  var cached   = cacheGet(cacheKey);
+  if (cached) return cached;
+  var res = await apiPost({ action: A.GET_INVENTORY });
+  cacheSet(cacheKey, res, 60000);
+  return res;
+}
+
+async function apiUpdateStock(stockObj) {
+  cacheClear("inventoryMatrix");
+  return await apiPost({ action: A.UPDATE_STOCK, data: stockObj });
+}
+
+// ══════════════════════════════════════════════════════
+// 4. newlisting.html
+// ══════════════════════════════════════════════════════
+
+async function apiAddStone(nameKr, nameEng, exp) {
+  cacheClear("allStones");
+  cacheClear("inventoryMatrix");
+  return await apiPost({ action: A.ADD_STONE, data: { nameKr: nameKr, nameEng: nameEng, exp: exp } });
+}
+
+async function apiUploadStoneImage(nameKr, file) {
+  if (file.size > UPLOAD.MAX_BYTES) {
+    alert("이미지는 4MB 이하여야 합니다."); throw new Error("크기 초과");
+  }
+  if (UPLOAD.ALLOWED_MIME.indexOf(file.type.toLowerCase()) === -1) {
+    alert("허용 형식: JPG, PNG, WEBP, GIF"); throw new Error("MIME 오류");
+  }
+  var buf       = await file.arrayBuffer();
+  var byteArray = Array.from(new Uint8Array(buf));
+  cacheClear("allStones");
+  return await apiPost({
+    action   : A.UPLOAD_IMAGE,
+    nameKr   : nameKr,
+    byteArray: byteArray,
+    mimeType : file.type,
+    fileName : file.name
+  });
+}
+
+async function apiDeleteStone(nameKr) {
+  cacheClear("allStones");
+  cacheClear("inventoryMatrix");
+  return await apiPost({ action: A.DELETE_STONE, nameKr: nameKr, softDelete: true });
+}
+
+// ══════════════════════════════════════════════════════
+// 5. selectstone.html
+// ══════════════════════════════════════════════════════
+
+async function apiSaveUsedStones(structureCode, stones) {
+  cacheClear("usedItems_" + structureCode);
+  return await apiPost({ action: A.SAVE_USED_STONES, structureCode: structureCode, stones: stones });
+}
+
+// ══════════════════════════════════════════════════════
+// 6. design.html
+// ══════════════════════════════════════════════════════
+
+async function apiGetUsedItems(structureCode) {
+  var cacheKey = "usedItems_" + structureCode;
+  var cached   = cacheGet(cacheKey);
+  if (cached) return cached;
+  var res    = await apiPost({ action: A.GET_USED_ITEMS, structureCode: structureCode });
+  var result = validateGetUsedItems(res);
+  if (result.items.length) cacheSet(cacheKey, result.items, 600000);
   return result.items;
 }
 
-/**
- * Details 저장 + 선택적 재고 차감 (통합)
- *
- * @param {string}  structureCode
- * @param {Array}   details - [{ nameKr, size, qty }] camelCase
- * @param {boolean} deduct
- */
 async function apiSaveDesign(structureCode, details, deduct) {
-  cacheClear(`details_${structureCode}`);
-
-  const res = await apiPost({
-    [F.ACTION]         : A.SAVE_DETAILS,
-    [F.STRUCTURE_CODE] : structureCode,
-    [F.DETAILS]        : details.map(d => ({
-      [F.NAME_KR] : d.nameKr,
-      [F.SIZE]    : d.size,
-      [F.QTY]     : d.qty
-    })),
-    [F.DEDUCT] : deduct === true
+  cacheClear("details_" + structureCode);
+  var res = await apiPost({
+    action        : A.SAVE_DETAILS,
+    structureCode : structureCode,
+    details       : details.map(function(d){ return { nameKr: d.nameKr, size: d.size, qty: d.qty }; }),
+    deduct        : deduct === true
   });
-
   return validateSaveDetails(res);
 }
 
-/**
- * LayoutSummary 저장
- */
 async function apiUpdateLayoutSummary(structureCode, layoutSummary) {
-  cacheClear(`archive_${structureCode}`);
-
-  return await apiPost({
-    [F.ACTION]         : A.UPDATE_LAYOUT_SUMMARY,
-    [F.STRUCTURE_CODE] : structureCode,
-    [F.LAYOUT_SUMMARY] : String(layoutSummary || "")
-  });
+  cacheClear("archive_" + structureCode);
+  return await apiPost({ action: A.UPDATE_LAYOUT_SUMMARY, structureCode: structureCode, layoutSummary: String(layoutSummary || "") });
 }
 
-/**
- * 기존 Details 로드 (design.html 재진입 시)
- * @returns {Array} [{ invId, nameKr, size, qty, seqNo }] camelCase 정규화됨
- */
 async function apiGetDetails(structureCode) {
-  const cacheKey = `details_${structureCode}`;
-  const cached   = cacheGet(cacheKey);
+  var cacheKey = "details_" + structureCode;
+  var cached   = cacheGet(cacheKey);
   if (cached) return cached;
-
-  const res    = await apiPost({ [F.ACTION]: A.GET_DETAILS, [F.STRUCTURE_CODE]: structureCode });
-  const result = validateGetDetails(res);
-
+  var res    = await apiPost({ action: A.GET_DETAILS, structureCode: structureCode });
+  var result = validateGetDetails(res);
   cacheSet(cacheKey, result.details, 60000);
   return result.details;
 }
 
-// ══════════════════════════════════════════════
-// 3. 공용 API 함수
-// ══════════════════════════════════════════════
-
-async function apiSaveUsedStones(structureCode, stones) {
-  cacheClear(`usedItems_${structureCode}`);
-  return await apiPost({
-    [F.ACTION]         : A.SAVE_USED_STONES,
-    [F.STRUCTURE_CODE] : structureCode,
-    [F.STONES]         : stones
-  });
-}
+// ══════════════════════════════════════════════════════
+// 7. analysismemo.html
+// ══════════════════════════════════════════════════════
 
 async function apiUpdateAnalysisMemo(structureCode, analysis, memo) {
   return await apiPost({
-    [F.ACTION]         : A.UPDATE_ANALYSIS_MEMO,
-    [F.STRUCTURE_CODE] : structureCode,
-    [F.ANALYSIS]       : String(analysis || ""),
-    [F.MEMO]           : String(memo     || "")
+    action       : A.UPDATE_ANALYSIS_MEMO,
+    structureCode: structureCode,
+    analysis     : String(analysis || ""),
+    memo         : String(memo     || "")
   });
 }
 
-async function apiUpdateStatus(structureCode, status) {
-  return await apiPost({
-    [F.ACTION]         : A.UPDATE_STATUS,
-    [F.STRUCTURE_CODE] : structureCode,
-    [F.STATUS]         : status
-  });
-}
+// ══════════════════════════════════════════════════════
+// 8. productimage.html
+// ══════════════════════════════════════════════════════
 
-async function apiUploadProductImage(structureCode, byteArray, mimeType, fileName) {
-  if (byteArray.length > UPLOAD.MAX_BYTES) {
-    alert("이미지는 4MB 이하여야 합니다.");
-    throw new Error("이미지 크기 초과");
+async function apiUploadProductImage(structureCode, file) {
+  if (file.size > UPLOAD.MAX_BYTES) {
+    alert("이미지는 4MB 이하여야 합니다."); throw new Error("크기 초과");
   }
-  if (!UPLOAD.ALLOWED_MIME.includes(mimeType.toLowerCase())) {
-    alert("허용되지 않는 이미지 형식입니다: " + mimeType);
-    throw new Error("MIME 타입 오류");
+  if (UPLOAD.ALLOWED_MIME.indexOf(file.type.toLowerCase()) === -1) {
+    alert("허용 형식: JPG, PNG, WEBP, GIF"); throw new Error("MIME 오류");
   }
+  var buf       = await file.arrayBuffer();
+  var byteArray = Array.from(new Uint8Array(buf));
   return await apiPost({
-    [F.ACTION]         : A.UPLOAD_PRODUCT_IMAGE,
-    [F.STRUCTURE_CODE] : structureCode,
-    [F.BYTE_ARRAY]     : byteArray,
-    [F.MIME_TYPE]      : mimeType,
-    [F.FILE_NAME]      : fileName
+    action        : A.UPLOAD_PRODUCT_IMAGE,
+    structureCode : structureCode,
+    byteArray     : byteArray,
+    mimeType      : file.type,
+    fileName      : file.name
   });
 }
