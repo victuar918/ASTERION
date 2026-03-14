@@ -1,144 +1,156 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Product Image</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <title>ASTERION – Product Image</title>
+  <script src="config.js"></script>
+  <script src="api_contract.js"></script>
+  <script src="state.js"></script>
+  <script src="api.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{
+      background:url('bg_main.png') center/cover no-repeat fixed;
+      font-family:'Arial',sans-serif;color:#fff;
+      min-height:100vh;display:flex;flex-direction:column;align-items:center;
+      padding:14px 14px 100px;
+    }
+    #title-img{width:260px;max-width:88vw;margin:12px auto 6px;display:block}
+    #code-display{font-size:12px;color:rgba(220,188,128,.8);letter-spacing:1px;text-align:center;margin-bottom:14px}
 
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/state.js"></script>
-<script src="js/ui.js"></script>
+    /* 이미지 업로드 구역 (newlisting과 동일 구조) */
+    #img-panel{width:100%;max-width:400px;margin-bottom:14px}
+    #img-box{
+      width:100%;aspect-ratio:1/1;max-width:400px;max-height:400px;
+      background:rgba(255,255,255,0.05);
+      border:2px dashed rgba(255,255,255,0.22);border-radius:12px;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      cursor:pointer;overflow:hidden;position:relative;
+      transition:border-color .15s,background .15s;-webkit-tap-highlight-color:transparent;
+    }
+    #img-box:hover{border-color:rgba(210,170,100,0.5);background:rgba(255,255,255,0.07)}
+    #img-box.has-image{border-style:solid;border-color:rgba(210,170,100,0.4)}
+    #img-placeholder{display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none}
+    #img-placeholder .plus-icon{
+      width:48px;height:48px;border:2px solid rgba(255,255,255,0.3);border-radius:50%;
+      display:flex;align-items:center;justify-content:center;font-size:24px;color:rgba(255,255,255,0.4);
+    }
+    #img-placeholder .img-hint{font-size:12px;color:rgba(255,255,255,.35);text-align:center;line-height:1.5}
+    #img-preview{display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+    #img-overlay{
+      display:none;position:absolute;inset:0;background:rgba(0,0,0,.45);
+      align-items:center;justify-content:center;font-size:12px;color:#fff;letter-spacing:1px;
+    }
+    #img-box.has-image:hover #img-overlay{display:flex}
+    #file-input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+    #file-name{font-size:11px;color:rgba(255,255,255,.45);margin-top:6px;text-align:center;width:100%;max-width:400px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-<style>
-body {
-margin: 0;
-font-family: Arial;
-background: linear-gradient(135deg,#fff6da 0%,#f5d97a 40%,#eac45a 70%,#d8ad3c 100%);
-text-align: center;
-padding-bottom: 90px;
-}
+    #status-msg{font-size:12px;text-align:center;min-height:18px;margin-bottom:4px;width:100%;max-width:400px}
+    .err-msg{color:rgba(220,80,80,.9)} .ok-msg{color:rgba(100,220,130,.9)}
 
-.title { width: 90%; margin-top: 20px; display: block; margin-left: auto; margin-right: auto; }
+    #nav-bar{
+      position:fixed;bottom:0;left:0;right:0;
+      display:flex;justify-content:space-around;align-items:center;
+      padding:8px 10px env(safe-area-inset-bottom,10px);
+      background:rgba(8,6,4,.88);border-top:1px solid rgba(255,255,255,0.07);z-index:50;
+    }
+    #nav-bar img{height:42px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+    #nav-bar img:active{opacity:.65}
 
-.structureCode { margin-top: 10px; font-size: 14px; font-weight: 600; opacity: 0.8; }
-
-/* 이미지 영역 */
-.image-area { margin-top: 30px; }
-#productImage {
-width: 320px;
-height: 320px;
-object-fit: contain;
-cursor: pointer;
-display: block;
-margin: 0 auto;
-border-radius: 8px;
-transition: opacity 0.2s;
-}
-
-#productImage:hover { opacity: 0.82; }
-
-input[type=file] { display:none; }
-
-/* 하단 버튼 */
-.bottom {
-position: fixed;
-bottom: 18px;
-width: 100%;
-display: flex;
-justify-content: center;
-gap: 15px;
-}
-
-.bottom img {
-width: 68px;
-cursor: pointer;
-transition: opacity 0.15s;
-}
-
-.bottom img:hover { opacity: 0.78; }
-</style>
+    #loading-overlay{
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;
+      align-items:center;justify-content:center;
+    }
+    #loading-overlay.show{display:flex}
+    .loading-text{font-size:13px;letter-spacing:2px;color:rgba(220,188,128,1)}
+  </style>
 </head>
 <body>
+  <img id="title-img" src="ttl_productimage.png" alt="Product Image"/>
+  <div id="code-display">—</div>
 
-<img src="images/ttl_productimage.png" class="title" alt="Product Image">
-<div class="structureCode" id="structureCodeDisplay">StructureCode: </div>
+  <div id="img-panel">
+    <div id="img-box">
+      <input id="file-input" type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"/>
+      <div id="img-placeholder">
+        <div class="plus-icon">+</div>
+        <div class="img-hint">제품 이미지를 선택하세요<br/><span style="font-size:10px;opacity:.7">JPG · PNG · WEBP · GIF · 최대 4MB</span></div>
+      </div>
+      <img id="img-preview" src="" alt="preview"/>
+      <div id="img-overlay">이미지 교체</div>
+    </div>
+    <div id="file-name"></div>
+  </div>
 
-<div class="image-area">
-<img id="productImage" src="images/btn_proimageselec.png" alt="이미지 선택">
-<input type="file" id="imageInput" accept="image/png">
-</div>
+  <div id="status-msg"></div>
 
-<div class="bottom">
-<img src="images/btn_go_home.png" alt="홈" onclick="goHome()">
-<img src="images/btn_go_before.png" alt="뒤로" onclick="goBefore()">
-<img src="images/btn_update.png" alt="업데이트" onclick="updateProductImage()">
-<img src="images/btn_booklet.png" alt="Booklet" onclick="goBooklet()">
-</div>
+  <div id="nav-bar">
+    <img src="btn_go_home.png"    alt="Home"    id="btn-home"/>
+    <img src="btn_go_before.png"  alt="Before"  id="btn-before"/>
+    <img src="btn_booklet.png"    alt="Booklet" id="btn-booklet"/>
+    <img src="btn_save.png"       alt="Save"    id="btn-save"/>
+  </div>
 
-<script>
-let selectedFile = null;
+  <div id="loading-overlay">
+    <div class="loading-text">UPLOADING...</div>
+  </div>
 
-window.onload = function() {
-const state = getSelectedStone();
-document.getElementById("structureCodeDisplay").textContent = "StructureCode: " + state.StructureCode || "";
+  <script>
+  "use strict";
+  var structureCode = null;
+  var selectedFile  = null;
 
-if (state.productImage) {
-document.getElementById("productImage").src = state.productImage;
-}
+  document.addEventListener("DOMContentLoaded", function(){
+    structureCode = requireStructureCode();
+    if (!structureCode) return;
+    document.getElementById("code-display").textContent = structureCode;
 
-document.getElementById("productImage").onclick = function() {
-document.getElementById("imageInput").click();
-};
-};
+    document.getElementById("btn-home").addEventListener("click", function(){ window.location.href = "index.html"; });
+    document.getElementById("btn-before").addEventListener("click", function(){ goPage("analysismemo.html"); });
+    document.getElementById("btn-booklet").addEventListener("click", function(){ goPage("booklet.html"); });
+    document.getElementById("btn-save").addEventListener("click", onSave);
+    document.getElementById("file-input").addEventListener("change", onFileChange);
+  });
 
-document.getElementById("imageInput").onchange = function() {
-const file = this.files[0];
-if (!file) return;
-selectedFile = file;
+  function onFileChange(e){
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024){ setStatus("이미지는 4MB 이하여야 합니다.","err"); e.target.value=""; return; }
+    var allowed = ["image/jpeg","image/jpg","image/png","image/webp","image/gif"];
+    if (allowed.indexOf(file.type.toLowerCase()) === -1){ setStatus("허용 형식: JPG, PNG, WEBP, GIF","err"); e.target.value=""; return; }
+    selectedFile = file;
+    setStatus("","");
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var p = document.getElementById("img-preview");
+      p.src = ev.target.result; p.style.display="block";
+      document.getElementById("img-placeholder").style.display="none";
+      document.getElementById("img-box").classList.add("has-image");
+    };
+    reader.readAsDataURL(file);
+    document.getElementById("file-name").textContent = file.name;
+  }
 
-const reader = new FileReader();
-reader.onload = function(e) {
-document.getElementById("productImage").src = e.target.result;
-};
-reader.readAsDataURL(file);
-};
+  async function onSave(){
+    if (!selectedFile){ setStatus("이미지를 먼저 선택하세요.","err"); return; }
+    document.getElementById("loading-overlay").classList.add("show");
+    try {
+      await apiUploadProductImage(structureCode, selectedFile);
+      document.getElementById("loading-overlay").classList.remove("show");
+      setStatus("업로드 완료!","ok");
+      setTimeout(function(){ setStatus("",""); }, 2500);
+    } catch(err){
+      document.getElementById("loading-overlay").classList.remove("show");
+      setStatus("업로드 실패: " + err.message,"err");
+    }
+  }
 
-function goHome() { location.href = "home.html"; }
-function goBefore() { location.href = "analysismemo.html"; }
-
-async function updateProductImage() {
-if (!selectedFile) { alert("이미지를 선택하세요."); return; }
-
-const state = getSelectedStone();
-const folderId = "19-712Gf2aX3YLP23JvcQ_snUbhGBvJ9v"; // Product image folder
-
-const reader = new FileReader();
-reader.onload = async function(e) {
-const bytes = Array.from(new Uint8Array(e.target.result));
-const data = await apiPost({
-action: "uploadProductImage",
-StructureCode: state.StructureCode,
-folderId: folderId,
-fileName: state.StructureCode + ".png",
-byteArray: bytes,
-mimeType: "image/png"
-});
-
-if (data.success) {
-setSelectedStone({ ...state, productImage: data.url });
-alert("업데이트 완료 ✓");
-} else {
-alert("업데이트 실패: " + (data.error || "알 수 없는 오류"));
-}
-};
-reader.readAsArrayBuffer(selectedFile);
-}
-
-function goBooklet() {
-const state = getSelectedStone();
-location.href = "booklet.html?StructureCode=" + encodeURIComponent(state.StructureCode);
-}
-</script>
+  function setStatus(msg,type){
+    var el=document.getElementById("status-msg");
+    el.textContent=msg;
+    el.className=type==="err"?"err-msg":(type==="ok"?"ok-msg":"");
+  }
+  </script>
 </body>
 </html>
