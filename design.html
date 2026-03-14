@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Structure Design</title>
 
-<!-- ▼ 공통 JS (순서 중요) -->
+<!-- ▼ 공통 JS (순서 고정) -->
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/state.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/layoutFormatter.js"></script>
-<!-- ▼ 페이지 전용 (defer: DOM 준비 후 실행) -->
+<!-- ▼ defer: DOM 준비 후 실행 (DOMContentLoaded 내부 코드 안전) -->
 <script src="js/design.js" defer></script>
 
 <style>
@@ -20,35 +20,39 @@
 body {
   margin: 0;
   font-family: Arial, sans-serif;
-  background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
+  background: linear-gradient(135deg,#fff6da 0%,#f5d97a 40%,#eac45a 70%,#d8ad3c 100%);
   min-height: 100vh;
-  text-align: center;
   color: #2b1e08;
-  padding-bottom: 90px; /* 하단 버튼 공간 */
+  padding: 16px 12px 90px;
 }
 
-.title { width: 90%; margin: 16px auto 0; display: block; }
+/* StructureCode 표시 */
+#structureCodeDisplay {
+  font-weight: bold;
+  font-size: 15px;
+  margin-bottom: 14px;
+}
 
-/* ── 원석 선택 ── */
+/* ── 원석 선택 버튼 ── */
 #stoneSelector {
-  margin: 14px 0 6px;
   display: flex;
-  justify-content: center;
   flex-wrap: wrap;
   gap: 6px;
+  margin-bottom: 12px;
 }
 
-.stone-btn {
-  padding: 6px 14px;
+.stone-select-btn {
+  padding: 5px 12px;
   border-radius: 20px;
-  border: 2px solid transparent;
-  background: rgba(255,255,255,0.4);
+  border: 2px solid #c9a830;
+  background: rgba(255,255,255,0.35);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.15s;
+  color: #2b1e08;
 }
 
-.stone-btn.active {
+.stone-select-btn.active-stone {
   background: #2b1e08;
   color: #f5d97a;
   border-color: #2b1e08;
@@ -57,17 +61,15 @@ body {
 
 /* ── 사이즈 버튼 ── */
 #sizeButtons {
-  margin: 10px 0;
   display: flex;
-  justify-content: center;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 10px;
+  margin-bottom: 14px;
 }
 
-#sizeButtons button {
-  padding: 7px 14px;
-  border-radius: 8px;
+.size-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
   border: none;
   background: #f5c542;
   font-weight: bold;
@@ -76,82 +78,75 @@ body {
   transition: opacity 0.15s;
 }
 
-#sizeButtons button:hover { opacity: 0.75; }
-
-/* ── 안내 메시지 ── */
-.guide {
-  font-size: 12px;
-  opacity: 0.55;
-  margin: 4px 0;
-}
+.size-btn:hover { opacity: 0.72; }
 
 /* ── Details 시퀀스 ── */
 #detailsContainer {
   min-height: 50px;
-  margin: 10px auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-  padding: 0 10px;
+  padding: 8px;
+  background: rgba(255,255,255,0.4);
+  border-radius: 8px;
+  line-height: 2.2;
 }
 
-/* [+] 버튼 */
 .plus-btn {
-  padding: 5px 10px;
-  border-radius: 6px;
-  border: 2px dashed #aaa;
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 2px dashed #bbb;
   background: transparent;
   color: #888;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: bold;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.12s;
+  margin: 0 2px;
 }
 
 .plus-btn.active-plus {
   border-color: #d8ad3c;
   background: rgba(248,197,66,0.25);
   color: #2b1e08;
-  font-weight: bold;
 }
 
-/* 원석 항목 */
 .detail-btn {
-  padding: 5px 10px;
-  border-radius: 6px;
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 5px;
   border: none;
   background: rgba(255,255,255,0.65);
   font-size: 13px;
   cursor: pointer;
+  margin: 0 2px;
   transition: opacity 0.15s;
 }
 
-.detail-btn:hover { opacity: 0.65; }
+.detail-btn:hover { opacity: 0.6; }
 
-/* ── Total Size ── */
+/* ── Total / Layout ── */
 #totalSize {
-  margin: 10px 0;
+  margin-top: 10px;
   font-weight: bold;
-  font-size: 16px;
+  font-size: 15px;
 }
 
-/* ── Layout Summary ── */
 #layoutSummaryContainer {
-  margin: 12px 14px;
-  padding: 10px 12px;
-  background: rgba(255,255,255,0.35);
-  border-radius: 8px;
-  text-align: left;
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.3);
+  border-radius: 6px;
   font-size: 13px;
   word-break: break-all;
+  min-height: 32px;
 }
 
-#layoutSummary { margin-top: 6px; color: #2b1e08; line-height: 1.6; }
+#layoutSummaryContainer strong { display: block; margin-bottom: 4px; }
 
 /* ── 하단 버튼 ── */
 .bottom {
   position: fixed;
-  bottom: 18px;
+  bottom: 16px;
+  left: 0;
   width: 100%;
   display: flex;
   justify-content: center;
@@ -159,7 +154,7 @@ body {
 }
 
 .bottom img {
-  width: 52px;
+  width: 50px;
   cursor: pointer;
   transition: opacity 0.15s;
 }
@@ -169,29 +164,28 @@ body {
 </head>
 <body>
 
-<img src="images/ttl_structuredesign.png" class="title" alt="Structure Design">
+<!-- StructureCode 표시 -->
+<div id="structureCodeDisplay">StructureCode: </div>
 
-<!-- ① 원석 선택 (다중 원석 지원 — D5 수정) -->
+<!-- [DJ1] 원석 선택 UI (design.js renderStoneSelector()) -->
 <div id="stoneSelector"></div>
-<div class="guide">원석 선택 후 사이즈를 클릭하세요</div>
 
-<!-- ② 사이즈 버튼 -->
+<!-- [DJ2] 사이즈 버튼 (design.js renderSizeButtons()) -->
 <div id="sizeButtons"></div>
-<div class="guide">[+]를 먼저 클릭하면 그 위치에 삽입됩니다</div>
 
-<!-- ③ Details 시퀀스 -->
+<!-- [DJ2] Details 시퀀스 (design.js renderDetails()) -->
 <div id="detailsContainer"></div>
 
-<!-- ④ Total Size -->
+<!-- Total Size -->
 <div id="totalSize">Total Size 0mm</div>
 
-<!-- ⑤ Layout Summary -->
+<!-- Layout Summary -->
 <div id="layoutSummaryContainer">
   <strong>Layout:</strong>
-  <div id="layoutSummary"></div>
+  <span id="layoutSummary"></span>
 </div>
 
-<!-- ⑥ 하단 버튼 -->
+<!-- 하단 버튼 -->
 <div class="bottom">
   <img src="images/btn_go_home.png"   alt="홈"    onclick="goHome()">
   <img src="images/btn_go_before.png" alt="뒤로"  onclick="goBeforeDesign()">
@@ -201,4 +195,3 @@ body {
 
 </body>
 </html>
-
