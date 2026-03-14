@@ -1,177 +1,206 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Works Desk</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <title>ASTERION – Works Desk</title>
+  <script src="config.js"></script>
+  <script src="api_contract.js"></script>
+  <script src="state.js"></script>
+  <script src="api.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{
+      background:url('bg_main.png') center/cover no-repeat fixed;
+      font-family:'Arial',sans-serif; color:#fff;
+      min-height:100vh;
+      display:flex; flex-direction:column; align-items:center;
+      padding:16px 14px 100px;
+    }
+    /* 타이틀 */
+    #title-img{width:260px;max-width:88vw;margin:14px auto 18px;display:block}
 
-<!-- ▼ 공통 JS (순서 중요: config → api → state → ui) -->
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/state.js"></script>
-<script src="js/ui.js"></script>
+    /* 필터 탭 */
+    #filter-bar{
+      display:flex; flex-wrap:wrap; gap:6px;
+      width:100%; max-width:480px; margin-bottom:12px;
+    }
+    .btn-filter{
+      padding:5px 12px; border-radius:20px; font-size:11px; cursor:pointer;
+      border:1px solid rgba(255,255,255,0.25);
+      background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.75);
+      transition:background .15s; -webkit-tap-highlight-color:transparent;
+    }
+    .btn-filter.active{
+      background:rgba(180,140,90,0.55); border-color:rgba(210,170,100,.9); color:#fff;
+    }
 
-<style>
-body {
-  margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  color: #2b1e08;
-  background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-}
+    /* 목록 패널 */
+    #list-panel{
+      width:100%; max-width:480px;
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:12px; overflow:hidden;
+    }
+    .list-empty{
+      padding:32px; text-align:center;
+      font-size:13px; color:rgba(255,255,255,0.35);
+    }
 
-.title-img {
-  display: block;
-  width: 95%;
-  max-width: 1400px;
-  margin: 10px auto;
-}
+    /* 목록 아이템 */
+    .work-item{
+      display:flex; align-items:center;
+      padding:12px 14px; gap:12px;
+      border-bottom:1px solid rgba(255,255,255,0.06);
+      cursor:pointer;
+      transition:background .15s; -webkit-tap-highlight-color:transparent;
+    }
+    .work-item:last-child{border-bottom:none}
+    .work-item:active{background:rgba(255,255,255,0.06)}
 
-/* Structure 리스트 */
-.structure-list-container {
-  flex: 4;
-  overflow-y: auto;
-  padding: 10px 30px;
-}
+    .work-code{
+      font-size:14px; font-weight:bold; flex:1;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .work-status{
+      font-size:10px; padding:3px 9px; border-radius:10px;
+      font-weight:bold; letter-spacing:.5px; flex-shrink:0;
+      white-space:nowrap;
+    }
+    /* Status 색상 */
+    .st-Pending   {background:rgba(150,150,150,.35); color:#ccc}
+    .st-Approved  {background:rgba(60,160,90,.4);    color:#9ef5b0}
+    .st-Rejected  {background:rgba(200,60,60,.4);    color:#ffaaaa}
+    .st-Archived  {background:rgba(100,80,50,.4);    color:#d4b97a}
+    .st-Tasking   {background:rgba(60,120,200,.4);   color:#a0c4ff}
+    .st-Forwarding{background:rgba(160,80,200,.4);   color:#d9aaff}
+    .st-AS        {background:rgba(200,130,50,.4);   color:#ffd59a}
 
-.row {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 15px;
-  margin-bottom: 5px;
-  cursor: pointer;
-  font-size: 16px;
-  border-radius: 5px;
-  transition: background 0.2s;
-  background: rgba(255,255,255,0.15);
-}
+    .work-arrow{
+      font-size:14px; color:rgba(255,255,255,0.28); flex-shrink:0;
+    }
 
-.row:hover   { background: rgba(255,255,255,0.25); }
-.row.selected { background: rgba(255,255,255,0.45); font-weight: 600; }
+    /* 하단 네비 */
+    #nav-bar{
+      position:fixed; bottom:0; left:0; right:0;
+      display:flex; justify-content:space-around; align-items:center;
+      padding:8px 10px env(safe-area-inset-bottom,10px);
+      background:rgba(8,6,4,.88);
+      border-top:1px solid rgba(255,255,255,0.07); z-index:50;
+    }
+    #nav-bar img{height:42px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+    #nav-bar img:active{opacity:.65}
 
-.code   { font-weight: 600; }
-.status { opacity: 0.8; }
-
-/* 하단 버튼 영역 */
-.button-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 15px;
-  padding-bottom: 15px;
-}
-
-.button-row {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-}
-
-.button-row img {
-  width: 60px;
-  cursor: pointer;
-  transition: transform 0.15s;
-}
-
-.button-row img:hover { transform: scale(1.1); }
-</style>
+    /* 로딩 */
+    #loading{
+      width:100%;max-width:480px;text-align:center;
+      padding:32px; font-size:13px; color:rgba(255,255,255,0.4);
+    }
+    /* 에러 */
+    .err-msg{color:rgba(220,80,80,.9);font-size:12px;padding:6px 0;text-align:center}
+  </style>
 </head>
-
 <body>
+  <img id="title-img" src="ttl_worksdesk.png" alt="Works Desk"/>
 
-<img src="images/ttl_worksdesk.png" class="title-img" alt="Works Desk">
-
-<div class="structure-list-container" id="structureList"></div>
-
-<div class="button-area">
-  <div class="button-row">
-    <img src="images/btn_stoneselect.png"  alt="원석선택"  onclick="goPage('selectstone.html')">
-    <img src="images/btn_go_design.png"    alt="디자인"    onclick="goPage('design.html')">
-    <img src="images/btn_analysis.png"     alt="분석메모"  onclick="goPage('analysismemo.html')">
+  <!-- 필터 탭 -->
+  <div id="filter-bar">
+    <button class="btn-filter active" data-status="ALL">ALL</button>
+    <button class="btn-filter" data-status="Tasking">Tasking</button>
+    <button class="btn-filter" data-status="Pending">Pending</button>
+    <button class="btn-filter" data-status="Forwarding">Forwarding</button>
+    <button class="btn-filter" data-status="A/S">A/S</button>
+    <button class="btn-filter" data-status="Approved">Approved</button>
+    <button class="btn-filter" data-status="Archived">Archived</button>
   </div>
-  <div class="button-row">
-    <img src="images/btn_productimage.png" alt="제품이미지" onclick="goPage('productimage.html')">
-    <img src="images/btn_booklet.png"      alt="북릿"      onclick="goPage('booklet.html')">
-    <img src="images/btn_forwarding.png"   alt="포워딩"    onclick="goPage('forwarding.html')">
-    <img src="images/btn_go_home.png"      alt="홈"        onclick="goHome()">
+
+  <!-- 목록 -->
+  <div id="list-panel">
+    <div id="loading">Loading...</div>
   </div>
-</div>
 
-<script>
-// ── worksdesk.html 전용 로직 ───────────────────────────────────
-// 공통 goPage / goHome / showLoading / hideLoading → ui.js
-// structureCode 관리 → state.js
-// API 호출 → api.js / config.js
+  <!-- 하단 네비 -->
+  <div id="nav-bar">
+    <img src="btn_go_home.png"  alt="Home"     id="btn-home"/>
+    <img src="btn_reload.png"   alt="Reload"   id="btn-reload"/>
+  </div>
 
-window.onload = function () {
-  loadTasking();
-};
+  <script>
+  "use strict";
+  var allItems   = [];   // 전체 목록
+  var curFilter  = "ALL";
 
-async function loadTasking() {
-  const listEl = document.getElementById("structureList");
-  listEl.innerHTML = "<div style='opacity:0.6; padding:10px;'>불러오는 중...</div>";
-
-  try {
-    showLoading("목록 불러오는 중...");
-    const json = await apiGet("getTaskingList");
-
-    if (!json.success) throw new Error(json.error || "목록 로드 실패");
-
-    const data     = Array.isArray(json.data) ? json.data : [];
-    const filtered = data.filter(function (item) {
-      return item.Status === "Tasking" ||
-             item.Status === "Forwarding" ||
-             item.Status === "A/S";
+  document.addEventListener("DOMContentLoaded", async function(){
+    document.getElementById("btn-home").addEventListener("click", function(){
+      window.location.href = "index.html";
+    });
+    document.getElementById("btn-reload").addEventListener("click", function(){
+      loadList();
     });
 
-    listEl.innerHTML = "";
+    // 필터 탭 이벤트
+    document.querySelectorAll(".btn-filter").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        document.querySelectorAll(".btn-filter").forEach(function(b){ b.classList.remove("active"); });
+        btn.classList.add("active");
+        curFilter = btn.getAttribute("data-status");
+        renderList();
+      });
+    });
 
-    if (filtered.length === 0) {
-      listEl.innerHTML = "<div style='opacity:0.6; padding:10px;'>조회된 Structure가 없습니다.</div>";
+    await loadList();
+  });
+
+  async function loadList(){
+    var panel = document.getElementById("list-panel");
+    panel.innerHTML = '<div id="loading">Loading...</div>';
+    try {
+      allItems = await apiGetTaskingList();
+      renderList();
+    } catch(err){
+      console.error("[worksdesk] 목록 로드 실패:", err);
+      panel.innerHTML = '<div class="list-empty err-msg">목록 로드 실패: ' + err.message + '</div>';
+    }
+  }
+
+  function renderList(){
+    var panel = document.getElementById("list-panel");
+    var items = (curFilter === "ALL")
+      ? allItems
+      : allItems.filter(function(i){ return i.status === curFilter; });
+
+    if (!items.length){
+      panel.innerHTML = '<div class="list-empty">항목 없음</div>';
       return;
     }
 
-    filtered.forEach(function (item) {
-      const row = document.createElement("div");
-      row.className = "row";
-
-      const codeEl   = document.createElement("div");
-      codeEl.className   = "code";
-      codeEl.textContent = item.StructureCode || "";
-
-      const statusEl = document.createElement("div");
-      statusEl.className   = "status";
-      statusEl.textContent = item.Status || "";
-
-      row.appendChild(codeEl);
-      row.appendChild(statusEl);
-
-      row.onclick = function () {
-        // 선택 하이라이트
-        document.querySelectorAll(".row").forEach(function (r) {
-          r.classList.remove("selected");
-        });
-        row.classList.add("selected");
-
-        // [B7 FIX] state.js setStructureCode 사용 → 키 "structureCode"로 통일
-        setStructureCode(item.StructureCode);
-      };
-
-      listEl.appendChild(row);
+    var html = "";
+    items.forEach(function(item){
+      var code   = String(item.structureCode || item.StructureCode || "");
+      var status = String(item.status        || item.Status        || "");
+      var stClass = "st-" + status.replace("/","");
+      html += '<div class="work-item" data-code="' + escHtml(code) + '">'
+            +   '<span class="work-code">' + escHtml(code) + '</span>'
+            +   '<span class="work-status ' + escHtml(stClass) + '">' + escHtml(status) + '</span>'
+            +   '<span class="work-arrow">›</span>'
+            + '</div>';
     });
+    panel.innerHTML = html;
 
-  } catch (err) {
-    listEl.innerHTML = "<div style='color:#c0392b; padding:10px;'>목록 로드 실패: " + err.message + "</div>";
-  } finally {
-    hideLoading();
+    panel.querySelectorAll(".work-item").forEach(function(el){
+      el.addEventListener("click", function(){
+        var code = el.getAttribute("data-code");
+        setStructureCode(code);
+        goPage("selectstone.html", code);
+      });
+    });
   }
-}
-</script>
 
+  function escHtml(s){
+    return String(s)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+  </script>
 </body>
 </html>
-
