@@ -1,37 +1,43 @@
 // ============================================================
-// ASTERION — Layout Formatter
+// ASTERION — Layout Formatter  v2
 // Details ↔ Layout 문자열 변환
-// design.html / analysismemo.html / PDF 공통 사용
+// design.js / analysismemo.html / PDF 공통 사용
 //
-// Details 객체 필드 (design.js와 통일):
-//   { nameKr, size, qty }   ← 소문자 카멜케이스
+// ▸ Details 객체 필드 (design.js 통일 기준):
+//     { nameKr, size, qty }  ← 소문자 카멜케이스
+//     isButton:true 항목은 자동 필터 제거
 //
-// Layout 문자열 형식:
-//   "자수정(6mm,3pcs) + 루비(2mm,4pcs)"  ← UI/Archive 저장용
+// ▸ Layout 문자열 (Archive 저장 / UI 표시):
+//     "자수정(6mm,2pcs) + 루비(4mm,1pcs)"
 //
-// PDF 문자열 형식:
-//   "자수정(6mm×3) / 루비(2mm×4)"        ← PDF 출력용
+// ▸ PDF 문자열:
+//     "자수정(6mm×2) / 루비(4mm×1)"
 // ============================================================
 
 /**
- * Details 배열 → Layout 문자열 (UI/Archive 저장용)
- * [+] 구분자 포함 (design.js details 배열 그대로 전달 가능)
+ * Details 배열 → Layout 문자열
+ * [LF1] d.name → d.nameKr
+ * [LF2] isButton 필터 추가
+ * [LF6] 구분자 ' + ' 통일
  *
- * @param {Array} details - [{ isButton?, nameKr, size, qty }, ...]
+ * @param {Array} details  [{nameKr, size, qty, isButton?}, ...]
  * @returns {string}
  */
 function detailsToLayout(details) {
   if (!Array.isArray(details) || !details.length) return "";
   return details
-    .filter(function(d) { return !d.isButton; })
+    .filter(function(d) { return !d.isButton; })          // [LF2]
     .map(function(d) {
-      return d.nameKr + "(" + d.size + "," + d.qty + "pcs)";
+      return (d.nameKr || d.name || "") +                  // [LF1]
+             "(" + (d.size || "") + "," + (d.qty || 0) + "pcs)";
     })
-    .join(" + ");
+    .join(" + ");                                          // [LF6]
 }
 
 /**
  * Details 배열 → PDF 문자열
+ * [LF1] d.name → d.nameKr
+ * [LF2] isButton 필터 추가
  *
  * @param {Array} details
  * @returns {string}
@@ -41,56 +47,62 @@ function detailsToPDF(details) {
   return details
     .filter(function(d) { return !d.isButton; })
     .map(function(d) {
-      return d.nameKr + "(" + d.size + "×" + d.qty + ")";
+      return (d.nameKr || d.name || "") +
+             "(" + (d.size || "") + "×" + (d.qty || 0) + ")";
     })
     .join(" / ");
 }
 
 /**
- * Layout 문자열 → Details 배열 (isButton 없이 데이터만)
- * 형식: "자수정(6mm,3pcs) + 루비(2mm,4pcs)"
+ * Layout 문자열 → Details 배열
+ * [LF4] null 체크 추가 — 파싱 불가 항목 스킵
+ * [LF5] qty 파싱 명확화
+ * [LF6] '+' 및 '|' 구분자 모두 파싱 (구버전 호환)
  *
- * @param {string} layout
+ * @param {string} layout  "자수정(6mm,2pcs) + 루비(4mm,1pcs)"
  * @returns {Array<{nameKr:string, size:string, qty:number}>}
- *
- * [L1 FIX] match null 체크 추가 — 형식 불일치 항목 스킵
- * [L2 FIX] 필드명 nameKr 통일 (d.name → d.nameKr)
  */
 function layoutToDetails(layout) {
   if (!layout || typeof layout !== "string") return [];
 
+  // [LF6] '+' 와 '|' 구분자 모두 지원
   return layout
-    .split(/\s*\+\s*/)          // " + " 또는 "+" 구분
+    .split(/\s*[+|]\s*/)
     .map(function(part) {
       part = part.trim();
       if (!part) return null;
 
-      const parenMatch = part.match(/^(.+?)\((.+)\)$/); // [L1 FIX] null 체크
-      if (!parenMatch) return null;
+      // [LF4] null 체크: nameKr(size,qty) 형식 파싱
+      const m = part.match(/^(.+?)\((.+)\)$/);
+      if (!m) return null;
 
-      const nameKr = parenMatch[1].trim();
-      const inside = parenMatch[2].trim();              // "6mm,3pcs" 또는 "6mm×3"
+      const nameKr = m[1].trim();
+      const inside = m[2].trim();   // "6mm,2pcs" 또는 "6mm×2"
 
-      // "6mm,3pcs" 형식
-      const commaMatch = inside.match(/^([\d.]+mm),(\d+)pcs$/);
-      if (commaMatch) {
-        return { nameKr: nameKr, size: commaMatch[1], qty: parseInt(commaMatch[2], 10) };
+      // "6mm,2pcs" 형식
+      const commaM = inside.match(/^([\d.]+mm),(\d+)(?:pcs)?$/);
+      if (commaM) {
+        return {
+          nameKr: nameKr,
+          size  : commaM[1],
+          qty   : parseInt(commaM[2].replace("pcs", ""), 10) // [LF5]
+        };
       }
 
-      // "6mm×3" 형식 (PDF)
-      const crossMatch = inside.match(/^([\d.]+mm)×(\d+)$/);
-      if (crossMatch) {
-        return { nameKr: nameKr, size: crossMatch[1], qty: parseInt(crossMatch[2], 10) };
+      // "6mm×2" 형식 (PDF)
+      const crossM = inside.match(/^([\d.]+mm)×(\d+)$/);
+      if (crossM) {
+        return { nameKr: nameKr, size: crossM[1], qty: parseInt(crossM[2], 10) };
       }
 
-      return null; // [L1 FIX] 파싱 불가 항목 제외
+      return null; // [LF4] 파싱 불가 항목 제외
     })
     .filter(function(d) { return d !== null; });
 }
 
 /**
- * Details 배열에서 Total Size(mm) 계산
- * size = "6mm" → 6 × qty
+ * Details 배열 Total Size(mm) 계산
+ * [LF3] d.size가 '6mm' string → parseFloat 처리
  *
  * @param {Array} details
  * @returns {number}
@@ -100,8 +112,8 @@ function calcTotalSize(details) {
   return details
     .filter(function(d) { return !d.isButton; })
     .reduce(function(sum, d) {
-      const mm = parseFloat(String(d.size).replace("mm", "")) || 0;
-      return sum + mm * (d.qty || 0);
+      const mm = parseFloat(String(d.size || "0").replace("mm", "")) || 0; // [LF3]
+      return sum + mm * (Number(d.qty) || 0);
     }, 0);
 }
 
