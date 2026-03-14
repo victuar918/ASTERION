@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Structure Design</title>
 
-<!-- ▼ 공통 JS (순서 고정) -->
+<!-- ▼ 공통 JS -->
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/state.js"></script>
@@ -24,6 +24,13 @@ body {
   padding: 16px 12px 90px;
 }
 
+/* 상단 타이틀 */
+#titleContainer {
+  text-align: center;
+  margin-bottom: 12px;
+}
+#titleContainer img { max-width: 180px; }
+
 /* StructureCode 표시 */
 #structureCodeDisplay {
   font-weight: bold;
@@ -38,13 +45,8 @@ body {
   gap: 8px;
   margin-bottom: 14px;
 }
-
 #stoneSelector div { display: flex; align-items: center; gap: 6px; }
-
-/* NameKr 라벨 */
 .stone-name { font-weight: 600; min-width: 90px; }
-
-/* Size 버튼 */
 .size-btn {
   padding: 6px 12px;
   border-radius: 6px;
@@ -123,6 +125,12 @@ body {
 </head>
 
 <body>
+
+<!-- 타이틀 -->
+<div id="titleContainer">
+  <img src="images/ttl_design.png" alt="Structure Design">
+</div>
+
 <div id="structureCodeDisplay">StructureCode: </div>
 
 <!-- 원석 + Size 버튼 행 -->
