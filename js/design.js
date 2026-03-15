@@ -93,7 +93,7 @@ function onSizeClick(nameKr, size, btn) {
   else if (next && next.nameKr === nameKr && next.size === sz) { next.qty++; activeInsIdx = pos + 1; }
   else { details.splice(pos, 0, { nameKr: nameKr, size: sz, qty: 1 }); activeInsIdx = pos + 1; }
 
-  if (btn) { btn.style.background = "rgba(180,140,90,.6)"; setTimeout(function () { btn.style.background = ""; }, 250); }
+  if (btn) { btn.classList.add("flash"); setTimeout(function () { btn.classList.remove("flash"); }, 250); }
   activeInsIdx = null;
   renderDetails();
 }
