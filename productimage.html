@@ -1,286 +1,122 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <title>ASTERION – Product Image</title>
-
-<script src="config.js"></script>
-<script src="state.js"></script>
-<script src="api.js"></script>
-
+<script src="config.js"></script><script src="api_contract.js"></script>
+<script src="state.js"></script><script src="api.js"></script>
 <style>
-
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-}
-
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
 body{
-
-background:url('images/bg_main.jpg') center/cover no-repeat fixed;
-font-family:Arial;
-color:white;
-
-height:100vh;
-
-display:flex;
-flex-direction:column;
-align-items:center;
-
-padding-bottom:110px;
-
+  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
+  font-family:'Arial',sans-serif;color:#fff;
+  display:flex;flex-direction:column;align-items:center;
+  min-height:100vh;overflow:hidden;
 }
-
-#title{
-
-margin-top:20px;
-
+.ttl{width:240px;max-width:86vw;display:block;margin:12px auto 4px;flex-shrink:0}
+/* 중앙 이미지 선택 버튼 */
+.content{flex:1;width:100%;max-width:480px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 16px;min-height:0}
+.img-wrap{
+  position:relative;width:200px;height:200px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
 }
-
-#title img{
-
-width:280px;
-
+.img-wrap input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:3}
+.img-bg{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1}
+.img-overlay{
+  position:absolute;inset:0;object-fit:cover;border-radius:8px;
+  z-index:2;display:none;
 }
-
-#image-area{
-
-flex:1;
-
-display:flex;
-flex-direction:column;
-justify-content:center;
-align-items:center;
-
-}
-
-#image-button{
-
-position:relative;
-
-width:240px;
-height:240px;
-
-cursor:pointer;
-
-}
-
-#image-button img{
-
-position:absolute;
-
-width:100%;
-height:100%;
-
-object-fit:contain;
-
-}
-
-#preview{
-
-z-index:2;
-
-}
-
-#button-base{
-
-z-index:1;
-
-}
-
-#structure-code{
-
-margin-top:12px;
-
-font-size:16px;
-letter-spacing:1px;
-
-}
-
-#nav{
-
-position:fixed;
-
-bottom:0;
-left:0;
-right:0;
-
-display:flex;
-
-justify-content:space-around;
-
-padding:10px;
-
-background:rgba(0,0,0,0.8);
-
-}
-
-#nav img{
-
-height:48px;
-cursor:pointer;
-
-}
-
-#file-input{
-
-display:none;
-
-}
-
+.img-overlay.show{display:block}
+.code-under{font-size:12px;color:rgba(220,188,128,.85);letter-spacing:1.5px;text-align:center;margin-top:8px}
+.st-msg{flex-shrink:0;font-size:12px;text-align:center;min-height:18px;padding:2px 0}
+.st-err{color:rgba(220,80,80,.9)}.st-ok{color:rgba(100,220,130,.9)}
+.nav-bar{flex-shrink:0;width:100%;max-width:480px;display:flex;justify-content:space-around;padding:6px 8px env(safe-area-inset-bottom,8px);background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,.07)}
+.nav-bar img{height:44px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+.nav-bar img:active{opacity:.6}
+.ld-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center}
+.ld-ov.show{display:flex}
+.ld-txt{font-size:12px;letter-spacing:2.5px;color:rgba(220,188,128,1)}
 </style>
-
 </head>
-
 <body>
-
-<div id="title">
-
-<img src="images/ttl_productimage.png">
-
+<img class="ttl" src="images/ttl_productimage.png" alt="Product Image"/>
+<div class="content">
+  <div class="img-wrap" id="img-wrap">
+    <input type="file" id="file-input" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"/>
+    <img class="img-bg" src="images/btn_proimageselec.png" alt="Select Image"/>
+    <img class="img-overlay" id="img-overlay" src="" alt=""/>
+  </div>
+  <div class="code-under" id="code-under">—</div>
 </div>
-
-<div id="image-area">
-
-<div id="image-button">
-
-<img id="preview">
-
-<img id="button-base" src="images/btn_proimageselec.png">
-
+<div class="st-msg" id="st-msg"></div>
+<div class="nav-bar">
+  <img src="images/btn_go_home.png"  id="b-home"/>
+  <img src="images/btn_go_before.png" id="b-back"/>
+  <img src="images/btn_update.png"   id="b-update"/>
+  <img src="images/btn_booklet.png"  id="b-next"/>
 </div>
-
-<div id="structure-code"></div>
-
-</div>
-
-<input type="file" id="file-input" accept="image/png,image/jpeg">
-
-<div id="nav">
-
-<img src="images/btn_go_home.png" id="btn-home">
-
-<img src="images/btn_go_before.png" id="btn-before">
-
-<img src="images/btn_update.png" id="btn-update">
-
-<img src="images/btn_booklet.png" id="btn-next">
-
-</div>
-
+<div class="ld-ov" id="ld-ov"><div class="ld-txt">UPLOADING...</div></div>
 <script>
+"use strict";
+var sc=null, selFile=null;
+document.addEventListener("DOMContentLoaded", async function(){
+  sc=requireStructureCode(); if(!sc) return;
+  document.getElementById("code-under").textContent=sc;
+  document.getElementById("b-home").onclick  =function(){ clearAndGo("index.html"); };
+  document.getElementById("b-back").onclick  =function(){ goPage("analysismemo.html",sc); };
+  document.getElementById("b-update").onclick=onUpdate;
+  document.getElementById("b-next").onclick  =function(){ goPage("booklet.html",sc); };
+  document.getElementById("file-input").addEventListener("change", onFileChange);
+  // 기존 이미지 로드
+  await loadExisting();
+});
 
-let structureCode=null
-let selectedFile=null
-
-document.addEventListener("DOMContentLoaded",init)
-
-function init(){
-
-structureCode=requireStructureCode()
-
-if(!structureCode)return
-
-document.getElementById("structure-code").innerText=structureCode
-
-document.getElementById("btn-home").onclick=()=>{
-
-location.href="index.html"
-
+async function loadExisting(){
+  try {
+    var item=await apiGetArchiveItem(sc);
+    if(item && (item.productImage||item.ProductImage)){
+      var url=item.productImage||item.ProductImage;
+      showOverlay(url);
+    }
+  } catch(e){}
 }
 
-document.getElementById("btn-before").onclick=()=>{
-
-goPage("analysismemo.html")
-
+function onFileChange(e){
+  var f=e.target.files&&e.target.files[0]; if(!f) return;
+  if(f.size>4*1024*1024){ setStatus("4MB 이하 이미지를 선택하세요","err"); e.target.value=""; return; }
+  selFile=f;
+  var reader=new FileReader();
+  reader.onload=function(ev){ showOverlay(ev.target.result); };
+  reader.readAsDataURL(f);
+  setStatus("","");
 }
 
-document.getElementById("btn-next").onclick=()=>{
-
-goPage("booklet.html")
-
+function showOverlay(src){
+  var ov=document.getElementById("img-overlay");
+  ov.src=src; ov.classList.add("show");
 }
 
-document.getElementById("image-button").onclick=()=>{
-
-document.getElementById("file-input").click()
-
+async function onUpdate(){
+  if(!selFile){ setStatus("이미지를 먼저 선택하세요","err"); return; }
+  document.getElementById("ld-ov").classList.add("show");
+  try {
+    await apiUploadProductImage(sc, selFile);
+    document.getElementById("ld-ov").classList.remove("show");
+    setStatus("업로드 완료!","ok");
+    selFile=null;
+    setTimeout(function(){ setStatus("",""); },2500);
+  } catch(err){
+    document.getElementById("ld-ov").classList.remove("show");
+    setStatus("업로드 실패: "+err.message,"err");
+  }
 }
 
-document.getElementById("file-input").onchange=previewImage
-
-document.getElementById("btn-update").onclick=uploadImage
-
-loadSavedImage()
-
+function setStatus(msg,type){
+  var el=document.getElementById("st-msg"); el.textContent=msg;
+  el.className="st-msg "+(type==="err"?"st-err":type==="ok"?"st-ok":"");
 }
-
-function previewImage(e){
-
-selectedFile=e.target.files[0]
-
-if(!selectedFile)return
-
-let reader=new FileReader()
-
-reader.onload=function(evt){
-
-document.getElementById("preview").src=evt.target.result
-
-}
-
-reader.readAsDataURL(selectedFile)
-
-}
-
-async function uploadImage(){
-
-if(!selectedFile){
-
-alert("Select Image")
-
-return
-
-}
-
-try{
-
-await apiUploadProductImage(structureCode,selectedFile)
-
-alert("Uploaded")
-
-}catch(e){
-
-alert("Upload Failed")
-
-}
-
-}
-
-async function loadSavedImage(){
-
-try{
-
-let url=await apiGetProductImage(structureCode)
-
-if(url){
-
-document.getElementById("preview").src=url
-
-}
-
-}catch(e){
-
-}
-
-}
-
 </script>
-
 </body>
-
 </html>
