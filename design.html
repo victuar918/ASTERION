@@ -1,229 +1,134 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-
-<title>Structure Design</title>
-
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>ASTERION – Structure Design</title>
 <script src="config.js"></script>
+<script src="api_contract.js"></script>
 <script src="state.js"></script>
 <script src="api.js"></script>
-
+<script src="ui.js"></script>
 <style>
-
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
 body{
-margin:0;
-height:100vh;
-
-background:url("images/bg_sub.jpg");
-background-size:cover;
-background-position:center;
-
-display:flex;
-flex-direction:column;
-align-items:center;
-
-font-family:sans-serif;
-color:white;
+  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
+  font-family:'Arial',sans-serif;color:#fff;
+  display:flex;flex-direction:column;align-items:center;
+  min-height:100vh;overflow:hidden;
 }
+.ttl{width:240px;max-width:86vw;display:block;margin:10px auto 3px;flex-shrink:0}
+.code-disp{font-size:12px;color:rgba(220,188,128,.85);letter-spacing:1.5px;text-align:center;padding:2px 0 4px;flex-shrink:0}
 
-/* Title */
+/* 4구역: 40% : 30% : ~auto : 20% */
+.content{flex:1;width:100%;max-width:480px;display:flex;flex-direction:column;min-height:0;padding:0 8px 2px}
+.zone-sel{flex:4;display:flex;flex-direction:column;min-height:0}
+.zone-det{flex:3;display:flex;flex-direction:column;min-height:0}
+.zone-tot{flex-shrink:0;padding:4px 2px}
+.zone-lay{flex:2;display:flex;flex-direction:column;min-height:0}
+.zone-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.3);padding:2px 4px;flex-shrink:0}
+.scroll-pane{flex:1;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
+.scroll-pane::-webkit-scrollbar{width:3px}
+.scroll-pane::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15)}
 
-#title-img{
-width:260px;
-margin-top:10px;
+/* Stone 행 */
+.stone-row{display:flex;align-items:center;flex-wrap:wrap;gap:5px;padding:5px 4px;border-bottom:1px solid rgba(255,255,255,.05)}
+.stone-name{font-size:12px;color:rgba(255,255,255,.8);min-width:70px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+.btn-size{
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);
+  border-radius:5px;color:#fff;font-size:11px;padding:3px 8px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:background .12s;
 }
-
-/* Main Layout */
-
-#main-area{
-
-flex:1;
-
-width:90%;
-max-width:420px;
-
-display:flex;
-flex-direction:column;
-
-}
-
-/* Selected List */
-
-#used-panel{
-
-flex:4;
-
-overflow-y:auto;
-
-background:transparent;
-
-}
-
-/* Stone Row */
-
-.stone-row{
-
-margin-bottom:6px;
-
-}
-
-.stone-name{
-
-display:inline-block;
-
-width:90px;
-
-}
-
-.size-btn{
-
-margin:2px;
-
-padding:4px 8px;
-
-background:rgba(255,255,255,0.15);
-
-border-radius:4px;
-
-cursor:pointer;
-
-}
+.btn-size:active{background:rgba(180,140,90,.6)}
+/* [FIX-5] classList 기반 피드백 클래스 — btn.style 인라인 대입 제거
+ *  btn.style.background = "" 는 현재도 올바르게 동작하나
+ *  CSS 정의 위치와 무관하게 항상 안전한 classList 방식으로 통일 */
+.btn-size.flash{background:rgba(180,140,90,.6)!important}
 
 /* Details */
-
-#details-panel{
-
-flex:3;
-
-display:flex;
-
-flex-wrap:wrap;
-
-align-items:center;
-
-gap:5px;
-
+.details-wrap{
+  flex:1;overflow-x:auto;overflow-y:auto;min-height:0;
+  display:flex;align-items:center;flex-wrap:nowrap;gap:3px;padding:4px;
+  -webkit-overflow-scrolling:touch;
 }
-
-/* Insert button */
-
-.insert-btn{
-
-width:28px;
-height:28px;
-
-border:1px dashed white;
-
-display:flex;
-align-items:center;
-justify-content:center;
-
-cursor:pointer;
-
+/* [+] 버튼 */
+.btn-plus{
+  width:26px;height:26px;background:rgba(255,255,255,.07);
+  border:1px dashed rgba(255,255,255,.28);border-radius:5px;
+  color:rgba(255,255,255,.5);font-size:15px;line-height:1;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;-webkit-tap-highlight-color:transparent;transition:background .12s;
 }
-
-/* Item */
-
-.detail-item{
-
-background:rgba(150,110,60,0.5);
-
-padding:5px 8px;
-
-border-radius:6px;
-
-cursor:pointer;
-
+.btn-plus.active-plus{
+  background:rgba(170,130,75,.55);border:1px solid rgba(210,170,100,.9);color:#fff;
 }
+/* 아이템 버튼 */
+.btn-item{
+  background:rgba(90,68,38,.5);border:1px solid rgba(190,150,90,.48);
+  border-radius:7px;color:#fff;font-size:11px;padding:4px 8px;
+  cursor:pointer;flex-shrink:0;line-height:1.4;text-align:center;
+  -webkit-tap-highlight-color:transparent;transition:background .12s;
+}
+.btn-item:active{background:rgba(190,150,90,.45)}
+.btn-item .sub{font-size:9px;color:rgba(255,255,255,.55);display:block}
 
 /* Total */
-
-#total-panel{
-
-flex:1;
-
-display:flex;
-
-align-items:center;
-
-justify-content:center;
-
-font-weight:bold;
-
-}
+.total-disp{font-size:14px;font-weight:bold;text-align:center;color:rgba(220,188,128,1);padding:3px}
 
 /* Layout */
+.layout-text{font-size:11px;color:rgba(255,255,255,.7);line-height:1.75;white-space:pre-wrap;word-break:break-all;padding:2px 4px}
 
-#layout-panel{
-
-flex:2;
-
-overflow-y:auto;
-
+/* 네비 */
+.nav-bar{
+  flex-shrink:0;width:100%;max-width:480px;
+  display:flex;justify-content:space-around;
+  padding:6px 8px env(safe-area-inset-bottom,8px);
+  background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,.07);
 }
-
-/* Bottom Buttons */
-
-#nav-bar{
-
-display:flex;
-
-justify-content:space-around;
-
-width:100%;
-
-padding:10px;
-
-}
-
-#nav-bar img{
-
-width:70px;
-
-cursor:pointer;
-
-}
-
+.nav-bar img{height:44px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+.nav-bar img:active{opacity:.6}
 </style>
-
 </head>
-
-
 <body>
+<img class="ttl" src="images/ttl_structuredesign.png" alt="Structure Design"/>
+<div class="code-disp" id="code-disp">—</div>
 
-<img id="title-img" src="images/ttl_structuredesign.png">
-
-
-<div id="main-area">
-
-<div id="used-panel"></div>
-
-<div id="details-panel"></div>
-
-<div id="total-panel">Total Size 0mm</div>
-
-<div id="layout-panel"></div>
-
+<div class="content">
+  <!-- Selected List 40% -->
+  <div class="zone-sel">
+    <div class="zone-label">Select Stone &amp; Size</div>
+    <div class="scroll-pane" id="sel-list">
+      <div style="padding:10px;font-size:12px;color:rgba(255,255,255,.3)">Loading...</div>
+    </div>
+  </div>
+  <!-- Details 30% -->
+  <div class="zone-det">
+    <div class="zone-label">Details</div>
+    <div class="details-wrap" id="details-wrap"></div>
+  </div>
+  <!-- Total -->
+  <div class="zone-tot">
+    <div class="total-disp" id="total-disp">Total Size 0mm</div>
+  </div>
+  <!-- Layout 20% -->
+  <div class="zone-lay">
+    <div class="zone-label">Layout for PDF</div>
+    <div class="scroll-pane" id="layout-wrap">
+      <div class="layout-text" id="layout-text">—</div>
+    </div>
+  </div>
 </div>
 
-
-<div id="nav-bar">
-
-<img src="images/btn_go_home.png" onclick="location.href='index.html'">
-
-<img src="images/btn_go_before.png" onclick="goPage('selectstone.html')">
-
-<img src="images/btn_save.png" id="btn-save">
-
-<img src="images/btn_analysis.png" onclick="goPage('analysismemo.html')">
-
+<!-- 네비 (팝업/로딩은 ui.js가 자동 삽입) -->
+<div class="nav-bar">
+  <img src="images/btn_go_home.png"   id="b-home"/>
+  <img src="images/btn_go_before.png" id="b-back"/>
+  <img src="images/btn_save.png"      id="b-save"/>
+  <img src="images/btn_analysis.png"  id="b-next"/>
 </div>
-
 
 <script src="design.js"></script>
-
 </body>
 </html>
+
