@@ -1,160 +1,141 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Structure Code Index</title>
-
-<!-- ▼ 공통 JS -->
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/state.js"></script>
-<script src="js/ui.js"></script>
-
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>ASTERION – Structure Code Index</title>
+<script src="config.js"></script><script src="api_contract.js"></script>
+<script src="state.js"></script><script src="api.js"></script>
 <style>
-body {
-  margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  color: #2b1e08;
-  background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
+  font-family:'Arial',sans-serif;color:#fff;
+  display:flex;flex-direction:column;align-items:center;
+  min-height:100vh;overflow:hidden;
 }
-
-.title-img {
-  width: 95%;
-  margin: 20px auto 0;
-  display: block;
+.ttl{width:240px;max-width:86vw;display:block;margin:12px auto 8px;flex-shrink:0}
+/* 타이틀~버튼 사이 중간 지점에 입력란 */
+.content{
+  flex:1;width:100%;max-width:400px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:0 20px;gap:12px;
 }
-
-/* 입력 영역 — 화면 중앙 */
-.input-group {
-  position: absolute;
-  top: 42%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  width: 35vw;
-  min-width: 260px;
+/* 선택된 code 표시 (입력 후 Select 버튼 누르면 나타남) */
+.selected-code{
+  font-size:16px;font-weight:bold;color:rgba(220,188,128,1);
+  letter-spacing:2px;text-align:center;min-height:22px;
 }
-
-.input-group input {
-  font-size: 18px;
-  padding: 12px;
-  border: 2px solid #d8ad3c;
-  border-radius: 6px;
-  text-align: center;
-  letter-spacing: 2px;
-  background: rgba(255,255,255,0.6);
-  outline: none;
+/* 입력란 */
+.input-wrap{width:100%;text-align:center}
+.code-input{
+  width:100%;padding:11px 14px;text-align:center;letter-spacing:2px;
+  background:rgba(0,0,0,.40);border:1px solid rgba(255,255,255,.18);border-radius:8px;
+  color:#fff;font-size:15px;outline:none;text-transform:uppercase;
+  transition:border-color .15s;
 }
-
-.input-group input:focus {
-  border-color: #b8860b;
-  background: rgba(255,255,255,0.9);
+.code-input:focus{border-color:rgba(210,170,100,.7)}
+.code-input::placeholder{color:rgba(255,255,255,.3);font-size:13px;letter-spacing:1px}
+/* 실시간 프리뷰 */
+.code-preview{
+  font-size:11px;color:rgba(220,188,128,.6);text-align:center;margin-top:4px;
+  letter-spacing:1.5px;min-height:16px;
 }
-
-/* 하단 버튼 */
-.bottom-nav {
-  position: absolute;
-  bottom: 5%;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 20px;
-}
-
-.bottom-nav img {
-  width: 90px;
-  cursor: pointer;
-  transition: transform 0.15s;
-}
-
-.bottom-nav img:hover { transform: scale(1.08); }
+.st-msg{font-size:12px;text-align:center;min-height:18px}
+.st-err{color:rgba(220,80,80,.9)}.st-ok{color:rgba(100,220,130,.9)}
+.nav-bar{flex-shrink:0;width:100%;max-width:400px;display:flex;justify-content:space-around;padding:6px 8px env(safe-area-inset-bottom,8px);background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,.07)}
+.nav-bar img{height:44px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+.nav-bar img:active{opacity:.6}
+.ld-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center}
+.ld-ov.show{display:flex}
+.ld-txt{font-size:12px;letter-spacing:2.5px;color:rgba(220,188,128,1)}
 </style>
 </head>
-
 <body>
-
-<img src="images/ttl_codeindex.png" alt="Structure Code Index" class="title-img">
-
-<div class="input-group">
-  <!-- S-00000-000000 형식 자동 포맷 -->
-  <input type="text" id="codeInput" placeholder="S-00000-000000" maxlength="14">
+<img class="ttl" src="images/ttl_codeindex.png" alt="Structure Code Index"/>
+<div class="content">
+  <div class="selected-code" id="sel-display"></div>
+  <div class="input-wrap">
+    <input class="code-input" id="code-input" type="text" maxlength="13" placeholder="S-00000-000000"/>
+    <div class="code-preview" id="code-preview">S-□□□□□-□□□□□□</div>
+  </div>
+  <div class="st-msg" id="st-msg"></div>
 </div>
-
-<div class="bottom-nav">
-  <img src="images/btn_go_home.png" alt="홈"     onclick="goHome()">
-  <img src="images/btn_as.png"      alt="A/S 등록" onclick="setAS()">
-  <img src="images/btn_select.png"  alt="선택"   onclick="selectCode()">
+<div class="nav-bar">
+  <img src="images/btn_go_home.png" id="b-home"/>
+  <img src="images/btn_select.png"  id="b-select"/>
+  <img src="images/btn_as.png"      id="b-as"/>
+  <img src="images/btn_complete.png" id="b-complete"/>
 </div>
-
+<div class="ld-ov" id="ld-ov"><div class="ld-txt">UPDATING...</div></div>
 <script>
-// ── 입력 포맷: S-00000-000000 자동 변환 ────────────────────────
-const codeInput = document.getElementById("codeInput");
+"use strict";
+var selCode=null;
 
-codeInput.addEventListener("input", function () {
-  // 대문자 + 숫자만 허용
-  let raw = codeInput.value.toUpperCase().replace(/[^0-9A-Z\-]/g, "");
+document.addEventListener("DOMContentLoaded", function(){
+  document.getElementById("b-home").onclick   =function(){ location.href="index.html"; };
+  document.getElementById("b-select").onclick =onSelect;
+  document.getElementById("b-as").onclick     =function(){ onChangeStatus(STATUS.AS); };
+  document.getElementById("b-complete").onclick=function(){ onChangeStatus(STATUS.COMPLETE); };
 
-  // 하이픈을 제거하고 순수 문자만 추출
-  const chars = raw.replace(/-/g, "");
-
-  // S 보장
-  const s   = chars.length > 0 ? chars[0] : "";
-  const mid = chars.slice(1, 6);   // 최대 5자리
-  const end = chars.slice(6, 12);  // 최대 6자리
-
-  let formatted = s || "";
-  if (mid.length > 0) formatted += "-" + mid;
-  if (end.length > 0) formatted += "-" + end;
-
-  codeInput.value = formatted;
+  // 입력 실시간 프리뷰 (하이픈 자동 삽입 없이 프리뷰만)
+  document.getElementById("code-input").addEventListener("input", onInput);
+  document.getElementById("code-input").addEventListener("keydown", function(e){ if(e.key==="Enter") onSelect(); });
 });
 
-// ── A/S 등록 ──────────────────────────────────────────────────
-// [B1 FIX] /exec 포함된 CONFIG.API_BASE 사용
-// [B2 FIX] api.js apiPost → Content-Type: text/plain
-// [B3 FIX] A/S → Code.gs VALID_STATUSES에 추가됨
-// [B4 FIX] setStructureCode → worksdesk 이동 시 state 유지
-async function setAS() {
-  const code = codeInput.value.trim();
-  if (!code) { alert("StructureCode를 입력해주세요."); return; }
+function onInput(){
+  var raw = this.value.toUpperCase().replace(/[^A-Z0-9\-]/g,"");
+  // 입력값을 그대로 유지 (커서 튐 방지 — 하이픈 자동삽입 없음)
+  this.value = raw;
+  // 프리뷰: 입력 중인 코드를 S-XXXXX-XXXXXX 구조로 시각화
+  var preview = formatPreview(raw);
+  document.getElementById("code-preview").textContent = preview;
+}
 
+function formatPreview(raw){
+  // raw에서 하이픈 제거 후 S + 5자 + 6자 로 분할
+  var clean = raw.replace(/\-/g,"");
+  var s1 = clean.slice(0,1)||"S";
+  var s2 = (clean.slice(1,6)||"").padEnd(5,"□");
+  var s3 = (clean.slice(6,12)||"").padEnd(6,"□");
+  return s1 + "-" + s2 + "-" + s3;
+}
+
+function getFormattedCode(){
+  var raw = document.getElementById("code-input").value.toUpperCase();
+  // 하이픈 있으면 그대로, 없으면 자동 삽입
+  if(raw.indexOf("-")!==-1) return raw;
+  var clean=raw.replace(/\-/g,"");
+  if(clean.length<7) return raw;
+  return clean.slice(0,1)+"-"+clean.slice(1,6)+"-"+clean.slice(6,12);
+}
+
+function onSelect(){
+  var code=getFormattedCode();
+  if(!code||code.length<7){ setStatus("코드를 입력하세요","err"); return; }
+  selCode=code;
+  document.getElementById("sel-display").textContent=code;
+  setStatus("선택됨: "+code,"ok");
+}
+
+async function onChangeStatus(newStatus){
+  if(!selCode){ setStatus("코드를 먼저 선택하세요","err"); return; }
+  document.getElementById("ld-ov").classList.add("show");
   try {
-    showLoading("A/S 상태 변경 중...");
-    // api.js apiPost 사용 — CONFIG.API_BASE 자동 참조
-    const result = await apiPost({
-      action: "updateStatus",
-      code  : code,      // Code.gs: payload.code || payload.structureCode
-      status: "A/S",     // Code.gs: payload.status || payload.newStatus
-    });
-
-    if (result.success) {
-      alert(code + " → A/S 상태로 변경되었습니다.");
-    } else {
-      alert("변경 실패: " + (result.error || "알 수 없는 오류"));
-    }
-  } catch (err) {
-    alert("오류: " + err.message);
-  } finally {
-    hideLoading();
+    await apiUpdateStatus(selCode, newStatus);
+    document.getElementById("ld-ov").classList.remove("show");
+    setStatus("Status → "+newStatus,"ok");
+  } catch(err){
+    document.getElementById("ld-ov").classList.remove("show");
+    setStatus("실패: "+err.message,"err");
   }
 }
 
-// ── 코드 선택 → worksdesk 이동 ────────────────────────────────
-function selectCode() {
-  const code = codeInput.value.trim();
-  if (!code) { alert("StructureCode를 입력해주세요."); return; }
-
-  // [B4 FIX] state.js setStructureCode → worksdesk에서 getStructureCode로 읽음
-  setStructureCode(code);
-  location.href = "worksdesk.html?code=" + encodeURIComponent(code);
+function setStatus(msg,type){
+  var el=document.getElementById("st-msg"); el.textContent=msg;
+  el.className="st-msg "+(type==="err"?"st-err":type==="ok"?"st-ok":"");
 }
 </script>
-
 </body>
 </html>
-
