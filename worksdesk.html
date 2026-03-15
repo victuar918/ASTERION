@@ -1,255 +1,142 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-
-<title>Work Desk</title>
-
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>ASTERION – Works Desk</title>
+<script src="config.js"></script>
+<script src="api_contract.js"></script>
+<script src="state.js"></script>
+<script src="api.js"></script>
 <style>
-
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
 body{
-margin:0;
-height:100vh;
-
-background-image:url("images/bg_sub.jpg");
-background-size:cover;
-background-position:center;
-
-display:flex;
-flex-direction:column;
-align-items:center;
-
-font-family:sans-serif;
-color:white;
+  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
+  font-family:'Arial',sans-serif;color:#fff;
+  display:flex;flex-direction:column;align-items:center;
+  min-height:100vh;overflow:hidden;
 }
-
-/* 타이틀 */
-
-.title{
-margin-top:20px;
-margin-bottom:10px;
+.ttl{width:260px;max-width:88vw;display:block;margin:14px auto 8px;flex-shrink:0}
+/* 목록창: 타이틀 ~ 네비 사이 100% 공간 */
+#list-wrap{
+  flex:1;width:100%;max-width:480px;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:0 0 4px;
 }
-
-.title img{
-width:240px;
+#list-wrap::-webkit-scrollbar{width:3px}
+#list-wrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15)}
+.work-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:13px 16px;
+  border-bottom:1px solid rgba(255,255,255,0.07);
+  cursor:pointer;transition:background .15s;
+  -webkit-tap-highlight-color:transparent;
 }
-
-/* Structure 리스트 */
-
-.structure-window{
-
-width:90%;
-max-width:420px;
-
-flex:1;
-
-overflow-y:auto;
-
-background:transparent;
-
-padding:10px;
+.work-row.selected{background:rgba(255,255,255,0.60)}
+.work-row:active{background:rgba(255,255,255,0.15)}
+.work-code{font-size:14px;font-weight:600;letter-spacing:.5px}
+.work-status{
+  font-size:10px;padding:3px 10px;border-radius:10px;font-weight:bold;letter-spacing:.5px;
 }
-
-.structure-item{
-
-padding:12px;
-
-text-align:center;
-
-font-size:18px;
-
-cursor:pointer;
-
-border-bottom:1px solid rgba(255,255,255,0.2);
-
+.st-Tasking   {background:rgba(60,120,200,.4);color:#a0c4ff}
+.st-AS        {background:rgba(200,130,50,.4);color:#ffd59a}
+.st-Forwarding{background:rgba(160,80,200,.4);color:#d9aaff}
+.empty-msg{text-align:center;padding:40px 16px;font-size:13px;color:rgba(255,255,255,.3)}
+/* 네비: 4+3 2열 그리드 */
+.nav-bar{
+  width:100%;max-width:480px;flex-shrink:0;
+  display:grid;grid-template-columns:repeat(4,1fr);gap:2px;
+  padding:6px 4px env(safe-area-inset-bottom,8px);
+  background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,0.07);
 }
-
-.structure-item.selected{
-
-background:rgba(255,255,255,0.2);
-
+.nav-bar .row2{
+  grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:2px;
 }
-
-/* 버튼 영역 */
-
-.button-area{
-
-width:100%;
-
-padding:10px;
-
-display:flex;
-flex-direction:column;
-gap:10px;
-
+.nav-bar img,.nav-bar .row2 img{
+  width:100%;height:44px;object-fit:contain;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s;
 }
-
-/* 1행 4개 */
-
-.row1{
-
-display:flex;
-justify-content:space-around;
-
-}
-
-/* 2행 3개 */
-
-.row2{
-
-display:flex;
-justify-content:space-evenly;
-
-}
-
-/* 버튼 */
-
-.button-area img{
-
-width:70px;
-cursor:pointer;
-
-}
-
+.nav-bar img:active,.nav-bar .row2 img:active{opacity:.6}
 </style>
-
 </head>
-
-
 <body>
+<img class="ttl" src="images/ttl_worksdesk.png" alt="Works Desk"/>
 
-<!-- Title -->
-
-<div class="title">
-<img src="images/ttl_worksdesk.png">
+<div id="list-wrap">
+  <div class="empty-msg" id="empty">Loading...</div>
 </div>
 
-
-<!-- Structure Scroll Window -->
-
-<div id="structureList" class="structure-window">
+<div class="nav-bar">
+  <!-- 1열 4개 -->
+  <img src="images/btn_go_home.png"     alt="Home"     id="b-home"/>
+  <img src="images/btn_stoneselect.png" alt="Select"   id="b-sel"/>
+  <img src="images/btn_go_design.png"   alt="Design"   id="b-des"/>
+  <img src="images/btn_analysis.png"    alt="Analysis" id="b-ana"/>
+  <!-- 2열 3개 -->
+  <div class="row2">
+    <img src="images/btn_productimage.png" alt="Product" id="b-pro"/>
+    <img src="images/btn_booklet.png"      alt="Booklet" id="b-bkl"/>
+    <img src="images/btn_forwarding.png"   alt="Forward" id="b-fwd"/>
+  </div>
 </div>
-
-
-<!-- Button Area -->
-
-<div class="button-area">
-
-<div class="row1">
-
-<img src="images/btn_go_home.png" onclick="goPage('index.html')">
-
-<img src="images/btn_stoneselect.png" onclick="goPage('selectstone.html')">
-
-<img src="images/btn_go_design.png" onclick="goPage('design.html')">
-
-<img src="images/btn_analysis.png" onclick="goPage('analysismemo.html')">
-
-</div>
-
-
-<div class="row2">
-
-<img src="images/btn_productimage.png" onclick="goPage('productimage.html')">
-
-<img src="images/btn_booklet.png" onclick="goPage('booklet.html')">
-
-<img src="images/btn_forwarding.png" onclick="goPage('forwarding.html')">
-
-</div>
-
-</div>
-
-
-
-<!-- 시스템 JS -->
-
-<script src="js/config.js"></script>
-<script src="js/state.js"></script>
-<script src="js/api.js"></script>
-
 
 <script>
+"use strict";
+var selCode = null;
 
-/* Structure 목록 로드 */
+document.addEventListener("DOMContentLoaded", async function(){
+  // 네비 이벤트
+  document.getElementById("b-home").onclick = function(){ clearAndGo("index.html"); };
+  document.getElementById("b-sel").onclick  = function(){ if(!selCode){alert("StructureCode를 선택하세요");return;} setStructureCode(selCode); goPage("selectstone.html",selCode); };
+  document.getElementById("b-des").onclick  = function(){ if(!selCode){alert("StructureCode를 선택하세요");return;} setStructureCode(selCode); goPage("design.html",selCode); };
+  document.getElementById("b-ana").onclick  = function(){ if(!selCode){alert("StructureCode를 선택하세요");return;} setStructureCode(selCode); goPage("analysismemo.html",selCode); };
+  document.getElementById("b-pro").onclick  = function(){ if(!selCode){alert("StructureCode를 선택하세요");return;} setStructureCode(selCode); goPage("productimage.html",selCode); };
+  document.getElementById("b-bkl").onclick  = function(){ if(!selCode){alert("StructureCode를 선택하세요");return;} setStructureCode(selCode); goPage("booklet.html",selCode); };
+  document.getElementById("b-fwd").onclick  = function(){ if(!selCode){alert("StructureCode를 선택하세요");return;} setStructureCode(selCode); goPage("forwarding.html",selCode); };
 
-async function loadStructures(){
+  await loadList();
+});
 
-const list=document.getElementById("structureList")
-
-if(!API || !API.getStructures) return
-
-const data=await API.getStructures()
-
-list.innerHTML=""
-
-data
-.filter(s =>
-s.Status==="Tasking" ||
-s.Status==="A/S" ||
-s.Status==="Forwarding"
-)
-.forEach(s=>{
-
-const div=document.createElement("div")
-
-div.className="structure-item"
-
-div.textContent=s.StructureCode
-
-div.onclick=()=>selectStructure(s.StructureCode,div)
-
-list.appendChild(div)
-
-})
-
+async function loadList(){
+  var el = document.getElementById("empty");
+  el.textContent = "Loading...";
+  try {
+    var data = await apiGetTaskingList();
+    // Tasking / A/S / Forwarding만 필터
+    var filtered = data.filter(function(d){
+      var s = String(d.status || d.Status || "");
+      return s === STATUS.TASKING || s === STATUS.AS || s === STATUS.FORWARDING;
+    });
+    el.style.display = filtered.length ? "none" : "block";
+    if (!filtered.length){ el.textContent = "작업 대기 중인 항목이 없습니다"; return; }
+    el.style.display = "none";
+    var wrap = document.getElementById("list-wrap");
+    filtered.forEach(function(item){
+      var code = String(item.structureCode || item.StructureCode || "");
+      var st   = String(item.status || item.Status || "");
+      var row  = document.createElement("div");
+      row.className = "work-row";
+      row.setAttribute("data-code", code);
+      row.innerHTML =
+        '<span class="work-code">' + esc(code) + '</span>' +
+        '<span class="work-status st-' + esc(st.replace("/","")) + '">' + esc(st) + '</span>';
+      row.addEventListener("click", function(){
+        if(selCode === code){
+          selCode = null; row.classList.remove("selected");
+        } else {
+          document.querySelectorAll(".work-row.selected").forEach(function(r){ r.classList.remove("selected"); });
+          selCode = code; row.classList.add("selected");
+        }
+      });
+      wrap.appendChild(row);
+    });
+  } catch(err){
+    el.textContent = "목록 로드 실패: " + err.message;
+    el.style.display = "block";
+  }
 }
-
-
-/* Structure 선택 */
-
-function selectStructure(code,element){
-
-STATE.activeStructure=code
-
-document.querySelectorAll(".structure-item")
-.forEach(i=>i.classList.remove("selected"))
-
-element.classList.add("selected")
-
-}
-
-
-/* 페이지 이동 */
-
-function goPage(page){
-
-if(page==="index.html"){
-
-location.href=page
-return
-
-}
-
-if(!STATE.activeStructure){
-
-alert("StructureCode를 먼저 선택하세요.")
-return
-
-}
-
-location.href=page
-
-}
-
-
-/* 시작 */
-
-document.addEventListener("DOMContentLoaded",loadStructures)
-
 </script>
-
 </body>
 </html>
+
