@@ -4,59 +4,51 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <title>ASTERION – Gemstone Information</title>
-<script src="config.js"></script><script src="api_contract.js"></script>
-<script src="state.js"></script><script src="api.js"></script>
+<script src="js/config.js"></script>
+<script src="js/api_contract.js"></script>
+<script src="js/state.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{
-  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
-  font-family:'Arial',sans-serif;color:#fff;
-  display:flex;flex-direction:column;align-items:center;
-  min-height:100vh;overflow:hidden;
-}
-.ttl{width:240px;max-width:86vw;display:block;margin:10px auto 3px;flex-shrink:0}
-.nk-disp{font-size:13px;color:rgba(220,188,128,.85);letter-spacing:1.5px;text-align:center;padding:2px 0 5px;flex-shrink:0}
+body{background:url('images/bg_all.jpg') center/cover no-repeat fixed;font-family:'Arial',sans-serif;color:#fff;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
+.ttl{width:360px;max-width:92vw;display:block;margin:14px auto 4px;flex-shrink:0}
+.nk-disp{font-size:14px;color:rgba(220,188,128,.9);letter-spacing:1.5px;text-align:center;padding:4px 0 5px;flex-shrink:0}
+
 /* 이미지:NameEng:Exp = 45%:15%:40% */
 .content{flex:1;width:100%;max-width:400px;display:flex;flex-direction:column;align-items:center;min-height:0;padding:0 16px}
-/* 이미지 구역 45% */
 .zone-img{flex:4.5;display:flex;align-items:center;justify-content:center;width:100%;min-height:0}
-.img-wrap{
-  position:relative;cursor:pointer;-webkit-tap-highlight-color:transparent;
-  /* 정사각형 최대 */
-  width:min(100%,200px);height:min(100%,200px);
-}
+.zone-eng{flex:1.5;width:100%;display:flex;align-items:center;min-height:0;padding:4px 0}
+.zone-exp{flex:4;width:100%;display:flex;flex-direction:column;min-height:0;padding-bottom:4px}
+
+/* 이미지 선택 박스 */
+.img-wrap{position:relative;cursor:pointer;width:min(100%,180px);height:min(100%,180px);-webkit-tap-highlight-color:transparent}
 .img-wrap input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:3}
 .img-bg{width:100%;height:100%;object-fit:contain;display:block;z-index:1;position:relative}
 .img-ov{position:absolute;inset:0;object-fit:cover;border-radius:8px;z-index:2;display:none}
 .img-ov.show{display:block}
-/* NameEng 15% */
-.zone-eng{flex:1.5;width:100%;display:flex;align-items:center;min-height:0}
+
+/* 투명도 60% 입력 */
 .txt-input{
-  width:100%;padding:8px 12px;background:rgba(0,0,0,.40);
+  width:100%;padding:9px 12px;
+  background:rgba(0,0,0,.60);
   border:1px solid rgba(255,255,255,.15);border-radius:8px;
   color:#fff;font-size:13px;outline:none;transition:border-color .15s;
 }
 .txt-input:focus{border-color:rgba(210,170,100,.65)}
 .txt-input::placeholder{color:rgba(255,255,255,.3)}
-/* Exp 40% */
-.zone-exp{flex:4;width:100%;display:flex;flex-direction:column;min-height:0}
 textarea.txt-input{flex:1;resize:none;min-height:0;overflow-y:auto;line-height:1.6}
-.st-msg{flex-shrink:0;font-size:12px;text-align:center;min-height:18px;padding:2px 0}
-.st-err{color:rgba(220,80,80,.9)}.st-ok{color:rgba(100,220,130,.9)}
-.nav-bar{flex-shrink:0;width:100%;max-width:400px;display:flex;justify-content:space-around;padding:6px 8px env(safe-area-inset-bottom,8px);background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,.07)}
-.nav-bar img{height:44px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+
+.nav-bar{flex-shrink:0;width:100%;max-width:400px;display:flex;justify-content:space-around;align-items:center;padding:8px 8px env(safe-area-inset-bottom,10px);background:transparent;border-top:none}
+.nav-bar img{height:88px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
 .nav-bar img:active{opacity:.6}
-.ld-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center}
-.ld-ov.show{display:flex}
-.ld-txt{font-size:12px;letter-spacing:2.5px;color:rgba(220,188,128,1)}
 </style>
 </head>
 <body>
 <img class="ttl" src="images/ttl_gemstoneinfo.png" alt="Gemstone Information"/>
 <div class="nk-disp" id="nk-disp">—</div>
 <div class="content">
-  <!-- 이미지 45% -->
   <div class="zone-img">
     <div class="img-wrap" id="img-wrap">
       <input type="file" id="file-input" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"/>
@@ -64,80 +56,60 @@ textarea.txt-input{flex:1;resize:none;min-height:0;overflow-y:auto;line-height:1
       <img class="img-ov" id="img-ov" src="" alt=""/>
     </div>
   </div>
-  <!-- NameEng 15% -->
   <div class="zone-eng">
     <input class="txt-input" id="nameeng-input" type="text" placeholder="English Name" maxlength="200"/>
   </div>
-  <!-- Exp 40% -->
   <div class="zone-exp">
     <textarea class="txt-input" id="exp-input" placeholder="Explanation..."></textarea>
   </div>
 </div>
-<div class="st-msg" id="st-msg"></div>
 <div class="nav-bar">
-  <img src="images/btn_go_home.png"   id="b-home"/>
-  <img src="images/btn_go_before.png" id="b-back"/>
-  <img src="images/btn_update.png"    id="b-update"/>
+  <img src="images/btn_go_home.png"   alt="Home"   id="b-home"/>
+  <img src="images/btn_go_before.png" alt="Before" id="b-back"/>
+  <img src="images/btn_update.png"    alt="Update" id="b-update"/>
 </div>
-<div class="ld-ov" id="ld-ov"><div class="ld-txt">UPDATING...</div></div>
 <script>
 "use strict";
-var nk=null, selFile=null, origNameEng="", origExp="";
-
-document.addEventListener("DOMContentLoaded", async function(){
-  nk=requireNameKr(); if(!nk) return;
+var nk=null,selFile=null,origEng="",origExp="";
+document.addEventListener("DOMContentLoaded",async function(){
+  nk=requireNameKr();if(!nk)return;
   document.getElementById("nk-disp").textContent=nk;
-  document.getElementById("b-home").onclick  =function(){ clearAndGoFromInventory("index.html"); };
-  document.getElementById("b-back").onclick  =function(){ clearAndGoFromInventory("inventory.html"); };
+  document.getElementById("b-home").onclick=function(){clearAndGoFromInventory("index.html");};
+  document.getElementById("b-back").onclick=function(){clearAndGoFromInventory("inventory.html");};
   document.getElementById("b-update").onclick=onUpdate;
   document.getElementById("file-input").addEventListener("change",onFileChange);
-  await loadInfo();
-});
-
-async function loadInfo(){
-  try {
+  showLoading("LOADING...");
+  try{
     var stones=await apiGetAllStonesFull();
-    var s=null;
-    for(var i=0;i<stones.length;i++){ if(stones[i].nameKr===nk){ s=stones[i]; break; } }
-    if(!s) return;
-    origNameEng=s.nameEng||""; origExp=s.exp||"";
-    document.getElementById("nameeng-input").value=origNameEng;
-    document.getElementById("exp-input").value=origExp;
-    if(s.image){ var ov=document.getElementById("img-ov"); ov.src=s.image; ov.classList.add("show"); }
-  } catch(e){}
-}
-
+    var s=null;for(var i=0;i<stones.length;i++){if(stones[i].nameKr===nk){s=stones[i];break;}}
+    hideLoading();
+    if(s){
+      origEng=s.nameEng||"";origExp=s.exp||"";
+      document.getElementById("nameeng-input").value=origEng;
+      document.getElementById("exp-input").value=origExp;
+      if(s.image){var ov=document.getElementById("img-ov");ov.src=s.image;ov.classList.add("show");}
+    }
+  }catch(e){hideLoading();}
+});
 function onFileChange(e){
-  var f=e.target.files&&e.target.files[0]; if(!f) return;
-  if(f.size>4*1024*1024){ setStatus("4MB 이하","err"); e.target.value=""; return; }
+  var f=e.target.files&&e.target.files[0];if(!f)return;
+  if(f.size>4*1024*1024){toastErr("4MB 이하");e.target.value="";return;}
   selFile=f;
-  var r=new FileReader(); r.onload=function(ev){ var ov=document.getElementById("img-ov"); ov.src=ev.target.result; ov.classList.add("show"); }; r.readAsDataURL(f);
-  setStatus("","");
+  var r=new FileReader();r.onload=function(ev){var ov=document.getElementById("img-ov");ov.src=ev.target.result;ov.classList.add("show");};r.readAsDataURL(f);
 }
-
 async function onUpdate(){
-  var nameEng=document.getElementById("nameeng-input").value.trim();
-  var exp=document.getElementById("exp-input").value.trim();
-  var changed=(nameEng!==origNameEng)||(exp!==origExp)||selFile;
-  if(!changed){ setStatus("변경 사항 없음",""); return; }
-  document.getElementById("ld-ov").classList.add("show");
-  try {
-    if(selFile) await apiUploadStoneImage(nk, nameEng||nk, selFile);
-    await apiUpdateStoneInfo(nk, nameEng, exp);
-    origNameEng=nameEng; origExp=exp; selFile=null;
-    document.getElementById("ld-ov").classList.remove("show");
-    setStatus("업데이트 완료!","ok");
-    setTimeout(function(){ setStatus("",""); },2500);
-  } catch(err){
-    document.getElementById("ld-ov").classList.remove("show");
-    setStatus("실패: "+err.message,"err");
-  }
-}
-
-function setStatus(msg,type){
-  var el=document.getElementById("st-msg"); el.textContent=msg;
-  el.className="st-msg "+(type==="err"?"st-err":type==="ok"?"st-ok":"");
+  var ne=document.getElementById("nameeng-input").value.trim();
+  var ex=document.getElementById("exp-input").value.trim();
+  if(ne===origEng&&ex===origExp&&!selFile){toastErr("변경 사항 없음");return;}
+  showLoading("UPDATING...");
+  try{
+    if(selFile)await apiUploadStoneImage(nk,ne||nk,selFile);
+    await apiUpdateStoneInfo(nk,ne,ex);
+    origEng=ne;origExp=ex;selFile=null;
+    hideLoading();toastOk("업데이트 완료!");
+  }catch(err){hideLoading();toastErr("실패: "+err.message);}
 }
 </script>
 </body>
 </html>
+
