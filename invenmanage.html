@@ -1,286 +1,163 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stock Manage</title>
-
-<!-- ▼ 공통 JS -->
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/state.js"></script>
-<script src="js/ui.js"></script>
-
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>ASTERION – Stock Management</title>
+<script src="config.js"></script><script src="api_contract.js"></script>
+<script src="state.js"></script><script src="api.js"></script>
 <style>
-body {
-  margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background: linear-gradient(135deg, #fff6da 0%, #f5d97a 40%, #eac45a 70%, #d8ad3c 100%);
-  min-height: 100vh;
-  color: #2b1e08;
-  text-align: center;
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
+  font-family:'Arial',sans-serif;color:#fff;
+  display:flex;flex-direction:column;align-items:center;
+  min-height:100vh;overflow:hidden;
 }
-
-.title-img { width: 95%; margin-top: 20px; }
-.stone-name { margin-top: 20px; font-size: 20px; font-weight: bold; }
-
-.stock-container {
-  margin-top: 25px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding-bottom: 100px;
+.ttl{width:240px;max-width:86vw;display:block;margin:10px auto 3px;flex-shrink:0}
+/* NameKr:테이블 = 35%:65% */
+.content{flex:1;width:100%;max-width:400px;display:flex;flex-direction:column;min-height:0;padding:0 14px}
+.zone-name{flex:3.5;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nk-text{font-size:15px;color:rgba(220,188,128,.9);letter-spacing:1.5px;text-align:center}
+.zone-table{flex:6.5;display:flex;flex-direction:column;min-height:0;overflow-y:auto}
+.zone-table::-webkit-scrollbar{width:3px}
+.zone-table::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15)}
+/* 헤더 행 */
+.tbl-header{display:flex;gap:8px;align-items:center;justify-content:center;padding:4px 0;flex-shrink:0}
+.hdr-size{font-size:10px;letter-spacing:1.2px;color:rgba(255,255,255,.45);width:80px;text-align:center}
+.hdr-unit{font-size:10px;color:rgba(255,255,255,.3);width:24px}
+.hdr-stock{font-size:10px;letter-spacing:1.2px;color:rgba(255,255,255,.45);width:80px;text-align:center}
+.hdr-pcs{font-size:10px;color:rgba(255,255,255,.3);width:24px}
+/* 데이터 행 */
+.tbl-row{display:flex;gap:8px;align-items:center;justify-content:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+/* Size 드롭다운 */
+.size-select{
+  width:80px;padding:7px 4px;text-align:center;
+  background:rgba(0,0,0,.40);border:1px solid rgba(255,255,255,.18);border-radius:6px;
+  color:#fff;font-size:13px;outline:none;cursor:pointer;
+  -webkit-appearance:none;appearance:none;
 }
-
-.stock-header {
-  display: flex;
-  width: 260px;
-  justify-content: space-between;
-  font-size: 14px;
-  font-weight: bold;
+.size-select:focus{border-color:rgba(210,170,100,.65)}
+.unit-label{width:24px;font-size:11px;color:rgba(255,255,255,.45);text-align:left}
+/* Stock 입력 */
+.stock-input{
+  width:80px;padding:7px 6px;text-align:center;
+  background:rgba(0,0,0,.40);border:1px solid rgba(255,255,255,.18);border-radius:6px;
+  color:#fff;font-size:13px;outline:none;
 }
-
-.stock-row { display: flex; align-items: center; gap: 6px; }
-
-.size-select {
-  width: 60px;
-  padding: 6px;
-  background: rgba(255,255,255,0.3);
-  border: none;
-  border-radius: 6px;
-  text-align: center;
-}
-
-.stock-input {
-  width: 80px;
-  padding: 6px;
-  background: rgba(255,255,255,0.3);
-  border: none;
-  border-radius: 6px;
-  text-align: center;
-}
-
-.unit { font-size: 12px; opacity: 0.8; }
-
-.bottom-nav {
-  position: fixed;
-  bottom: 15px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 12px;
-}
-
-.bottom-nav img { width: 60px; cursor: pointer; transition: transform 0.15s; }
-.bottom-nav img:hover { transform: scale(1.1); }
+.stock-input:focus{border-color:rgba(210,170,100,.65)}
+.st-msg{flex-shrink:0;font-size:12px;text-align:center;min-height:18px;padding:2px 0}
+.st-err{color:rgba(220,80,80,.9)}.st-ok{color:rgba(100,220,130,.9)}
+.nav-bar{flex-shrink:0;width:100%;max-width:400px;display:flex;justify-content:space-around;padding:6px 8px env(safe-area-inset-bottom,8px);background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,.07)}
+.nav-bar img{height:44px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+.nav-bar img:active{opacity:.6}
+.ld-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center}
+.ld-ov.show{display:flex}
+.ld-txt{font-size:12px;letter-spacing:2.5px;color:rgba(220,188,128,1)}
 </style>
 </head>
-
 <body>
-
-<img src="images/ttl_stockmanage.png" class="title-img" alt="Stock Manage">
-
-<div class="stone-name" id="stoneName"></div>
-
-<div class="stock-container">
-  <div class="stock-header">
-    <div>Size</div>
-    <div>Stock</div>
+<img class="ttl" src="images/ttl_stockmanage.png" alt="Stock Management"/>
+<div class="content">
+  <div class="zone-name"><div class="nk-text" id="nk-text">—</div></div>
+  <div class="zone-table">
+    <div class="tbl-header">
+      <span class="hdr-size">Size</span><span class="hdr-unit">  </span>
+      <span class="hdr-stock">Stock</span><span class="hdr-pcs">  </span>
+    </div>
+    <div id="rows-container"></div>
   </div>
-  <div id="rows"></div>
 </div>
-
-<div class="bottom-nav">
-  <img src="images/btn_go_home.png"   alt="홈"      onclick="goHome()">
-  <img src="images/btn_go_before.png" alt="뒤로"    onclick="goBefore()">
-  <img src="images/btn_addsize.png"   alt="행추가"  onclick="addSize()">
-  <img src="images/btn_update.png"    alt="업데이트" onclick="updateStock()">
+<div class="st-msg" id="st-msg"></div>
+<div class="nav-bar">
+  <img src="images/btn_go_home.png"   id="b-home"/>
+  <img src="images/btn_go_before.png" id="b-back"/>
+  <img src="images/btn_addsize.png"   id="b-add"/>
+  <img src="images/btn_update.png"    id="b-update"/>
 </div>
-
+<div class="ld-ov" id="ld-ov"><div class="ld-txt">UPDATING...</div></div>
 <script>
-// ── 초기화 ─────────────────────────────────────────────────────
-// state.js getSelectedStone()으로 원석 정보 읽기
-const stone = getSelectedStone();
-const selectedNameKr = stone.nameKr;
+"use strict";
+var nk=null, allSizes=[];
 
-let sizeList = [];
+document.addEventListener("DOMContentLoaded", async function(){
+  nk=requireNameKr(); if(!nk) return;
+  document.getElementById("nk-text").textContent=nk;
+  document.getElementById("b-home").onclick  =function(){ clearAndGoFromInventory("index.html"); };
+  document.getElementById("b-back").onclick  =function(){ clearAndGoFromInventory("inventory.html"); };
+  document.getElementById("b-add").onclick   =addRow;
+  document.getElementById("b-update").onclick=onUpdate;
+  await loadData();
+});
 
-window.onload = async function () {
-  if (!selectedNameKr) {
-    alert("원석 정보가 없습니다. 목록으로 돌아가세요.");
-    location.href = "inventory.html";
-    return;
-  }
-
-  document.getElementById("stoneName").textContent = selectedNameKr;
-
+async function loadData(){
   try {
-    showLoading("사이즈 목록 불러오는 중...");
-    await loadSizeMaster();
-  } catch (err) {
-    hideLoading();
-    alert("사이즈 목록 로드 실패: " + err.message);
-    return;
-  }
-
-  try {
-    showLoading("재고 불러오는 중...");
-    await loadInventory();
-  } catch (err) {
-    alert("재고 로드 실패: " + err.message);
-  } finally {
-    hideLoading();
-  }
-};
-
-// ── SizeMaster 로드 ──────────────────────────────────────────
-async function loadSizeMaster() {
-  // api.js apiGet — URLSearchParams가 encodeURIComponent 자동 처리
-  const data = await apiGet("getSizes");
-  if (!data.success || !Array.isArray(data.sizes) || !data.sizes.length) {
-    throw new Error(data.error || "SizeMaster가 비어있습니다.");
-  }
-  sizeList = data.sizes;
-}
-
-// ── Inventory 로드 ────────────────────────────────────────────
-async function loadInventory() {
-  // api.js apiGet params → URLSearchParams 자동 인코딩
-  const data = await apiGet("getStoneInventory", { nameKr: selectedNameKr });
-  if (!data.success || !Array.isArray(data.inventory)) {
-    throw new Error(data.error || "inventory 데이터 없음");
-  }
-
-  const rowsDiv = document.getElementById("rows");
-  rowsDiv.innerHTML = "";
-
-  if (!data.inventory.length) {
-    addRow(); // 최초 등록 시 빈 행 1개
-    return;
-  }
-
-  // [IM1 FIX] SizeMaster 순서 기준으로 정렬 후 렌더
-  // 사용자가 중간 사이즈를 먼저 추가해도 항상 SizeMaster 순서로 표시
-  const sortedInventory = sizeList
-    .map(function(sz) {
-      return data.inventory.find(function(item) { return item.Size === sz; });
-    })
-    .filter(Boolean); // SizeMaster에 없는 사이즈는 제외
-
-  // SizeMaster에 없는 사이즈 (레거시 데이터 등)는 뒤에 추가
-  const unmatchedInventory = data.inventory.filter(function(item) {
-    return !sizeList.includes(item.Size);
-  });
-
-  sortedInventory.concat(unmatchedInventory).forEach(function (item) {
-    addRow(item.Size, item.Stock);
-  });
-}
-
-// ── 행 생성 ──────────────────────────────────────────────────
-function addRow(size, stock) {
-  if (!sizeList.length) {
-    alert("사이즈 목록이 없습니다. 페이지를 새로고침하세요.");
-    return;
-  }
-
-  const row = document.createElement("div");
-  row.className = "stock-row";
-
-  const sel = document.createElement("select");
-  sel.className = "size-select";
-  sizeList.forEach(function (s) {
-    const op = document.createElement("option");
-    op.value = op.textContent = s;
-    if (s === String(size || "")) op.selected = true;
-    sel.appendChild(op);
-  });
-
-  const inp = document.createElement("input");
-  inp.type      = "number";
-  inp.className = "stock-input";
-  inp.min       = "0";
-  inp.step      = "1";
-  inp.value     = (stock !== undefined && stock !== "") ? stock : "";
-
-  row.appendChild(sel);
-  row.appendChild(makeUnit("mm"));
-  row.appendChild(inp);
-  row.appendChild(makeUnit("pcs"));
-
-  document.getElementById("rows").appendChild(row);
-}
-
-function makeUnit(text) {
-  const d = document.createElement("div");
-  d.className = "unit";
-  d.textContent = text;
-  return d;
-}
-
-// ── 행 추가 ──────────────────────────────────────────────────
-function addSize() {
-  if (!sizeList.length) { alert("사이즈 목록이 없습니다."); return; }
-
-  const used = new Set(
-    Array.from(document.querySelectorAll(".stock-row select"))
-      .map(function (el) { return el.value; })
-  );
-  const next = sizeList.find(function (s) { return !used.has(s); });
-
-  if (!next) { alert("모든 사이즈가 이미 추가되었습니다."); return; }
-  addRow(next, "");
-}
-
-// ── Stock 업데이트 ────────────────────────────────────────────
-async function updateStock() {
-  const rows = document.querySelectorAll(".stock-row");
-  if (!rows.length) { alert("업데이트할 항목이 없습니다."); return; }
-
-  const stockMap = {};
-  let hasError = false;
-
-  rows.forEach(function (row) {
-    const size   = row.querySelector("select").value;
-    const rawVal = row.querySelector("input").value;
-    if (rawVal === "") return;
-
-    const qty = Number(rawVal);
-    if (isNaN(qty) || qty < 0 || !Number.isInteger(qty)) {
-      alert("유효하지 않은 수량: " + rawVal + " (" + size + ")");
-      hasError = true;
-      return;
-    }
-
-    if (!stockMap[selectedNameKr]) stockMap[selectedNameKr] = {};
-    stockMap[selectedNameKr][size] = qty;
-  });
-
-  if (hasError) return;
-  if (!Object.keys(stockMap).length) { alert("수량을 입력하세요."); return; }
-
-  try {
-    showLoading("재고 업데이트 중...");
-    // api.js apiPost → Content-Type: text/plain (CORS Simple Request)
-    const data = await apiPost({ action: "updateStock", data: stockMap });
-    if (data.success) {
-      alert("Stock Updated ✓");
-      // 화면 갱신 (서버 저장값 재표시)
-      await loadInventory();
+    allSizes=await apiGetSizes();
+    var inv=await apiGetStoneInventory(nk);
+    var container=document.getElementById("rows-container");
+    container.innerHTML="";
+    if(inv&&inv.length){
+      inv.forEach(function(row){ addRow(row.size||row.Size, row.stock||row.Stock||0); });
     } else {
-      alert("업데이트 실패: " + (data.error || "알 수 없는 오류"));
+      addRow();
     }
-  } catch (err) {
-    alert("업데이트 오류: " + err.message);
-  } finally {
-    hideLoading();
+  } catch(err){
+    setStatus("로드 실패: "+err.message,"err");
+    addRow();
   }
 }
 
-// goBefore 재정의 (ui.js 기본값 history.back() 유지해도 되지만 명시)
-function goBefore() { location.href = "inventory.html"; }
-</script>
+function addRow(preSize, preStock){
+  var container=document.getElementById("rows-container");
+  var row=document.createElement("div"); row.className="tbl-row";
 
+  // Size 드롭다운
+  var sel=document.createElement("select"); sel.className="size-select";
+  var optEmpty=document.createElement("option"); optEmpty.value=""; optEmpty.textContent="—"; sel.appendChild(optEmpty);
+  allSizes.forEach(function(sz){
+    var opt=document.createElement("option"); opt.value=sz; opt.textContent=sz;
+    if(sz===(preSize||"")) opt.selected=true;
+    sel.appendChild(opt);
+  });
+  var mmLabel=document.createElement("span"); mmLabel.className="unit-label"; mmLabel.textContent="mm";
+
+  // Stock 입력
+  var inp=document.createElement("input"); inp.type="number"; inp.className="stock-input";
+  inp.min="0"; inp.placeholder="0";
+  if(preStock!==undefined&&preStock!==null) inp.value=preStock;
+  var pcsLabel=document.createElement("span"); pcsLabel.className="unit-label"; pcsLabel.textContent="pcs";
+
+  row.appendChild(sel); row.appendChild(mmLabel);
+  row.appendChild(inp); row.appendChild(pcsLabel);
+  container.appendChild(row);
+}
+
+async function onUpdate(){
+  var rows=document.querySelectorAll("#rows-container .tbl-row");
+  var data=[];
+  rows.forEach(function(row){
+    var sz=row.querySelector(".size-select").value;
+    var st=parseInt(row.querySelector(".stock-input").value,10);
+    if(sz&&!isNaN(st)&&st>=0) data.push({size:sz,stock:st});
+  });
+  if(!data.length){ setStatus("Size와 Stock을 입력하세요","err"); return; }
+  document.getElementById("ld-ov").classList.add("show");
+  try {
+    await apiUpdateStock(nk, data);
+    document.getElementById("ld-ov").classList.remove("show");
+    setStatus("업데이트 완료!","ok");
+    setTimeout(function(){ setStatus("",""); },2500);
+  } catch(err){
+    document.getElementById("ld-ov").classList.remove("show");
+    setStatus("실패: "+err.message,"err");
+  }
+}
+
+function setStatus(msg,type){
+  var el=document.getElementById("st-msg"); el.textContent=msg;
+  el.className="st-msg "+(type==="err"?"st-err":type==="ok"?"st-ok":"");
+}
+</script>
 </body>
 </html>
