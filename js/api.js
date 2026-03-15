@@ -5,17 +5,17 @@
  * [수정 1] apiSaveDesign → action:"saveDesign" 단일 GAS 콜
  *           (saveDetails + updateLayoutSummary + updateDetailsStr 서버 통합)
  * [수정 2] 캐시 무효화 완전성: 쓰기 시 관련 캐시 전부 무효화
- * [수정 3] apiPost 에러 표시 → UI.toast 사용 (ui.js 의존)
+ * [수정 3] apiPost 에러 표시 → toastErr() 사용 (ui.js의 toastErr)
  */
 "use strict";
 
 /* ══════════════════════════════════════════════
-   내부 헬퍼: UI.toast 안전 호출
-   (ui.js 로드 전 호출될 경우 alert 폴백)
+   내부 헬퍼: 에러 표시
+   (ui.js의 toastErr 사용, 미로드 시 alert 폴백)
 ══════════════════════════════════════════════ */
 function _uiErr(msg) {
-  if (typeof UI !== "undefined" && UI.toast) {
-    UI.toast(msg, "err", 4000);
+  if (typeof toastErr === "function") {
+    toastErr(msg, 4000);
   } else {
     alert(msg);
   }
