@@ -13,12 +13,12 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{
-  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
+  background:url('bg_all.jpg') center/cover no-repeat fixed;
   font-family:'Arial',sans-serif;color:#fff;
   display:flex;flex-direction:column;align-items:center;
   min-height:100vh;overflow:hidden;
 }
-.ttl{width:260px;max-width:88vw;display:block;margin:14px auto 8px;flex-shrink:0}
+.ttl{width:360px;max-width:92vw;display:block;margin:14px auto 8px;flex-shrink:0}
 
 /*
  * 목록창: 타이틀 이미지 바로 아래 ~ 하단 버튼 바로 위
@@ -44,7 +44,7 @@ body{
 .work-row.selected{background:rgba(255,255,255,0.60)}
 .work-row:active{background:rgba(255,255,255,0.15)}
 
-.work-code{font-size:14px;font-weight:600;letter-spacing:.5px}
+.work-code{font-size:14px;font-weight:600;letter-spacing:.5px;color:#1a2e5a}
 .work-status{
   font-size:10px;padding:3px 10px;border-radius:10px;font-weight:bold;letter-spacing:.5px;
 }
@@ -67,8 +67,8 @@ body{
 .nav-bar{
   width:100%;max-width:480px;flex-shrink:0;
   display:grid;grid-template-columns:repeat(4,1fr);gap:2px;
-  padding:6px 4px env(safe-area-inset-bottom,8px);
-  background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,0.07);
+  padding:8px 4px env(safe-area-inset-bottom,10px);
+  background:transparent;border-top:none;
 }
 .nav-bar .row2{
   grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:2px;
@@ -81,7 +81,7 @@ body{
 </style>
 </head>
 <body>
-<img class="ttl" src="images/ttl_worksdesk.png" alt="Works Desk"/>
+<img class="ttl" src="ttl_worksdesk.png" alt="Works Desk"/>
 
 <div id="list-wrap">
   <div class="empty-msg" id="empty">Loading...</div>
@@ -89,15 +89,15 @@ body{
 
 <div class="nav-bar">
   <!-- 1열 4개 -->
-  <img src="images/btn_go_home.png"     alt="Home"     id="b-home"/>
-  <img src="images/btn_stoneselect.png" alt="Select"   id="b-sel"/>
-  <img src="images/btn_go_design.png"   alt="Design"   id="b-des"/>
-  <img src="images/btn_analysis.png"    alt="Analysis" id="b-ana"/>
+  <img src="btn_go_home.png"     alt="Home"     id="b-home"/>
+  <img src="btn_stoneselect.png" alt="Select"   id="b-sel"/>
+  <img src="btn_go_design.png"   alt="Design"   id="b-des"/>
+  <img src="btn_analysis.png"    alt="Analysis" id="b-ana"/>
   <!-- 2열 3개 -->
   <div class="row2">
-    <img src="images/btn_productimage.png" alt="Product" id="b-pro"/>
-    <img src="images/btn_booklet.png"      alt="Booklet" id="b-bkl"/>
-    <img src="images/btn_forwarding.png"   alt="Forward" id="b-fwd"/>
+    <img src="btn_productimage.png" alt="Product" id="b-pro"/>
+    <img src="btn_booklet.png"      alt="Booklet" id="b-bkl"/>
+    <img src="btn_forwarding.png"   alt="Forward" id="b-fwd"/>
   </div>
 </div>
 
