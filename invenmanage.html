@@ -4,8 +4,11 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <title>ASTERION – Stock Management</title>
-<script src="config.js"></script><script src="api_contract.js"></script>
-<script src="state.js"></script><script src="api.js"></script>
+<script src="config.js"></script>
+<script src="api_contract.js"></script>
+<script src="state.js"></script>
+<script src="api.js"></script>
+<script src="ui.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
@@ -16,6 +19,7 @@ body{
   min-height:100vh;overflow:hidden;
 }
 .ttl{width:240px;max-width:86vw;display:block;margin:10px auto 3px;flex-shrink:0}
+
 /* NameKr:테이블 = 35%:65% */
 .content{flex:1;width:100%;max-width:400px;display:flex;flex-direction:column;min-height:0;padding:0 14px}
 .zone-name{flex:3.5;display:flex;align-items:center;justify-content:center;flex-shrink:0}
@@ -23,14 +27,20 @@ body{
 .zone-table{flex:6.5;display:flex;flex-direction:column;min-height:0;overflow-y:auto}
 .zone-table::-webkit-scrollbar{width:3px}
 .zone-table::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15)}
+
 /* 헤더 행 */
 .tbl-header{display:flex;gap:8px;align-items:center;justify-content:center;padding:4px 0;flex-shrink:0}
-.hdr-size{font-size:10px;letter-spacing:1.2px;color:rgba(255,255,255,.45);width:80px;text-align:center}
-.hdr-unit{font-size:10px;color:rgba(255,255,255,.3);width:24px}
+.hdr-size {font-size:10px;letter-spacing:1.2px;color:rgba(255,255,255,.45);width:80px;text-align:center}
+.hdr-unit {font-size:10px;color:rgba(255,255,255,.3);width:24px}
 .hdr-stock{font-size:10px;letter-spacing:1.2px;color:rgba(255,255,255,.45);width:80px;text-align:center}
-.hdr-pcs{font-size:10px;color:rgba(255,255,255,.3);width:24px}
-/* 데이터 행 */
-.tbl-row{display:flex;gap:8px;align-items:center;justify-content:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+
+/* [FIX] 데이터 행 padding: 5px → 7px */
+.tbl-row{
+  display:flex;gap:8px;align-items:center;justify-content:center;
+  padding:7px 0;                              /* 5px→7px */
+  border-bottom:1px solid rgba(255,255,255,.05)
+}
+
 /* Size 드롭다운 */
 .size-select{
   width:80px;padding:7px 4px;text-align:center;
@@ -39,7 +49,11 @@ body{
   -webkit-appearance:none;appearance:none;
 }
 .size-select:focus{border-color:rgba(210,170,100,.65)}
+/* [FIX] 중복 선택된 드롭다운 강조 */
+.size-select.dup-warn{border-color:rgba(220,80,80,.8);background:rgba(60,0,0,.4)}
+
 .unit-label{width:24px;font-size:11px;color:rgba(255,255,255,.45);text-align:left}
+
 /* Stock 입력 */
 .stock-input{
   width:80px;padding:7px 6px;text-align:center;
@@ -47,14 +61,18 @@ body{
   color:#fff;font-size:13px;outline:none;
 }
 .stock-input:focus{border-color:rgba(210,170,100,.65)}
+
+/* 상태 메시지 */
 .st-msg{flex-shrink:0;font-size:12px;text-align:center;min-height:18px;padding:2px 0}
 .st-err{color:rgba(220,80,80,.9)}.st-ok{color:rgba(100,220,130,.9)}
-.nav-bar{flex-shrink:0;width:100%;max-width:400px;display:flex;justify-content:space-around;padding:6px 8px env(safe-area-inset-bottom,8px);background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,.07)}
+
+.nav-bar{
+  flex-shrink:0;width:100%;max-width:400px;display:flex;justify-content:space-around;
+  padding:6px 8px env(safe-area-inset-bottom,8px);
+  background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,.07)
+}
 .nav-bar img{height:44px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
 .nav-bar img:active{opacity:.6}
-.ld-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center}
-.ld-ov.show{display:flex}
-.ld-txt{font-size:12px;letter-spacing:2.5px;color:rgba(220,188,128,1)}
 </style>
 </head>
 <body>
@@ -63,8 +81,8 @@ body{
   <div class="zone-name"><div class="nk-text" id="nk-text">—</div></div>
   <div class="zone-table">
     <div class="tbl-header">
-      <span class="hdr-size">Size</span><span class="hdr-unit">  </span>
-      <span class="hdr-stock">Stock</span><span class="hdr-pcs">  </span>
+      <span class="hdr-size">Size</span><span class="hdr-unit"> </span>
+      <span class="hdr-stock">Stock</span><span class="hdr-unit"> </span>
     </div>
     <div id="rows-container"></div>
   </div>
@@ -76,87 +94,125 @@ body{
   <img src="images/btn_addsize.png"   id="b-add"/>
   <img src="images/btn_update.png"    id="b-update"/>
 </div>
-<div class="ld-ov" id="ld-ov"><div class="ld-txt">UPDATING...</div></div>
+
 <script>
 "use strict";
-var nk=null, allSizes=[];
+var nk = null, allSizes = [];
 
 document.addEventListener("DOMContentLoaded", async function(){
-  nk=requireNameKr(); if(!nk) return;
-  document.getElementById("nk-text").textContent=nk;
-  document.getElementById("b-home").onclick  =function(){ clearAndGoFromInventory("index.html"); };
-  document.getElementById("b-back").onclick  =function(){ clearAndGoFromInventory("inventory.html"); };
-  document.getElementById("b-add").onclick   =addRow;
-  document.getElementById("b-update").onclick=onUpdate;
+  nk = requireNameKr(); if(!nk) return;
+  document.getElementById("nk-text").textContent = nk;
+  document.getElementById("b-home").onclick   = function(){ clearAndGoFromInventory("index.html"); };
+  document.getElementById("b-back").onclick   = function(){ clearAndGoFromInventory("inventory.html"); };
+  document.getElementById("b-add").onclick    = function(){ addRow(); };
+  document.getElementById("b-update").onclick = onUpdate;
   await loadData();
 });
 
 async function loadData(){
+  showLoading("LOADING...");
   try {
-    allSizes=await apiGetSizes();
-    var inv=await apiGetStoneInventory(nk);
-    var container=document.getElementById("rows-container");
-    container.innerHTML="";
-    if(inv&&inv.length){
-      inv.forEach(function(row){ addRow(row.size||row.Size, row.stock||row.Stock||0); });
+    allSizes = await apiGetSizes();
+    var inv  = await apiGetStoneInventory(nk);
+    hideLoading();
+    var container = document.getElementById("rows-container");
+    container.innerHTML = "";
+    if(inv && inv.length){
+      inv.forEach(function(row){ addRow(row.size || row.Size, row.stock || row.Stock || 0); });
     } else {
-      addRow();
+      addRow();  /* 빈 행 하나 */
     }
   } catch(err){
-    setStatus("로드 실패: "+err.message,"err");
+    hideLoading();
+    setStatus("로드 실패: " + err.message, "err");
     addRow();
   }
 }
 
 function addRow(preSize, preStock){
-  var container=document.getElementById("rows-container");
-  var row=document.createElement("div"); row.className="tbl-row";
+  var container = document.getElementById("rows-container");
+  var row = document.createElement("div"); row.className = "tbl-row";
 
-  // Size 드롭다운
-  var sel=document.createElement("select"); sel.className="size-select";
-  var optEmpty=document.createElement("option"); optEmpty.value=""; optEmpty.textContent="—"; sel.appendChild(optEmpty);
+  /* Size 드롭다운 */
+  var sel = document.createElement("select"); sel.className = "size-select";
+  var optEmpty = document.createElement("option"); optEmpty.value = ""; optEmpty.textContent = "—";
+  sel.appendChild(optEmpty);
   allSizes.forEach(function(sz){
-    var opt=document.createElement("option"); opt.value=sz; opt.textContent=sz;
-    if(sz===(preSize||"")) opt.selected=true;
+    var opt = document.createElement("option"); opt.value = sz; opt.textContent = sz;
+    if(sz === (preSize || "")) opt.selected = true;
     sel.appendChild(opt);
   });
-  var mmLabel=document.createElement("span"); mmLabel.className="unit-label"; mmLabel.textContent="mm";
 
-  // Stock 입력
-  var inp=document.createElement("input"); inp.type="number"; inp.className="stock-input";
-  inp.min="0"; inp.placeholder="0";
-  if(preStock!==undefined&&preStock!==null) inp.value=preStock;
-  var pcsLabel=document.createElement("span"); pcsLabel.className="unit-label"; pcsLabel.textContent="pcs";
+  /* [FIX] Size 변경 시 실시간 중복 체크 */
+  sel.addEventListener("change", function(){ checkDuplicates(); });
+
+  var mmLabel = document.createElement("span"); mmLabel.className = "unit-label"; mmLabel.textContent = "mm";
+
+  /* Stock 입력 */
+  var inp = document.createElement("input"); inp.type = "number"; inp.className = "stock-input";
+  inp.min = "0"; inp.placeholder = "0";
+  if(preStock !== undefined && preStock !== null) inp.value = preStock;
+  var pcsLabel = document.createElement("span"); pcsLabel.className = "unit-label"; pcsLabel.textContent = "pcs";
 
   row.appendChild(sel); row.appendChild(mmLabel);
   row.appendChild(inp); row.appendChild(pcsLabel);
   container.appendChild(row);
 }
 
-async function onUpdate(){
-  var rows=document.querySelectorAll("#rows-container .tbl-row");
-  var data=[];
-  rows.forEach(function(row){
-    var sz=row.querySelector(".size-select").value;
-    var st=parseInt(row.querySelector(".stock-input").value,10);
-    if(sz&&!isNaN(st)&&st>=0) data.push({size:sz,stock:st});
+/**
+ * [FIX] 중복 Size 실시간 체크
+ * 같은 Size가 2개 이상이면 해당 드롭다운에 dup-warn 클래스 추가
+ */
+function checkDuplicates(){
+  var selects = document.querySelectorAll("#rows-container .size-select");
+  var seen    = {};
+  /* 집계 */
+  selects.forEach(function(s){
+    var v = s.value;
+    if(!v) return;
+    seen[v] = (seen[v] || 0) + 1;
   });
-  if(!data.length){ setStatus("Size와 Stock을 입력하세요","err"); return; }
-  document.getElementById("ld-ov").classList.add("show");
+  /* 강조 */
+  selects.forEach(function(s){
+    if(s.value && seen[s.value] > 1){ s.classList.add("dup-warn"); }
+    else { s.classList.remove("dup-warn"); }
+  });
+}
+
+async function onUpdate(){
+  var rows = document.querySelectorAll("#rows-container .tbl-row");
+  var data = [], sizeSet = new Set(), hasDup = false;
+
+  rows.forEach(function(row){
+    var sz = row.querySelector(".size-select").value;
+    var st = parseInt(row.querySelector(".stock-input").value, 10);
+    if(!sz || isNaN(st) || st < 0) return;
+    if(sizeSet.has(sz)){ hasDup = true; return; }  /* [FIX] 중복 사이즈 제거 */
+    sizeSet.add(sz);
+    data.push({ size: sz, stock: st });
+  });
+
+  if(hasDup){
+    setStatus("중복된 Size가 있습니다. 확인 후 다시 시도하세요.", "err");
+    return;
+  }
+  if(!data.length){ setStatus("Size와 Stock을 입력하세요", "err"); return; }
+
+  showLoading("UPDATING...");
   try {
     await apiUpdateStock(nk, data);
-    document.getElementById("ld-ov").classList.remove("show");
-    setStatus("업데이트 완료!","ok");
-    setTimeout(function(){ setStatus("",""); },2500);
+    hideLoading();
+    setStatus("업데이트 완료!", "ok");
+    setTimeout(function(){ setStatus("", ""); }, 2500);
   } catch(err){
-    document.getElementById("ld-ov").classList.remove("show");
-    setStatus("실패: "+err.message,"err");
+    hideLoading();
+    setStatus("실패: " + err.message, "err");
   }
 }
 
-function setStatus(msg,type){
-  var el=document.getElementById("st-msg"); el.textContent=msg;
-  el.className="st-msg "+(type==="err"?"st-err":type==="ok"?"st-ok":"");
+function setStatus(msg, type){
+  var el = document.getElementById("st-msg"); el.textContent = msg;
+  el.className = "st-msg " + (type === "err" ? "st-err" : type === "ok" ? "st-ok" : "");
 }
 </script>
 </body>
