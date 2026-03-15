@@ -1,0 +1,135 @@
+/* ASTERION 공통 스타일 — 각 HTML <style> 태그에 포함 */
+
+/* Reset */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+
+/* Body */
+body.pg{
+background-image:url('../images/bg_all.jpg');
+background-size:cover;background-position:center;background-attachment:fixed;
+font-family:'Arial',sans-serif;color:#fff;
+min-height:100vh;display:flex;flex-direction:column;align-items:center;
+overflow-x:hidden;
+}
+body.pg-home{
+background-image:url('../images/bg_home.jpg');
+background-size:cover;background-position:center;background-attachment:fixed;
+font-family:'Arial',sans-serif;color:#fff;
+min-height:100vh;display:flex;flex-direction:column;align-items:center;
+justify-content:flex-end;overflow-x:hidden;
+}
+
+/* 타이틀 이미지 */
+.ttl-img{width:260px;max-width:88vw;display:block;margin:14px auto 0;flex-shrink:0}
+
+/* Code 표시 */
+.code-disp{
+font-size:12px;color:rgba(220,188,128,.85);letter-spacing:1.5px;
+text-align:center;padding:6px 0 4px;flex-shrink:0;
+}
+
+/* 투명 패널 */
+.panel{
+width:100%;
+background:rgba(255,255,255,0.0); /* 100% 투명 */
+border:1px solid rgba(255,255,255,0.10);
+border-radius:10px;overflow:hidden;
+}
+.panel-60{background:rgba(0,0,0,0.40)} /* 투명도 60% (진짜 불투명) */
+
+/* 스크롤 창 */
+.scroll-pane{overflow-y:auto;-webkit-overflow-scrolling:touch}
+.scroll-pane::-webkit-scrollbar{width:3px}
+.scroll-pane::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2);border-radius:3px}
+
+/* 목록 행 */
+.list-row{
+padding:11px 16px;font-size:14px;cursor:pointer;
+border-bottom:1px solid rgba(255,255,255,0.06);
+text-align:center;transition:background .15s;
+-webkit-tap-highlight-color:transparent;
+}
+.list-row:last-child{border-bottom:none}
+.list-row:active,.list-row.selected{background:rgba(255,255,255,0.40)}
+
+/* 텍스트 입력 */
+.txt-input{
+width:100%;padding:9px 12px;
+background:rgba(0,0,0,0.40);
+border:1px solid rgba(255,255,255,0.18);border-radius:8px;
+color:#fff;font-size:13px;outline:none;
+transition:border-color .15s;
+}
+.txt-input:focus{border-color:rgba(210,170,100,0.7)}
+.txt-input::placeholder{color:rgba(255,255,255,0.3)}
+textarea.txt-input{resize:vertical;line-height:1.6}
+
+/* 하단 네비 바 */
+.nav-bar{
+position:fixed;bottom:0;left:0;right:0;
+display:flex;justify-content:space-around;align-items:center;
+padding:6px 8px env(safe-area-inset-bottom,8px);
+background:rgba(5,4,2,.90);
+border-top:1px solid rgba(255,255,255,0.07);z-index:50;
+flex-shrink:0;
+}
+.nav-bar img{height:44px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+.nav-bar img:active{opacity:.6}
+
+/* 상태 메시지 */
+.st-msg{font-size:12px;text-align:center;min-height:18px;flex-shrink:0;padding:3px 0}
+.st-err{color:rgba(220,80,80,.9)}
+.st-ok {color:rgba(100,220,130,.9)}
+.st-info{color:rgba(220,188,128,.9)}
+
+/* 로딩 오버레이 */
+.ld-overlay{
+display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;
+align-items:center;justify-content:center;flex-direction:column;gap:14px;
+}
+.ld-overlay.show{display:flex}
+.ld-dots{display:flex;gap:7px}
+.ld-dots span{
+width:9px;height:9px;border-radius:50%;background:rgba(220,188,128,.9);
+animation:ldp 1.2s ease-in-out infinite;
+}
+.ld-dots span:nth-child(2){animation-delay:.2s}
+.ld-dots span:nth-child(3){animation-delay:.4s}
+@keyframes ldp{0%,80%,100%{transform:scale(.7);opacity:.4}40%{transform:scale(1.1);opacity:1}}
+.ld-txt{font-size:12px;letter-spacing:2.5px;color:rgba(220,188,128,1)}
+
+/* 팝업 오버레이 */
+.popup-ov{
+display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;
+align-items:center;justify-content:center;
+}
+.popup-ov.show{display:flex}
+.popup-box{
+background:rgba(20,15,8,.97);border:1px solid rgba(200,160,100,.45);
+border-radius:14px;padding:26px 24px 20px;width:270px;text-align:center;
+}
+.popup-q{font-size:14px;color:rgba(220,188,128,1);line-height:1.55;margin-bottom:20px}
+.popup-btns{display:flex;gap:12px;justify-content:center}
+.popup-btns button{
+flex:1;padding:10px 0;border-radius:8px;font-size:14px;font-weight:bold;
+cursor:pointer;border:none;-webkit-tap-highlight-color:transparent;
+}
+.btn-yes{background:rgba(170,130,75,.85);color:#fff}
+.btn-no{background:rgba(255,255,255,.09);color:rgba(255,255,255,.78);border:1px solid rgba(255,255,255,.2)!important}
+
+/* 이미지 선택 박스 */
+.img-select-box{
+position:relative;cursor:pointer;overflow:hidden;
+border-radius:12px;-webkit-tap-highlight-color:transparent;
+display:flex;align-items:center;justify-content:center;
+}
+.img-select-box input[type=file]{
+position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:2;
+}
+.img-select-box .bg-btn{width:100%;height:100%;object-fit:contain;display:block}
+.img-select-box .overlay-img{
+position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;
+display:none;
+}
+.img-select-box .overlay-img.show{display:block}
