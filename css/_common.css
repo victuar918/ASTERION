@@ -1,135 +1,169 @@
-/* ASTERION 공통 스타일 — 각 HTML <style> 태그에 포함 */
+/* ============================================================
+   ASTERION — common.css
+   모든 HTML에서 공통으로 적용되는 스타일
+   <link rel="stylesheet" href="css/common.css"/> 로 불러오기
+   ============================================================ */
 
-/* Reset */
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
+/* ── 리셋 ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
 
-/* Body */
-body.pg{
-background-image:url('../images/bg_all.jpg');
-background-size:cover;background-position:center;background-attachment:fixed;
-font-family:'Arial',sans-serif;color:#fff;
-min-height:100vh;display:flex;flex-direction:column;align-items:center;
-overflow-x:hidden;
-}
-body.pg-home{
-background-image:url('../images/bg_home.jpg');
-background-size:cover;background-position:center;background-attachment:fixed;
-font-family:'Arial',sans-serif;color:#fff;
-min-height:100vh;display:flex;flex-direction:column;align-items:center;
-justify-content:flex-end;overflow-x:hidden;
-}
-
-/* 타이틀 이미지 */
-.ttl-img{width:260px;max-width:88vw;display:block;margin:14px auto 0;flex-shrink:0}
-
-/* Code 표시 */
-.code-disp{
-font-size:12px;color:rgba(220,188,128,.85);letter-spacing:1.5px;
-text-align:center;padding:6px 0 4px;flex-shrink:0;
+/* ── 기본 body ──
+   각 HTML은 body에 background-image만 추가하면 됨 */
+body {
+  font-family: 'Arial', sans-serif;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  overflow: hidden;
+  /* 갤럭시 S24 Ultra 기준 하단 네비게이션 바 여백 */
+  padding-bottom: env(safe-area-inset-bottom, 48px);
 }
 
-/* 투명 패널 */
-.panel{
-width:100%;
-background:rgba(255,255,255,0.0); /* 100% 투명 */
-border:1px solid rgba(255,255,255,0.10);
-border-radius:10px;overflow:hidden;
+/* ── 타이틀 이미지 ── */
+.ttl {
+  width: 360px;
+  max-width: 92vw;
+  display: block;
+  margin: 14px auto 8px;
+  flex-shrink: 0;
 }
-.panel-60{background:rgba(0,0,0,0.40)} /* 투명도 60% (진짜 불투명) */
 
-/* 스크롤 창 */
-.scroll-pane{overflow-y:auto;-webkit-overflow-scrolling:touch}
-.scroll-pane::-webkit-scrollbar{width:3px}
-.scroll-pane::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2);border-radius:3px}
+/* ── StructureCode / NameKr 표시 ── */
+.code-disp {
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  text-align: center;
+  color: rgba(220, 188, 128, .9);
+  padding: 4px 0 6px;
+  flex-shrink: 0;
+}
 
-/* 목록 행 */
-.list-row{
-padding:11px 16px;font-size:14px;cursor:pointer;
-border-bottom:1px solid rgba(255,255,255,0.06);
-text-align:center;transition:background .15s;
--webkit-tap-highlight-color:transparent;
+/* ── 하단 네비바 ──
+   투명 배경, 테두리 없음, 하단 안전 여백 포함 */
+.nav-bar {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 8px 8px env(safe-area-inset-bottom, 48px);
+  background: transparent;
+  border-top: none;
 }
-.list-row:last-child{border-bottom:none}
-.list-row:active,.list-row.selected{background:rgba(255,255,255,0.40)}
 
-/* 텍스트 입력 */
-.txt-input{
-width:100%;padding:9px 12px;
-background:rgba(0,0,0,0.40);
-border:1px solid rgba(255,255,255,0.18);border-radius:8px;
-color:#fff;font-size:13px;outline:none;
-transition:border-color .15s;
+/* 버튼 이미지 크기 */
+.nav-bar img {
+  height: 88px;
+  object-fit: contain;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .15s;
 }
-.txt-input:focus{border-color:rgba(210,170,100,0.7)}
-.txt-input::placeholder{color:rgba(255,255,255,0.3)}
-textarea.txt-input{resize:vertical;line-height:1.6}
+.nav-bar img:active { opacity: .6; }
 
-/* 하단 네비 바 */
-.nav-bar{
-position:fixed;bottom:0;left:0;right:0;
-display:flex;justify-content:space-around;align-items:center;
-padding:6px 8px env(safe-area-inset-bottom,8px);
-background:rgba(5,4,2,.90);
-border-top:1px solid rgba(255,255,255,0.07);z-index:50;
-flex-shrink:0;
+/* worksdesk 전용 2열 그리드 nav */
+.nav-bar.grid4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  max-width: 480px;
 }
-.nav-bar img{height:44px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
-.nav-bar img:active{opacity:.6}
+.nav-bar.grid4 .row2 {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+}
+.nav-bar.grid4 img,
+.nav-bar.grid4 .row2 img {
+  width: 100%;
+  height: 88px;
+  object-fit: contain;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .15s;
+}
+.nav-bar.grid4 img:active,
+.nav-bar.grid4 .row2 img:active { opacity: .6; }
 
-/* 상태 메시지 */
-.st-msg{font-size:12px;text-align:center;min-height:18px;flex-shrink:0;padding:3px 0}
-.st-err{color:rgba(220,80,80,.9)}
-.st-ok {color:rgba(100,220,130,.9)}
-.st-info{color:rgba(220,188,128,.9)}
+/* ── 투명도 60% 입력창 ── */
+.input-60 {
+  background: rgba(0, 0, 0, .60);
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  outline: none;
+  transition: border-color .15s;
+}
+.input-60:focus { border-color: rgba(210, 170, 100, .65); }
+.input-60::placeholder { color: rgba(255, 255, 255, .3); }
 
-/* 로딩 오버레이 */
-.ld-overlay{
-display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;
-align-items:center;justify-content:center;flex-direction:column;gap:14px;
+/* ── 목록 행 ── */
+.list-row {
+  padding: 12px 16px;
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+  transition: background .15s;
+  -webkit-tap-highlight-color: transparent;
 }
-.ld-overlay.show{display:flex}
-.ld-dots{display:flex;gap:7px}
-.ld-dots span{
-width:9px;height:9px;border-radius:50%;background:rgba(220,188,128,.9);
-animation:ldp 1.2s ease-in-out infinite;
+.list-row:active { background: rgba(255, 255, 255, .15); }
+/* 선택 시 투명도 60% + 네이비 텍스트 */
+.list-row.selected {
+  background: rgba(255, 255, 255, .60);
+  color: #1a2e5a;
+  font-weight: 600;
 }
-.ld-dots span:nth-child(2){animation-delay:.2s}
-.ld-dots span:nth-child(3){animation-delay:.4s}
-@keyframes ldp{0%,80%,100%{transform:scale(.7);opacity:.4}40%{transform:scale(1.1);opacity:1}}
-.ld-txt{font-size:12px;letter-spacing:2.5px;color:rgba(220,188,128,1)}
 
-/* 팝업 오버레이 */
-.popup-ov{
-display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;
-align-items:center;justify-content:center;
+/* ── 빈 목록 안내 ── */
+.empty-row {
+  padding: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, .28);
 }
-.popup-ov.show{display:flex}
-.popup-box{
-background:rgba(20,15,8,.97);border:1px solid rgba(200,160,100,.45);
-border-radius:14px;padding:26px 24px 20px;width:270px;text-align:center;
-}
-.popup-q{font-size:14px;color:rgba(220,188,128,1);line-height:1.55;margin-bottom:20px}
-.popup-btns{display:flex;gap:12px;justify-content:center}
-.popup-btns button{
-flex:1;padding:10px 0;border-radius:8px;font-size:14px;font-weight:bold;
-cursor:pointer;border:none;-webkit-tap-highlight-color:transparent;
-}
-.btn-yes{background:rgba(170,130,75,.85);color:#fff}
-.btn-no{background:rgba(255,255,255,.09);color:rgba(255,255,255,.78);border:1px solid rgba(255,255,255,.2)!important}
 
-/* 이미지 선택 박스 */
-.img-select-box{
-position:relative;cursor:pointer;overflow:hidden;
-border-radius:12px;-webkit-tap-highlight-color:transparent;
-display:flex;align-items:center;justify-content:center;
+/* ── 스크롤바 ── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .15); border-radius: 3px; }
+
+/* ── 이미지 오버레이 박스 (productimage / stoneinfo 공통) ── */
+.img-wrap {
+  position: relative;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-.img-select-box input[type=file]{
-position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:2;
+.img-wrap input[type=file] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
 }
-.img-select-box .bg-btn{width:100%;height:100%;object-fit:contain;display:block}
-.img-select-box .overlay-img{
-position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;
-display:none;
+.img-bg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  position: relative;
+  z-index: 1;
 }
-.img-select-box .overlay-img.show{display:block}
+.img-ov {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  z-index: 2;
+  display: none;
+}
+.img-ov.show { display: block; }
