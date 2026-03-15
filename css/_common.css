@@ -49,7 +49,7 @@ body {
   justify-content: space-around;
   align-items: center;
   padding: 8px 8px 8px;
-  margin-bottom: 56px;   /* 갤럭시 S24 Ultra 하단 네비바 여백 — 부족하면 늘릴 것 */
+  margin-bottom: 100px;   /* 갤럭시 S24 Ultra 하단 네비바 여백 — 부족하면 늘릴 것 */
   background: transparent;
   border-top: none;
 }
