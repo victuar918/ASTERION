@@ -8,8 +8,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 
-/* ── 기본 body ──
-   각 HTML은 body에 background-image만 추가하면 됨 */
+/* ── 기본 body ── */
 body {
   font-family: 'Arial', sans-serif;
   color: #fff;
@@ -18,8 +17,6 @@ body {
   align-items: center;
   min-height: 100vh;
   overflow: hidden;
-  /* 갤럭시 S24 Ultra 기준 하단 네비게이션 바 여백 */
-  padding-bottom: env(safe-area-inset-bottom, 80px);
 }
 
 /* ── 타이틀 이미지 ── */
@@ -42,7 +39,8 @@ body {
 }
 
 /* ── 하단 네비바 ──
-   투명 배경, 테두리 없음, 하단 안전 여백 포함 */
+   투명 배경, 테두리 없음
+   margin-bottom 으로 Android 네비게이션 바 위에 고정 여백 확보 */
 .nav-bar {
   flex-shrink: 0;
   width: 100%;
@@ -50,7 +48,8 @@ body {
   display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 8px 8px env(safe-area-inset-bottom, 48px);
+  padding: 8px 8px 8px;
+  margin-bottom: 56px;   /* 갤럭시 S24 Ultra 하단 네비바 여백 — 부족하면 늘릴 것 */
   background: transparent;
   border-top: none;
 }
@@ -114,7 +113,6 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 .list-row:active { background: rgba(255, 255, 255, .15); }
-/* 선택 시 투명도 60% + 네이비 텍스트 */
 .list-row.selected {
   background: rgba(255, 255, 255, .60);
   color: #1a2e5a;
