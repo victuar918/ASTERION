@@ -8,6 +8,7 @@
 <script src="api_contract.js"></script>
 <script src="state.js"></script>
 <script src="api.js"></script>
+<script src="ui.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
@@ -18,14 +19,20 @@ body{
   min-height:100vh;overflow:hidden;
 }
 .ttl{width:260px;max-width:88vw;display:block;margin:14px auto 8px;flex-shrink:0}
-/* 목록창: 타이틀 ~ 네비 사이 100% 공간 */
+
+/*
+ * 목록창: 타이틀 이미지 바로 아래 ~ 하단 버튼 바로 위
+ * flex:1 로 남은 공간을 모두 차지, 내부 스크롤
+ */
 #list-wrap{
   flex:1;width:100%;max-width:480px;
   overflow-y:auto;-webkit-overflow-scrolling:touch;
   padding:0 0 4px;
+  position:relative;   /* empty-msg 절대 위치용 */
 }
 #list-wrap::-webkit-scrollbar{width:3px}
 #list-wrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15)}
+
 .work-row{
   display:flex;align-items:center;justify-content:space-between;
   padding:13px 16px;
@@ -33,8 +40,10 @@ body{
   cursor:pointer;transition:background .15s;
   -webkit-tap-highlight-color:transparent;
 }
+/* 선택 시 투명도 60% (rgba 0.60) */
 .work-row.selected{background:rgba(255,255,255,0.60)}
 .work-row:active{background:rgba(255,255,255,0.15)}
+
 .work-code{font-size:14px;font-weight:600;letter-spacing:.5px}
 .work-status{
   font-size:10px;padding:3px 10px;border-radius:10px;font-weight:bold;letter-spacing:.5px;
@@ -42,8 +51,19 @@ body{
 .st-Tasking   {background:rgba(60,120,200,.4);color:#a0c4ff}
 .st-AS        {background:rgba(200,130,50,.4);color:#ffd59a}
 .st-Forwarding{background:rgba(160,80,200,.4);color:#d9aaff}
-.empty-msg{text-align:center;padding:40px 16px;font-size:13px;color:rgba(255,255,255,.3)}
-/* 네비: 4+3 2열 그리드 */
+
+.empty-msg{
+  text-align:center;padding:40px 16px;
+  font-size:13px;color:rgba(255,255,255,.3);
+  display:none;   /* JS로 제어 */
+}
+.err-msg{color:rgba(220,80,80,.8)!important}
+
+/*
+ * 하단 네비: 버튼 7개 → 4 + 3 두 줄
+ * 1열: Home / Stone Select / Design / Analysis&Memo
+ * 2열: Product Image / Booklet / Forwarding
+ */
 .nav-bar{
   width:100%;max-width:480px;flex-shrink:0;
   display:grid;grid-template-columns:repeat(4,1fr);gap:2px;
@@ -86,57 +106,86 @@ body{
 var selCode = null;
 
 document.addEventListener("DOMContentLoaded", async function(){
-  // 네비 이벤트
+  /* 네비 이벤트 */
   document.getElementById("b-home").onclick = function(){ clearAndGo("index.html"); };
-  document.getElementById("b-sel").onclick  = function(){ if(!selCode){alert("StructureCode를 선택하세요");return;} setStructureCode(selCode); goPage("selectstone.html",selCode); };
-  document.getElementById("b-des").onclick  = function(){ if(!selCode){alert("StructureCode를 선택하세요");return;} setStructureCode(selCode); goPage("design.html",selCode); };
-  document.getElementById("b-ana").onclick  = function(){ if(!selCode){alert("StructureCode를 선택하세요");return;} setStructureCode(selCode); goPage("analysismemo.html",selCode); };
-  document.getElementById("b-pro").onclick  = function(){ if(!selCode){alert("StructureCode를 선택하세요");return;} setStructureCode(selCode); goPage("productimage.html",selCode); };
-  document.getElementById("b-bkl").onclick  = function(){ if(!selCode){alert("StructureCode를 선택하세요");return;} setStructureCode(selCode); goPage("booklet.html",selCode); };
-  document.getElementById("b-fwd").onclick  = function(){ if(!selCode){alert("StructureCode를 선택하세요");return;} setStructureCode(selCode); goPage("forwarding.html",selCode); };
+
+  /* StructureCode 미선택 시 경고 후 차단 공통 함수 */
+  function requireSel(page){
+    if(!selCode){ toastErr("StructureCode를 먼저 선택하세요"); return; }
+    setStructureCode(selCode);
+    goPage(page, selCode);
+  }
+  document.getElementById("b-sel").onclick = function(){ requireSel("selectstone.html"); };
+  document.getElementById("b-des").onclick = function(){ requireSel("design.html"); };
+  document.getElementById("b-ana").onclick = function(){ requireSel("analysismemo.html"); };
+  document.getElementById("b-pro").onclick = function(){ requireSel("productimage.html"); };
+  document.getElementById("b-bkl").onclick = function(){ requireSel("booklet.html"); };
+  document.getElementById("b-fwd").onclick = function(){ requireSel("forwarding.html"); };
 
   await loadList();
 });
 
 async function loadList(){
-  var el = document.getElementById("empty");
+  var el   = document.getElementById("empty");
+  var wrap = document.getElementById("list-wrap");
+
+  /* [FIX] 재호출 시 이전 목록 중복 방지 */
+  wrap.querySelectorAll(".work-row").forEach(function(r){ r.remove(); });
+  selCode = null;       /* 선택 상태 초기화 */
+
   el.textContent = "Loading...";
+  el.className   = "empty-msg";
+  el.style.display = "block";
+
   try {
     var data = await apiGetTaskingList();
-    // Tasking / A/S / Forwarding만 필터
+
+    /* Tasking / A/S / Forwarding 만 표시 */
     var filtered = data.filter(function(d){
       var s = String(d.status || d.Status || "");
       return s === STATUS.TASKING || s === STATUS.AS || s === STATUS.FORWARDING;
     });
-    el.style.display = filtered.length ? "none" : "block";
-    if (!filtered.length){ el.textContent = "작업 대기 중인 항목이 없습니다"; return; }
+
+    if(!filtered.length){
+      el.textContent   = "작업 대기 중인 항목이 없습니다";
+      el.style.display = "block";
+      return;
+    }
+
     el.style.display = "none";
-    var wrap = document.getElementById("list-wrap");
+
     filtered.forEach(function(item){
       var code = String(item.structureCode || item.StructureCode || "");
-      var st   = String(item.status || item.Status || "");
+      var st   = String(item.status        || item.Status        || "");
       var row  = document.createElement("div");
       row.className = "work-row";
       row.setAttribute("data-code", code);
       row.innerHTML =
         '<span class="work-code">' + esc(code) + '</span>' +
         '<span class="work-status st-' + esc(st.replace("/","")) + '">' + esc(st) + '</span>';
+
       row.addEventListener("click", function(){
         if(selCode === code){
-          selCode = null; row.classList.remove("selected");
+          /* 같은 행 재클릭 → 선택 해제 */
+          selCode = null;
+          row.classList.remove("selected");
         } else {
-          document.querySelectorAll(".work-row.selected").forEach(function(r){ r.classList.remove("selected"); });
-          selCode = code; row.classList.add("selected");
+          /* 다른 행 선택 */
+          wrap.querySelectorAll(".work-row.selected").forEach(function(r){ r.classList.remove("selected"); });
+          selCode = code;
+          row.classList.add("selected");
         }
       });
+
       wrap.appendChild(row);
     });
+
   } catch(err){
-    el.textContent = "목록 로드 실패: " + err.message;
+    el.textContent   = "목록 로드 실패: " + err.message;
+    el.className     = "empty-msg err-msg";
     el.style.display = "block";
   }
 }
 </script>
 </body>
 </html>
-
