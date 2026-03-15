@@ -4,148 +4,60 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <title>ASTERION – Forwarding</title>
-<script src="config.js"></script>
-<script src="api_contract.js"></script>
-<script src="state.js"></script>
-<script src="api.js"></script>
-<script src="ui.js"></script>
+<script src="js/config.js"></script>
+<script src="js/api_contract.js"></script>
+<script src="js/state.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{
-  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
-  font-family:'Arial',sans-serif;color:#fff;
-  display:flex;flex-direction:column;align-items:center;
-  min-height:100vh;overflow:hidden;
-}
-.ttl{width:240px;max-width:86vw;display:block;margin:10px auto 3px;flex-shrink:0}
+body{background:url('images/bg_all.jpg') center/cover no-repeat fixed;font-family:'Arial',sans-serif;color:#fff;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
+.ttl{width:360px;max-width:92vw;display:block;margin:14px auto 4px;flex-shrink:0}
 
-/*
- * 콘텐츠 레이아웃:
- * StructureCode + 두 입력란(1:1) 을
- * 타이틀~버튼 사이 공간에 배치
- * StructureCode 공간 : 두 입력란 공간 = 1:2
- */
-.content{
-  flex:1;width:100%;max-width:420px;
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  padding:0 20px;gap:0;min-height:0;
-}
-/* StructureCode 표시 공간 */
-.zone-code{
-  flex:1;display:flex;align-items:center;justify-content:center;
-}
-.code-text{
-  font-size:15px;font-weight:600;color:rgba(220,188,128,.9);
-  letter-spacing:2px;text-align:center;
-}
-/* 두 입력란 공간 (1:1) */
-.zone-inputs{
-  flex:2;width:100%;display:flex;flex-direction:column;
-  justify-content:center;gap:14px;
-}
+/* StructureCode 공간 : 두 입력란 공간 = 1:2 */
+.content{flex:1;width:100%;max-width:420px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 22px;gap:0}
+.zone-code{flex:1;display:flex;align-items:center;justify-content:center}
+.code-text{font-size:15px;font-weight:600;color:rgba(220,188,128,.9);letter-spacing:2px;text-align:center}
+.zone-inputs{flex:2;width:100%;display:flex;flex-direction:column;justify-content:center;gap:16px}
 .input-group{display:flex;flex-direction:column;gap:5px}
-.input-label{
-  font-size:11px;color:rgba(255,255,255,.55);
-  letter-spacing:.8px;padding-left:2px;
-}
+.input-label{font-size:11px;color:rgba(255,255,255,.55);letter-spacing:.8px;padding-left:2px}
 .date-input{
   width:100%;padding:11px 14px;
-  background:rgba(0,0,0,.42);
+  background:rgba(0,0,0,.60);
   border:1px solid rgba(255,255,255,.18);border-radius:8px;
-  color:#fff;font-size:14px;outline:none;
-  transition:border-color .15s;
-  /* 날짜 입력 스타일 */
-  -webkit-appearance:none;
-  color-scheme:dark;
+  color:#fff;font-size:14px;outline:none;transition:border-color .15s;
+  -webkit-appearance:none;color-scheme:dark;
 }
 .date-input:focus{border-color:rgba(210,170,100,.7)}
-.date-input::placeholder{color:rgba(255,255,255,.28)}
-/* 상태 힌트 */
-.status-hint{
-  font-size:10px;letter-spacing:.5px;
-  color:rgba(220,188,128,.6);text-align:center;
-  min-height:14px;padding:2px 0;flex-shrink:0;
-}
+.status-hint{font-size:11px;text-align:center;color:rgba(220,188,128,.65);min-height:16px;padding:4px 0}
 
-.st-msg{flex-shrink:0;font-size:12px;text-align:center;min-height:18px;padding:3px 0}
-.st-err{color:rgba(220,80,80,.9)}
-.st-ok{color:rgba(100,220,130,.9)}
-.st-info{color:rgba(220,188,128,.8)}
-
-.nav-bar{
-  flex-shrink:0;width:100%;max-width:420px;
-  display:flex;justify-content:space-around;
-  padding:6px 8px env(safe-area-inset-bottom,8px);
-  background:rgba(5,4,2,.92);
-  border-top:1px solid rgba(255,255,255,.07);
-}
-.nav-bar img{
-  height:44px;cursor:pointer;
-  -webkit-tap-highlight-color:transparent;transition:opacity .15s;
-}
+.nav-bar{flex-shrink:0;width:100%;max-width:420px;display:flex;justify-content:space-around;align-items:center;padding:8px 8px env(safe-area-inset-bottom,10px);background:transparent;border-top:none}
+.nav-bar img{height:88px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
 .nav-bar img:active{opacity:.6}
-
-.ld-ov{
-  display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);
-  z-index:200;align-items:center;justify-content:center;
-}
-.ld-ov.show{display:flex}
-.ld-dots{display:flex;gap:7px}
-.ld-dots span{
-  width:9px;height:9px;border-radius:50%;
-  background:rgba(220,188,128,.9);
-  animation:ldp 1.2s ease-in-out infinite;
-}
-.ld-dots span:nth-child(2){animation-delay:.2s}
-.ld-dots span:nth-child(3){animation-delay:.4s}
-@keyframes ldp{0%,80%,100%{transform:scale(.7);opacity:.4}40%{transform:scale(1.1);opacity:1}}
-.ld-txt{font-size:12px;letter-spacing:2.5px;color:rgba(220,188,128,1);margin-top:10px}
 </style>
 </head>
 <body>
-
 <img class="ttl" src="images/ttl_forwarding.png" alt="Forwarding Management"/>
-
 <div class="content">
-  <!-- StructureCode 표시 -->
-  <div class="zone-code">
-    <div class="code-text" id="code-text">—</div>
-  </div>
-
-  <!-- 날짜 입력 두 개 (1:1) -->
+  <div class="zone-code"><div class="code-text" id="code-text">—</div></div>
   <div class="zone-inputs">
     <div class="input-group">
       <div class="input-label">Forwarding Date</div>
-      <input class="date-input" type="date" id="fwd-date" placeholder="YYYY-MM-DD"/>
+      <input class="date-input" type="date" id="fwd-date"/>
     </div>
     <div class="input-group">
       <div class="input-label">Delivery Completed Date</div>
-      <input class="date-input" type="date" id="del-date" placeholder="YYYY-MM-DD"/>
+      <input class="date-input" type="date" id="del-date"/>
     </div>
   </div>
-
-  <!-- Status 힌트 -->
   <div class="status-hint" id="status-hint"></div>
 </div>
-
-<div class="st-msg" id="st-msg"></div>
-
 <div class="nav-bar">
   <img src="images/btn_go_home.png"   alt="Home"   id="b-home"/>
   <img src="images/btn_go_before.png" alt="Before" id="b-back"/>
   <img src="images/btn_update.png"    alt="Update" id="b-update"/>
 </div>
-
-<div class="ld-ov" id="ld-ov">
-  <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
-    <div class="ld-dots"><span></span><span></span><span></span></div>
-    <div class="ld-txt">UPDATING...</div>
-  </div>
-</div>
-
-<script src="forwarding.js"></script>
+<script src="js/forwarding.js"></script>
 </body>
 </html>
-
