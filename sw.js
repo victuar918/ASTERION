@@ -1,88 +1,54 @@
 /**
- * sw.js — ASTERION Service Worker
- * 역할: 앱 셸(HTML/JS/CSS/이미지) 캐싱 → 오프라인에서도 화면 로드 가능
- * 데이터(GAS API 통신)는 캐시하지 않음 — 항상 최신 서버 데이터 사용
+ * sw.js — ASTERION Service Worker (안전판)
+ *
+ * 전략: Network-First
+ * - 네트워크 요청 성공 → 응답 반환 + 백그라운드 캐싱
+ * - 네트워크 실패(오프라인) → 캐시에서 반환
+ * - GAS API(script.google.com) → 캐싱 없이 항상 네트워크
+ *
+ * 설치 실패 방지: 사전 캐싱 없음, 동적 캐싱만 사용
  */
 
-var CACHE_NAME = "asterion-v1";
+var CACHE = "asterion-v1";
 
-/* 캐싱할 앱 셸 파일 목록 */
-var CACHE_URLS = [
-  "/ASTERION/index.html",
-  "/ASTERION/worksdesk.html",
-  "/ASTERION/selectstone.html",
-  "/ASTERION/design.html",
-  "/ASTERION/analysismemo.html",
-  "/ASTERION/productimage.html",
-  "/ASTERION/booklet.html",
-  "/ASTERION/structureindex.html",
-  "/ASTERION/inventory.html",
-  "/ASTERION/stoneinfo.html",
-  "/ASTERION/newlisting.html",
-  "/ASTERION/invenmanage.html",
-  "/ASTERION/forwarding.html",
-  "/ASTERION/js/config.js",
-  "/ASTERION/js/api_contract.js",
-  "/ASTERION/js/state.js",
-  "/ASTERION/js/api.js",
-  "/ASTERION/js/ui.js",
-  "/ASTERION/js/design.js",
-  "/ASTERION/js/booklet.js",
-  "/ASTERION/js/forwarding.js"
-];
-
-/* ── Install: 앱 셸 캐싱 ── */
-self.addEventListener("install", function(event) {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(CACHE_URLS);
-    }).then(function() {
-      return self.skipWaiting();
-    })
-  );
+/* ── Install: 최소 설치, 실패 없음 ── */
+self.addEventListener("install", function(e) {
+  self.skipWaiting();
 });
 
-/* ── Activate: 이전 버전 캐시 삭제 ── */
-self.addEventListener("activate", function(event) {
-  event.waitUntil(
+/* ── Activate: 이전 캐시 정리 ── */
+self.addEventListener("activate", function(e) {
+  e.waitUntil(
     caches.keys().then(function(keys) {
       return Promise.all(
-        keys.filter(function(key) { return key !== CACHE_NAME; })
-            .map(function(key) { return caches.delete(key); })
+        keys.filter(function(k) { return k !== CACHE; })
+            .map(function(k) { return caches.delete(k); })
       );
-    }).then(function() {
-      return self.clients.claim();
-    })
+    }).then(function() { return self.clients.claim(); })
   );
 });
 
-/* ── Fetch: 캐시 우선, 없으면 네트워크 ── */
-self.addEventListener("fetch", function(event) {
-  var url = event.request.url;
+/* ── Fetch: Network-First ── */
+self.addEventListener("fetch", function(e) {
+  /* GET만 처리, POST(GAS API)는 그대로 통과 */
+  if (e.request.method !== "GET") return;
 
-  /* GAS API 요청은 캐시하지 않고 항상 네트워크로 */
-  if (url.indexOf("script.google.com") !== -1) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
+  /* GAS API는 캐싱 없이 통과 */
+  if (e.request.url.indexOf("script.google.com") !== -1) return;
 
-  event.respondWith(
-    caches.match(event.request).then(function(cached) {
-      if (cached) return cached;
-      return fetch(event.request).then(function(response) {
-        /* 이미지 등 앱 셸 외 리소스는 동적 캐싱 */
-        if (response && response.status === 200 && response.type === "basic") {
-          var clone = response.clone();
-          caches.open(CACHE_NAME).then(function(cache) {
-            cache.put(event.request, clone);
-          });
+  e.respondWith(
+    fetch(e.request)
+      .then(function(res) {
+        /* 정상 응답이면 캐시에 저장 후 반환 */
+        if (res && res.status === 200) {
+          var clone = res.clone();
+          caches.open(CACHE).then(function(c) { c.put(e.request, clone); });
         }
-        return response;
-      }).catch(function() {
-        /* 오프라인 + 캐시 없는 경우 index 반환 */
-        return caches.match("/ASTERION/index.html");
-      });
-    })
+        return res;
+      })
+      .catch(function() {
+        /* 오프라인 → 캐시 반환 */
+        return caches.match(e.request);
+      })
   );
 });
-
