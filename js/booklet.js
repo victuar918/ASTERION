@@ -108,4 +108,3 @@ async function onCreatePdf(){
     document.getElementById("st-msg").textContent = "PDF 생성 실패: " + err.message;
   }
 }
-
