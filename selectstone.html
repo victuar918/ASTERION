@@ -1,268 +1,135 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-
-<title>Gemstone Select</title>
-
-<script src="config.js"></script>
-<script src="api_contract.js"></script>
-<script src="state.js"></script>
-<script src="api.js"></script>
-
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>ASTERION – Gemstone Select</title>
+<script src="config.js"></script><script src="api_contract.js"></script>
+<script src="state.js"></script><script src="api.js"></script>
 <style>
-
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
 body{
-margin:0;
-height:100vh;
-
-background:url("images/bg_sub.jpg");
-background-size:cover;
-background-position:center;
-
-display:flex;
-flex-direction:column;
-align-items:center;
-
-font-family:sans-serif;
-color:white;
+  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
+  font-family:'Arial',sans-serif;color:#fff;
+  display:flex;flex-direction:column;align-items:center;
+  min-height:100vh;overflow:hidden;
 }
-
-/* Title */
-
-#title-img{
-width:260px;
-margin-top:15px;
+.ttl{width:240px;max-width:86vw;display:block;margin:12px auto 4px;flex-shrink:0}
+.code-disp{font-size:12px;color:rgba(220,188,128,.85);letter-spacing:1.5px;text-align:center;padding:3px 0 5px;flex-shrink:0}
+/* 두 스크롤 창이 타이틀~버튼 사이를 1:1로 */
+.panes{flex:1;width:100%;max-width:480px;display:flex;flex-direction:column;gap:4px;padding:0 10px;min-height:0}
+.pane-wrap{flex:1;display:flex;flex-direction:column;min-height:0}
+.pane-label{font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:rgba(255,255,255,.3);padding:2px 4px;flex-shrink:0}
+.pane{
+  flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  min-height:0;
 }
-
-/* Container */
-
-#stone-area{
-
-flex:1;
-
-width:90%;
-max-width:420px;
-
-display:flex;
-flex-direction:column;
-
-margin-top:10px;
+.pane::-webkit-scrollbar{width:3px}
+.pane::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15)}
+.stone-row{
+  padding:11px 16px;font-size:14px;text-align:center;cursor:pointer;
+  border-bottom:1px solid rgba(255,255,255,0.07);
+  transition:background .15s;-webkit-tap-highlight-color:transparent;
 }
-
-/* Stone List */
-
-#stone-list{
-
-flex:1;
-
-overflow-y:auto;
-
-background:rgba(255,255,255,0.1);
-
-border-radius:6px;
-
-margin-bottom:8px;
+.stone-row:active{background:rgba(255,255,255,0.15)}
+.empty-row{padding:20px;text-align:center;font-size:12px;color:rgba(255,255,255,.25)}
+.nav-bar{
+  flex-shrink:0;width:100%;max-width:480px;
+  display:flex;justify-content:space-around;
+  padding:6px 8px env(safe-area-inset-bottom,8px);
+  background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,.07);z-index:50;
 }
-
-/* Selected List */
-
-#selected-list{
-
-flex:1;
-
-overflow-y:auto;
-
-background:transparent;
-
-border-radius:6px;
-
-}
-
-/* Item */
-
-.stone-item{
-
-padding:12px;
-
-text-align:center;
-
-border-bottom:1px solid rgba(255,255,255,0.2);
-
-cursor:pointer;
-
-}
-
-/* Buttons */
-
-#nav-bar{
-
-width:100%;
-
-display:flex;
-justify-content:space-around;
-
-padding:10px;
-
-}
-
-#nav-bar img{
-
-width:70px;
-cursor:pointer;
-
-}
-
+.nav-bar img{height:44px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+.nav-bar img:active{opacity:.6}
+.st-msg{flex-shrink:0;font-size:11px;text-align:center;min-height:16px;padding:2px 0;color:rgba(220,80,80,.9)}
 </style>
 </head>
-
-
 <body>
-
-<img id="title-img" src="images/ttl_stoneselect.png">
-
-<div id="stone-area">
-
-<div id="stone-list"></div>
-
-<div id="selected-list"></div>
-
+<img class="ttl" src="images/ttl_stoneselect.png" alt="Gemstone Select"/>
+<div class="code-disp" id="code-disp">—</div>
+<div class="panes">
+  <div class="pane-wrap">
+    <div class="pane-label">Stone List</div>
+    <div class="pane" id="stone-list"><div class="empty-row">Loading...</div></div>
+  </div>
+  <div class="pane-wrap">
+    <div class="pane-label">Selected</div>
+    <div class="pane" id="sel-list"><div class="empty-row">선택된 원석 없음</div></div>
+  </div>
 </div>
-
-
-<div id="nav-bar">
-
-<img src="images/btn_go_home.png" onclick="goHome()">
-
-<img src="images/btn_go_before.png" onclick="goPage('worksdesk.html')">
-
-<img src="images/btn_design.png" onclick="goDesign()">
-
+<div class="st-msg" id="st-msg"></div>
+<div class="nav-bar">
+  <img src="images/btn_go_home.png"  id="b-home"/>
+  <img src="images/btn_go_before.png" id="b-back"/>
+  <img src="images/btn_design.png"   id="b-design"/>
 </div>
-
-
-
 <script>
-
 "use strict";
+var sc = null;
+var allStones = [];   // {nameKr, ...}
+var selected  = [];   // nameKr strings
 
-var structureCode=null
-var allStones=[]
-var selectedStones=[]
+document.addEventListener("DOMContentLoaded", async function(){
+  sc = requireStructureCode(); if(!sc) return;
+  document.getElementById("code-disp").textContent = sc;
+  // Home: 초기화 후 이동
+  document.getElementById("b-home").onclick   = function(){ clearAndGo("index.html"); };
+  // Before: 초기화 후 이동
+  document.getElementById("b-back").onclick   = function(){ window._sc=null; window.location.href="worksdesk.html"; };
+  // Design: 저장 후 이동
+  document.getElementById("b-design").onclick = onDesign;
 
-document.addEventListener("DOMContentLoaded",init)
-
-
-async function init(){
-
-structureCode=requireStructureCode()
-
-if(!structureCode)return
-
-await loadStones()
-
-}
-
+  await loadStones();
+});
 
 async function loadStones(){
-
-allStones=await apiGetAllStones()
-
-render()
-
+  try {
+    allStones = await apiGetAllStones();
+    renderLists();
+  } catch(err){
+    document.getElementById("stone-list").innerHTML = '<div class="empty-row" style="color:rgba(220,80,80,.8)">로드 실패: '+esc(err.message)+'</div>';
+  }
 }
 
-
-function render(){
-
-const list=document.getElementById("stone-list")
-const selected=document.getElementById("selected-list")
-
-list.innerHTML=""
-selected.innerHTML=""
-
-allStones.forEach(stone=>{
-
-if(selectedStones.includes(stone.nameKr)){
-
-const div=document.createElement("div")
-
-div.className="stone-item"
-div.textContent=stone.nameKr
-
-div.onclick=()=>removeStone(stone.nameKr)
-
-selected.appendChild(div)
-
-}else{
-
-const div=document.createElement("div")
-
-div.className="stone-item"
-div.textContent=stone.nameKr
-
-div.onclick=()=>addStone(stone.nameKr)
-
-list.appendChild(div)
-
+function renderLists(){
+  var sl = document.getElementById("stone-list");
+  var dl = document.getElementById("sel-list");
+  var unselected = allStones.filter(function(s){ return selected.indexOf(s.nameKr) === -1; });
+  // Stone List
+  if(!unselected.length){ sl.innerHTML='<div class="empty-row">모두 선택됨</div>'; }
+  else {
+    sl.innerHTML="";
+    unselected.forEach(function(s){
+      var r=document.createElement("div"); r.className="stone-row";
+      r.textContent=s.nameKr;
+      r.addEventListener("click",function(){ selected.push(s.nameKr); renderLists(); });
+      sl.appendChild(r);
+    });
+  }
+  // Selected
+  if(!selected.length){ dl.innerHTML='<div class="empty-row">선택된 원석 없음</div>'; }
+  else {
+    dl.innerHTML="";
+    selected.forEach(function(name){
+      var r=document.createElement("div"); r.className="stone-row";
+      r.textContent=name;
+      r.addEventListener("click",function(){ selected=selected.filter(function(n){return n!==name;}); renderLists(); });
+      dl.appendChild(r);
+    });
+  }
 }
 
-})
-
+async function onDesign(){
+  if(!selected.length){ document.getElementById("st-msg").textContent="원석을 1개 이상 선택하세요"; return; }
+  document.getElementById("st-msg").textContent="";
+  try {
+    await apiSaveUsedStones(sc, selected);
+    goPage("design.html", sc);
+  } catch(err){
+    document.getElementById("st-msg").textContent="저장 실패: "+err.message;
+  }
 }
-
-
-function addStone(name){
-
-selectedStones.push(name)
-
-render()
-
-}
-
-
-function removeStone(name){
-
-selectedStones=selectedStones.filter(n=>n!==name)
-
-render()
-
-}
-
-
-function goHome(){
-
-location.href="index.html"
-
-}
-
-
-async function goDesign(){
-
-if(selectedStones.length===0){
-
-alert("원석을 선택하세요")
-return
-
-}
-
-try{
-
-await apiSaveUsedStones(structureCode,selectedStones)
-
-goPage("design.html")
-
-}catch(err){
-
-alert("저장 실패 "+err.message)
-
-}
-
-}
-
 </script>
-
 </body>
 </html>
