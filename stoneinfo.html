@@ -1,327 +1,143 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stone Info</title>
-
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/state.js"></script>
-<script src="js/ui.js"></script>
-
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>ASTERION – Gemstone Information</title>
+<script src="config.js"></script><script src="api_contract.js"></script>
+<script src="state.js"></script><script src="api.js"></script>
 <style>
-body {
-  margin: 0;
-  font-family: Arial;
-  background: linear-gradient(135deg,#fff6da 0%,#f5d97a 40%,#eac45a 70%,#d8ad3c 100%);
-  text-align: center;
-  padding-bottom: 90px;
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
+  font-family:'Arial',sans-serif;color:#fff;
+  display:flex;flex-direction:column;align-items:center;
+  min-height:100vh;overflow:hidden;
 }
-
-.title { width: 90%; margin-top: 20px; display: block; margin-left: auto; margin-right: auto; }
-
-/* ── 이미지 영역 ──
-   stoneImage 하나만 존재 → 200×200 고정 공간
-   Image 없음: btn_gemimageselec.png 표시 (클릭 → 파일 선택)
-   Image 있음: 해당 이미지 표시 (클릭 → 파일 선택으로 교체)
-   파일 선택 시: 선택된 이미지 src 교체 → 공간 변화 없음 (SI 버그 수정)
-*/
-.image-area { margin-top: 30px; }
-
-#stoneImage {
-  width: 200px;
-  height: 200px;
-  object-fit: contain;
-  cursor: pointer;
-  display: block;
-  margin: 0 auto;
-  border-radius: 8px;
-  transition: opacity 0.2s;
+.ttl{width:240px;max-width:86vw;display:block;margin:10px auto 3px;flex-shrink:0}
+.nk-disp{font-size:13px;color:rgba(220,188,128,.85);letter-spacing:1.5px;text-align:center;padding:2px 0 5px;flex-shrink:0}
+/* 이미지:NameEng:Exp = 45%:15%:40% */
+.content{flex:1;width:100%;max-width:400px;display:flex;flex-direction:column;align-items:center;min-height:0;padding:0 16px}
+/* 이미지 구역 45% */
+.zone-img{flex:4.5;display:flex;align-items:center;justify-content:center;width:100%;min-height:0}
+.img-wrap{
+  position:relative;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  /* 정사각형 최대 */
+  width:min(100%,200px);height:min(100%,200px);
 }
-
-#stoneImage:hover { opacity: 0.82; }
-
-/* ── 입력 ── */
-.label {
-  margin-top: 16px;
-  font-size: 12px;
-  opacity: 0.6;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+.img-wrap input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:3}
+.img-bg{width:100%;height:100%;object-fit:contain;display:block;z-index:1;position:relative}
+.img-ov{position:absolute;inset:0;object-fit:cover;border-radius:8px;z-index:2;display:none}
+.img-ov.show{display:block}
+/* NameEng 15% */
+.zone-eng{flex:1.5;width:100%;display:flex;align-items:center;min-height:0}
+.txt-input{
+  width:100%;padding:8px 12px;background:rgba(0,0,0,.40);
+  border:1px solid rgba(255,255,255,.15);border-radius:8px;
+  color:#fff;font-size:13px;outline:none;transition:border-color .15s;
 }
-
-input, textarea {
-  width: 80%;
-  max-width: 440px;
-  margin-top: 5px;
-  padding: 8px 10px;
-  font-size: 14px;
-  border-radius: 6px;
-  border: none;
-  box-sizing: border-box;
-  background: rgba(255,255,255,0.5);
-  display: block;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-input:focus, textarea:focus { background: rgba(255,255,255,0.85); outline: none; }
-
-textarea { height: 90px; resize: none; }
-
-.readonly { opacity: 0.65; cursor: default; }
-
-/* ── 하단 버튼 ── */
-.bottom {
-  position: fixed;
-  bottom: 18px;
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  gap: 15px;
-}
-
-.bottom img {
-  width: 68px;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-
-.bottom img:hover { opacity: 0.78; }
+.txt-input:focus{border-color:rgba(210,170,100,.65)}
+.txt-input::placeholder{color:rgba(255,255,255,.3)}
+/* Exp 40% */
+.zone-exp{flex:4;width:100%;display:flex;flex-direction:column;min-height:0}
+textarea.txt-input{flex:1;resize:none;min-height:0;overflow-y:auto;line-height:1.6}
+.st-msg{flex-shrink:0;font-size:12px;text-align:center;min-height:18px;padding:2px 0}
+.st-err{color:rgba(220,80,80,.9)}.st-ok{color:rgba(100,220,130,.9)}
+.nav-bar{flex-shrink:0;width:100%;max-width:400px;display:flex;justify-content:space-around;padding:6px 8px env(safe-area-inset-bottom,8px);background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,.07)}
+.nav-bar img{height:44px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
+.nav-bar img:active{opacity:.6}
+.ld-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center}
+.ld-ov.show{display:flex}
+.ld-txt{font-size:12px;letter-spacing:2.5px;color:rgba(220,188,128,1)}
 </style>
 </head>
-
 <body>
-
-<img src="images/ttl_gemstoneinfo.png" class="title" alt="Stone Info">
-
-<div class="image-area">
-  <!--
-    단일 img 태그만 사용:
-    - 기본 src = btn_gemimageselec.png (이미지 미등록 상태)
-    - Image 값 있을 때: window.onload에서 src 교체
-    - 파일 선택 후: FileReader DataURL로 src 교체 → 레이아웃 변화 없음
-  -->
-  <img id="stoneImage"
-       src="images/btn_gemimageselec.png"
-       alt="이미지 선택 (클릭)">
-
-  <!-- 숨겨진 파일 입력 -->
-  <input type="file" id="imageInput"
-         accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
-         style="display:none">
+<img class="ttl" src="images/ttl_gemstoneinfo.png" alt="Gemstone Information"/>
+<div class="nk-disp" id="nk-disp">—</div>
+<div class="content">
+  <!-- 이미지 45% -->
+  <div class="zone-img">
+    <div class="img-wrap" id="img-wrap">
+      <input type="file" id="file-input" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"/>
+      <img class="img-bg" src="images/btn_gemimageselec.png" alt=""/>
+      <img class="img-ov" id="img-ov" src="" alt=""/>
+    </div>
+  </div>
+  <!-- NameEng 15% -->
+  <div class="zone-eng">
+    <input class="txt-input" id="nameeng-input" type="text" placeholder="English Name" maxlength="200"/>
+  </div>
+  <!-- Exp 40% -->
+  <div class="zone-exp">
+    <textarea class="txt-input" id="exp-input" placeholder="Explanation..."></textarea>
+  </div>
 </div>
-
-<div class="label">KOREAN NAME</div>
-<input id="nameKr" class="readonly" readonly>
-
-<div class="label">ENGLISH NAME</div>
-<input id="nameEng" placeholder="예) Amethyst">
-
-<div class="label">DESCRIPTION</div>
-<textarea id="exp" placeholder="원석 설명"></textarea>
-
-<div class="bottom">
-  <img src="images/btn_go_home.png"   alt="홈"          onclick="goHome()">
-  <img src="images/btn_go_before.png" alt="뒤로"        onclick="goBefore()">
-  <img src="images/btn_update.png"    alt="업데이트"    onclick="updateAll()">
+<div class="st-msg" id="st-msg"></div>
+<div class="nav-bar">
+  <img src="images/btn_go_home.png"   id="b-home"/>
+  <img src="images/btn_go_before.png" id="b-back"/>
+  <img src="images/btn_update.png"    id="b-update"/>
 </div>
-
+<div class="ld-ov" id="ld-ov"><div class="ld-txt">UPDATING...</div></div>
 <script>
-// ── 설정 ──────────────────────────────────────────────────────
-const MAX_RAW_SIZE  = 50 * 1024 * 1024; // 원본 50MB 초과 차단
-const MAX_COMP_SIZE =  4 * 1024 * 1024; // 압축 후 4MB 초과 차단
-const COMP_MAX_PX   = 1200;
-const COMP_QUALITY  = 0.85;
+"use strict";
+var nk=null, selFile=null, origNameEng="", origExp="";
 
-let selectedFile = null;
+document.addEventListener("DOMContentLoaded", async function(){
+  nk=requireNameKr(); if(!nk) return;
+  document.getElementById("nk-disp").textContent=nk;
+  document.getElementById("b-home").onclick  =function(){ clearAndGoFromInventory("index.html"); };
+  document.getElementById("b-back").onclick  =function(){ clearAndGoFromInventory("inventory.html"); };
+  document.getElementById("b-update").onclick=onUpdate;
+  document.getElementById("file-input").addEventListener("change",onFileChange);
+  await loadInfo();
+});
 
-// ── 초기화 ─────────────────────────────────────────────────────
-window.onload = function() {
-  // 이미지 클릭 → 파일 선택
-  document.getElementById("stoneImage").onclick = function() {
-    document.getElementById("imageInput").click();
-  };
-
-  // state.js로 원석 정보 로드
-  const s = getSelectedStone();
-
-  document.getElementById("nameKr").value  = s.nameKr;
-  document.getElementById("nameEng").value = s.nameEng;
-  document.getElementById("exp").value     = s.exp;
-
-  // Image 값이 있으면 btn_gemimageselec.png 대신 실제 이미지로 교체
-  // → UI 공간 변화 없음 (200×200 고정)
-  if (s.image) {
-    document.getElementById("stoneImage").src = s.image;
-  }
-};
-
-// ── 파일 선택 ─────────────────────────────────────────────────
-// 선택된 이미지를 stoneImage.src에 바로 교체 → 레이아웃 밀림 없음
-document.getElementById("imageInput").onchange = function() {
-  const file = this.files[0];
-
-  if (!file) {
-    selectedFile = null;
-    return;
-  }
-
-  if (file.size > MAX_RAW_SIZE) {
-    alert("파일이 너무 큽니다 (50MB 초과).");
-    this.value = "";
-    selectedFile = null;
-    return;
-  }
-
-  selectedFile = file;
-
-  // 미리보기: stoneImage src만 교체 (추가 img 태그 없음 → UI 밀림 없음)
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    document.getElementById("stoneImage").src = e.target.result;
-  };
-  reader.onerror = function() {
-    alert("미리보기 실패. 다시 선택해 주세요.");
-    selectedFile = null;
-    document.getElementById("imageInput").value = "";
-  };
-  reader.readAsDataURL(file);
-};
-
-// ── 이미지 압축 ───────────────────────────────────────────────
-// [SI1 FIX] file.type을 그대로 canvas.toBlob에 전달
-//   → png → image/png 유지, jpg → image/jpeg 유지
-function compressImage(file) {
-  return new Promise(function(resolve, reject) {
-    const reader = new FileReader();
-    reader.onerror = function() { reject(new Error("파일 읽기 실패")); };
-    reader.onload  = function(e) {
-      const img = new Image();
-      img.onerror = function() { reject(new Error("이미지 로드 실패")); };
-      img.onload  = function() {
-        let w = img.naturalWidth, h = img.naturalHeight;
-        if (!w || !h) { reject(new Error("이미지 크기 읽기 실패")); return; }
-
-        // 리사이즈
-        if (w > COMP_MAX_PX || h > COMP_MAX_PX) {
-          const r = Math.min(COMP_MAX_PX / w, COMP_MAX_PX / h);
-          w = Math.round(w * r);
-          h = Math.round(h * r);
-        }
-
-        const canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext("2d");
-
-        // PNG: 투명 배경 유지 / JPG: 흰 배경
-        if (file.type !== "image/png" && file.type !== "image/webp") {
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, w, h);
-        }
-        ctx.drawImage(img, 0, 0, w, h);
-
-        // [SI1 FIX] file.type 그대로 → png는 png, jpg는 jpeg로 저장
-        canvas.toBlob(function(blob) {
-          if (!blob) { reject(new Error("압축 실패")); return; }
-          resolve(blob);
-        }, file.type, COMP_QUALITY);
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-// ── 전체 업데이트 (이미지 + 정보) ────────────────────────────
-async function updateAll() {
-  // [SI2 FIX] oldNameKr 명시적 전달 (NameKr 변경 + Inventory 갱신)
-  const oldNameKr = getSelectedStone().nameKr;
-  const nameKr    = document.getElementById("nameKr").value.trim();  // readonly = oldNameKr
-  const nameEng   = document.getElementById("nameEng").value.trim();
-  const exp       = document.getElementById("exp").value.trim();
-
-  if (!oldNameKr) {
-    alert("원석 정보가 없습니다. 목록으로 돌아가세요.");
-    location.href = "inventory.html";
-    return;
-  }
-
+async function loadInfo(){
   try {
-    // ── 이미지 업로드 ─────────────────────────────────────────
-    if (selectedFile) {
-      showLoading("이미지 처리 중...");
+    var stones=await apiGetAllStonesFull();
+    var s=null;
+    for(var i=0;i<stones.length;i++){ if(stones[i].nameKr===nk){ s=stones[i]; break; } }
+    if(!s) return;
+    origNameEng=s.nameEng||""; origExp=s.exp||"";
+    document.getElementById("nameeng-input").value=origNameEng;
+    document.getElementById("exp-input").value=origExp;
+    if(s.image){ var ov=document.getElementById("img-ov"); ov.src=s.image; ov.classList.add("show"); }
+  } catch(e){}
+}
 
-      const blob = await compressImage(selectedFile);
-      if (blob.size > MAX_COMP_SIZE) {
-        alert("압축 후에도 4MB를 초과합니다. 더 작은 이미지를 사용해 주세요.");
-        return;
-      }
+function onFileChange(e){
+  var f=e.target.files&&e.target.files[0]; if(!f) return;
+  if(f.size>4*1024*1024){ setStatus("4MB 이하","err"); e.target.value=""; return; }
+  selFile=f;
+  var r=new FileReader(); r.onload=function(ev){ var ov=document.getElementById("img-ov"); ov.src=ev.target.result; ov.classList.add("show"); }; r.readAsDataURL(f);
+  setStatus("","");
+}
 
-      const buffer    = await blob.arrayBuffer();
-      const byteArray = Array.from(new Uint8Array(buffer));
-
-      // [SI1 FIX] 원본 확장자 유지
-      const ext      = selectedFile.name.split(".").pop().toLowerCase();
-      const fileName = selectedFile.name.replace(/\.[^.]+$/, "") + "." + ext;
-
-      showLoading("이미지 업로드 중...");
-      // [SI1 FIX] mimeType: selectedFile.type (원본 MIME 전달)
-      const imgData = await apiPost({
-        action   : "uploadImage",
-        nameKr   : oldNameKr,
-        fileName : fileName,
-        mimeType : selectedFile.type,
-        byteArray: byteArray,
-      });
-
-      if (imgData.success) {
-        setSelectedStone({ ...getSelectedStone(), image: imgData.url });
-        // 업로드 완료 후 실제 Drive URL로 src 교체
-        document.getElementById("stoneImage").src = imgData.url;
-      } else {
-        alert("이미지 업로드 실패: " + (imgData.error || "알 수 없는 오류"));
-        return;
-      }
-    }
-
-    // ── 정보 업데이트 ─────────────────────────────────────────
-    showLoading("정보 업데이트 중...");
-
-    // [SI2 FIX] oldNameKr 전달 — Code.gs updateStoneInfo가 Inventory 갱신에 필요
-    const data = await apiPost({
-      action: "updateStoneInfo",
-      data  : {
-        oldNameKr: oldNameKr,  // [SI2 FIX] 필수 필드
-        nameKr   : nameKr,
-        nameEng  : nameEng,
-        exp      : exp,
-      },
-    });
-
-    if (data.success) {
-      setSelectedStone({
-        nameKr : nameKr,
-        nameEng: nameEng,
-        exp    : exp,
-        image  : getSelectedStone().image,
-      });
-      selectedFile = null;
-      document.getElementById("imageInput").value = "";
-      alert("업데이트 완료 ✓");
-    } else {
-      alert("업데이트 실패: " + (data.error || "알 수 없는 오류"));
-    }
-  } catch (err) {
-    alert("오류: " + err.message);
-  } finally {
-    hideLoading();
+async function onUpdate(){
+  var nameEng=document.getElementById("nameeng-input").value.trim();
+  var exp=document.getElementById("exp-input").value.trim();
+  var changed=(nameEng!==origNameEng)||(exp!==origExp)||selFile;
+  if(!changed){ setStatus("변경 사항 없음",""); return; }
+  document.getElementById("ld-ov").classList.add("show");
+  try {
+    if(selFile) await apiUploadStoneImage(nk, nameEng||nk, selFile);
+    await apiUpdateStoneInfo(nk, nameEng, exp);
+    origNameEng=nameEng; origExp=exp; selFile=null;
+    document.getElementById("ld-ov").classList.remove("show");
+    setStatus("업데이트 완료!","ok");
+    setTimeout(function(){ setStatus("",""); },2500);
+  } catch(err){
+    document.getElementById("ld-ov").classList.remove("show");
+    setStatus("실패: "+err.message,"err");
   }
 }
 
-function goBefore() { location.href = "inventory.html"; }
+function setStatus(msg,type){
+  var el=document.getElementById("st-msg"); el.textContent=msg;
+  el.className="st-msg "+(type==="err"?"st-err":type==="ok"?"st-ok":"");
+}
 </script>
-
 </body>
 </html>
