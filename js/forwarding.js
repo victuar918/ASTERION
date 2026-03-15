@@ -116,4 +116,3 @@ function setStatus(msg, type) {
 }
 function showLoading() { document.getElementById("ld-ov").classList.add("show"); }
 function hideLoading() { document.getElementById("ld-ov").classList.remove("show"); }
-
