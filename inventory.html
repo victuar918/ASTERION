@@ -4,10 +4,11 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
   <title>ASTERION – Inventory</title>
-  <script src="config.js"></script>
-  <script src="api_contract.js"></script>
-  <script src="state.js"></script>
-  <script src="api.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/api_contract.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     body{
@@ -124,7 +125,7 @@
   </style>
 </head>
 <body>
-  <img id="title-img" src="ttl_inventory.png" alt="Inventory"/>
+  <img id="title-img" src="images/ttl_inventory.png" alt="Inventory"/>
 
   <div id="search-wrap">
     <span class="search-icon">🔍</span>
@@ -147,9 +148,9 @@
 
   <!-- 하단 네비 -->
   <div id="nav-bar">
-    <img src="btn_go_home.png"     alt="Home"    id="btn-home"/>
-    <img src="btn_go_newlisting.png" alt="New"   id="btn-new"/>
-    <img src="btn_reload.png"      alt="Reload"  id="btn-reload"/>
+    <img src="images/btn_go_home.png"     alt="Home"    id="btn-home"/>
+    <img src="images/btn_go_newlisting.png" alt="New"   id="btn-new"/>
+    <img src="images/btn_reload.png"      alt="Reload"  id="btn-reload"/>
   </div>
 
   <script>
