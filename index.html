@@ -1,68 +1,41 @@
 <!DOCTYPE html>
 <html lang="ko">
-
 <head>
-
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <title>ASTERION</title>
-
 <style>
-
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
 body{
-margin:0;
-height:100vh;
-
-background-image:url(images/bg_home.jpg);
-background-size:cover;
-background-position:center;
-background-repeat:no-repeat;
-
-display:flex;
-flex-direction:column;
-justify-content:flex-end;
+  background:url('images/bg_home.jpg') center/cover no-repeat fixed;
+  font-family:'Arial',sans-serif;color:#fff;
+  min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:flex-end;
 }
-
-/* 하단 버튼 영역 */
-
-.menu{
-width:100%;
-display:flex;
-justify-content:space-around;
-align-items:center;
-padding:30px 0;
+#btn-row{
+  width:100%;max-width:480px;
+  display:flex;justify-content:space-around;align-items:flex-end;
+  padding:0 12px 32px;gap:10px;
 }
-
-/* 버튼 이미지 */
-
-.menu img{
-width:90px;
-cursor:pointer;
+#btn-row img{
+  flex:1;max-width:140px;height:auto;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+  transition:opacity .15s;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));
 }
-
+#btn-row img:active{opacity:.7;transform:scale(.97)}
 </style>
-
 </head>
-
 <body>
-
-<div class="menu">
-
-<a href="worksdesk.html">
-<img src="images/btn_go_design.png">
-</a>
-
-<a href="inventory.html">
-<img src="images/btn_go_inventory.png">
-</a>
-
-<a href="structureindex.html">
-<img src="images/btn_go_index.png">
-</a>
-
+<div id="btn-row">
+  <img src="images/btn_worksdesk.png"    alt="Structure Design" id="btn-wd"/>
+  <img src="images/btn_go_index.png"     alt="Code Index"       id="btn-si"/>
+  <img src="images/btn_go_inventory.png" alt="Inventory"        id="btn-inv"/>
 </div>
-
+<script>
+document.getElementById("btn-wd").onclick  = function(){ location.href="worksdesk.html"; };
+document.getElementById("btn-si").onclick  = function(){ location.href="structureindex.html"; };
+document.getElementById("btn-inv").onclick = function(){ location.href="inventory.html"; };
+</script>
 </body>
-
 </html>
