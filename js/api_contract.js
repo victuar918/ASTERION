@@ -8,6 +8,8 @@
 var A = Object.freeze({
   // design.html
   GET_USED_ITEMS        : "getUsedItems",
+  /** Details + LayoutSummary + DetailsStr 단일 GAS 콜 통합 저장 */
+  SAVE_DESIGN           : "saveDesign",
   SAVE_DETAILS          : "saveDetails",
   UPDATE_LAYOUT_SUMMARY : "updateLayoutSummary",
   GET_DETAILS           : "getDetails",
