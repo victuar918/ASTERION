@@ -19,7 +19,7 @@ body {
   min-height: 100vh;
   overflow: hidden;
   /* 갤럭시 S24 Ultra 기준 하단 네비게이션 바 여백 */
-  padding-bottom: env(safe-area-inset-bottom, 48px);
+  padding-bottom: env(safe-area-inset-bottom, 80px);
 }
 
 /* ── 타이틀 이미지 ── */
