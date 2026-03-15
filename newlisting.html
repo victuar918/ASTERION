@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-<title>ASTERION – New Listing</title>
+<title>ASTERION – Inventory</title>
 <script src="config.js"></script><script src="api_contract.js"></script>
 <script src="state.js"></script><script src="api.js"></script>
 <style>
@@ -15,96 +15,79 @@ body{
   display:flex;flex-direction:column;align-items:center;
   min-height:100vh;overflow:hidden;
 }
-.ttl{width:240px;max-width:86vw;display:block;margin:10px auto 4px;flex-shrink:0}
-/* NameKr:NameEng:Exp = 20:20:60 */
-.content{flex:1;width:100%;max-width:400px;display:flex;flex-direction:column;min-height:0;padding:0 16px;gap:4px}
-/* NameKr 20% */
-.zone-kr{flex:2;display:flex;flex-direction:column;justify-content:center}
-.zone-eng{flex:2;display:flex;flex-direction:column;justify-content:center}
-/* Exp 60% */
-.zone-exp{flex:6;display:flex;flex-direction:column;min-height:0}
-.field-label{
-  font-size:11px;color:rgba(255,255,255,.55);letter-spacing:.5px;
-  margin-bottom:4px;flex-shrink:0;
+.ttl{width:240px;max-width:86vw;display:block;margin:12px auto 6px;flex-shrink:0}
+/* 100% 투명 스크롤 창 */
+#stone-list{
+  flex:1;width:100%;max-width:480px;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:0;min-height:0;
 }
-.req{color:rgba(220,100,100,.9)}
-.txt-input{
-  width:100%;padding:9px 12px;background:rgba(0,0,0,.40);
-  border:1px solid rgba(255,255,255,.15);border-radius:8px;
-  color:#fff;font-size:13px;outline:none;transition:border-color .15s;
+#stone-list::-webkit-scrollbar{width:3px}
+#stone-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15)}
+.s-row{
+  padding:13px 16px;font-size:14px;text-align:center;cursor:pointer;
+  border-bottom:1px solid rgba(255,255,255,.07);
+  transition:background .15s;-webkit-tap-highlight-color:transparent;
 }
-.txt-input:focus{border-color:rgba(210,170,100,.65)}
-.txt-input::placeholder{color:rgba(255,255,255,.3)}
-.exp-label{font-size:11px;color:rgba(255,255,255,.55);letter-spacing:.5px;padding:4px 0 3px;flex-shrink:0;text-align:center}
-textarea.txt-input{flex:1;resize:none;min-height:0;overflow-y:auto;line-height:1.6}
-.st-msg{flex-shrink:0;font-size:12px;text-align:center;min-height:18px;padding:2px 0}
-.st-err{color:rgba(220,80,80,.9)}.st-ok{color:rgba(100,220,130,.9)}
-.nav-bar{flex-shrink:0;width:100%;max-width:400px;display:flex;justify-content:space-around;padding:6px 8px env(safe-area-inset-bottom,8px);background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,.07)}
+.s-row.selected{background:rgba(255,255,255,.40)}
+.s-row:active{background:rgba(255,255,255,.15)}
+.empty{padding:32px;text-align:center;font-size:13px;color:rgba(255,255,255,.3)}
+.nav-bar{flex-shrink:0;width:100%;max-width:480px;display:flex;justify-content:space-around;padding:6px 8px env(safe-area-inset-bottom,8px);background:rgba(5,4,2,.92);border-top:1px solid rgba(255,255,255,.07)}
 .nav-bar img{height:44px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
 .nav-bar img:active{opacity:.6}
-.ld-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center}
-.ld-ov.show{display:flex}
-.ld-txt{font-size:12px;letter-spacing:2.5px;color:rgba(220,188,128,1)}
 </style>
 </head>
 <body>
-<img class="ttl" src="images/ttl_gemstonelist.png" alt="New Listing"/>
-<div class="content">
-  <!-- NameKr 20% -->
-  <div class="zone-kr">
-    <div class="field-label">한글 이름 <span class="req">*</span></div>
-    <input class="txt-input" id="nk-input" type="text" placeholder="예: 자수정" maxlength="200"/>
-  </div>
-  <!-- NameEng 20% -->
-  <div class="zone-eng">
-    <div class="field-label">영어 이름</div>
-    <input class="txt-input" id="ne-input" type="text" placeholder="예: Amethyst" maxlength="200"/>
-  </div>
-  <!-- Exp 60% -->
-  <div class="zone-exp">
-    <div class="exp-label">Gemstone Explanation</div>
-    <textarea class="txt-input" id="exp-input" placeholder="원석 설명, 특징 등..." maxlength="1000"></textarea>
-  </div>
-</div>
-<div class="st-msg" id="st-msg"></div>
+<img class="ttl" src="images/ttl_inventory.png" alt="Inventory"/>
+<div id="stone-list"><div class="empty">Loading...</div></div>
 <div class="nav-bar">
   <img src="images/btn_go_home.png"   id="b-home"/>
-  <img src="images/btn_go_before.png" id="b-back"/>
-  <img src="images/btn_listing.png"   id="b-listing"/>
+  <img src="images/btn_stonelisting.png" id="b-new"/>
+  <img src="images/btn_information.png"  id="b-info"/>
+  <img src="images/btn_management.png"   id="b-stock"/>
 </div>
-<div class="ld-ov" id="ld-ov"><div class="ld-txt">SAVING...</div></div>
 <script>
 "use strict";
-document.addEventListener("DOMContentLoaded", function(){
-  document.getElementById("b-home").onclick   =function(){ location.href="index.html"; };
-  document.getElementById("b-back").onclick   =function(){ location.href="inventory.html"; };
-  document.getElementById("b-listing").onclick=onListing;
+var selName=null;
+
+document.addEventListener("DOMContentLoaded", async function(){
+  document.getElementById("b-home").onclick =function(){ clearAndGoFromInventory("index.html"); };
+  document.getElementById("b-new").onclick  =function(){ clearAndGoFromInventory("newlisting.html"); };
+  document.getElementById("b-info").onclick =function(){
+    if(!selName){ alert("원석을 선택하세요"); return; }
+    setCurrentNameKr(selName); goPageWithName("stoneinfo.html",selName);
+  };
+  document.getElementById("b-stock").onclick=function(){
+    if(!selName){ alert("원석을 선택하세요"); return; }
+    setCurrentNameKr(selName); goPageWithName("invenmanage.html",selName);
+  };
+  await loadStones();
 });
 
-async function onListing(){
-  var nk=document.getElementById("nk-input").value.trim();
-  var ne=document.getElementById("ne-input").value.trim();
-  var ex=document.getElementById("exp-input").value.trim();
-  if(!nk){ setStatus("한글 이름을 입력하세요","err"); document.getElementById("nk-input").focus(); return; }
-  setStatus("","");
-  document.getElementById("ld-ov").classList.add("show");
+async function loadStones(){
+  var el=document.getElementById("stone-list");
   try {
-    await apiAddStone(nk,ne,ex);
-    document.getElementById("ld-ov").classList.remove("show");
-    setStatus("등록 완료!","ok");
-    document.getElementById("nk-input").value="";
-    document.getElementById("ne-input").value="";
-    document.getElementById("exp-input").value="";
-    setTimeout(function(){ setStatus("",""); },2500);
+    var stones=await apiGetAllStones(); // nameKr만 필요
+    if(!stones||!stones.length){ el.innerHTML='<div class="empty">등록된 원석 없음</div>'; return; }
+    el.innerHTML="";
+    stones.forEach(function(s){
+      var name=s.nameKr||s;
+      var row=document.createElement("div"); row.className="s-row";
+      row.textContent=name;
+      row.setAttribute("data-name",name);
+      row.addEventListener("click",function(){
+        if(selName===name){
+          selName=null; row.classList.remove("selected");
+        } else {
+          document.querySelectorAll(".s-row.selected").forEach(function(r){ r.classList.remove("selected"); });
+          selName=name; row.classList.add("selected");
+        }
+      });
+      el.appendChild(row);
+    });
   } catch(err){
-    document.getElementById("ld-ov").classList.remove("show");
-    setStatus("실패: "+err.message,"err");
+    el.innerHTML='<div class="empty" style="color:rgba(220,80,80,.8)">로드 실패: '+esc(err.message)+'</div>';
   }
-}
-
-function setStatus(msg,type){
-  var el=document.getElementById("st-msg"); el.textContent=msg;
-  el.className="st-msg "+(type==="err"?"st-err":type==="ok"?"st-ok":"");
 }
 </script>
 </body>
