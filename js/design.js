@@ -1,32 +1,27 @@
 /**
- * design.js — Structure Design 페이지 로직 (완전판)
+ * design.js — Structure Design 페이지 로직 (최종판)
+ * 의존: config.js → api_contract.js → state.js → api.js → ui.js
  *
- * [FIX-3] buildDetailsString() A/S용 상세 문자열 → Archive.DetailsStr 저장
- * [SPEC]  activeInsIdx: [+] 클릭으로 위치 선택 → Size 클릭으로 삽입 → 자동 해제
- *         아이템 클릭: qty-1 (0이면 삭제), activeInsIdx 유지
+ * [통합] apiSaveDesign 단일 호출로 3-step 서버 작업 완료
+ * [ui.js] showLoading / hideLoading / confirmPopup / toastOk / toastErr 사용
  */
 "use strict";
 
 var sc           = null;
-var details      = [];
-var activeInsIdx = null;
+var details      = [];   // [{nameKr, size, qty}]
+var activeInsIdx = null; // null = 미선택, number = [+] 위치
 
 /* ══════════════════════════════════════════════
    초기화
 ══════════════════════════════════════════════ */
 document.addEventListener("DOMContentLoaded", async function () {
-  sc = requireStructureCode();
-  if (!sc) return;
+  sc = requireStructureCode(); if (!sc) return;
   document.getElementById("code-disp").textContent = sc;
 
   document.getElementById("b-home").addEventListener("click", function () { clearAndGo("index.html"); });
   document.getElementById("b-back").addEventListener("click", function () { goPage("selectstone.html", sc); });
   document.getElementById("b-save").addEventListener("click", onSaveClick);
   document.getElementById("b-next").addEventListener("click", function () { goPage("analysismemo.html", sc); });
-
-  document.getElementById("pop-yes").addEventListener("click", function () { hidePopup(); execSave(true); });
-  document.getElementById("pop-no").addEventListener("click",  function () { hidePopup(); execSave(false); });
-  document.getElementById("popup").addEventListener("click", function (e) { if (e.target === this) hidePopup(); });
 
   await loadSavedDetails();
   await loadItems();
@@ -44,7 +39,7 @@ async function loadSavedDetails() {
         return { nameKr: d.nameKr, size: formatSize(d.size), qty: d.qty };
       });
     }
-  } catch (e) {}
+  } catch (e) { /* 실패 시 빈 상태로 시작 */ }
 }
 
 /* ══════════════════════════════════════════════
@@ -52,16 +47,18 @@ async function loadSavedDetails() {
 ══════════════════════════════════════════════ */
 async function loadItems() {
   var el = document.getElementById("sel-list");
+  showLoading("LOADING...");
   try {
     var items = await apiGetUsedItems(sc);
+    hideLoading();
     if (!items || !items.length) {
-      el.innerHTML = '<div style="padding:10px;font-size:12px;color:rgba(255,180,80,.7)">재고 있는 항목 없음. selectstone에서 원석을 먼저 선택하세요.</div>';
+      el.innerHTML = '<div style="padding:10px;font-size:12px;color:rgba(255,180,80,.7)">재고 있는 항목 없음 — selectstone에서 원석을 먼저 선택하세요.</div>';
       return;
     }
     el.innerHTML = "";
     items.forEach(function (item) {
       var row = document.createElement("div"); row.className = "stone-row";
-      var nm = document.createElement("span"); nm.className = "stone-name"; nm.textContent = item.nameKr; nm.title = item.nameKr;
+      var nm  = document.createElement("span"); nm.className = "stone-name"; nm.textContent = item.nameKr; nm.title = item.nameKr;
       row.appendChild(nm);
       (item.sizes || []).forEach(function (sz) {
         var b = document.createElement("button"); b.className = "btn-size"; b.textContent = formatSize(sz);
@@ -71,6 +68,7 @@ async function loadItems() {
       el.appendChild(row);
     });
   } catch (err) {
+    hideLoading();
     el.innerHTML = '<div style="padding:10px;font-size:12px;color:rgba(220,80,80,.8)">로드 실패: ' + esc(err.message) + '</div>';
   }
 }
@@ -80,17 +78,21 @@ async function loadItems() {
 ══════════════════════════════════════════════ */
 function onSizeClick(nameKr, size, btn) {
   if (activeInsIdx === null) {
+    /* [+] 버튼을 먼저 누르도록 힌트 */
     var ps = document.querySelectorAll(".btn-plus");
     ps.forEach(function (b) { b.style.borderColor = "rgba(220,80,80,.8)"; b.style.color = "rgba(220,80,80,.8)"; });
     setTimeout(function () { ps.forEach(function (b) { b.style.borderColor = ""; b.style.color = ""; }); }, 700);
     return;
   }
-  var sz = formatSize(size), pos = activeInsIdx;
+  var sz   = formatSize(size);
+  var pos  = activeInsIdx;
   var prev = pos > 0              ? details[pos - 1] : null;
   var next = pos < details.length ? details[pos]     : null;
+
   if      (prev && prev.nameKr === nameKr && prev.size === sz) { prev.qty++; }
   else if (next && next.nameKr === nameKr && next.size === sz) { next.qty++; activeInsIdx = pos + 1; }
   else { details.splice(pos, 0, { nameKr: nameKr, size: sz, qty: 1 }); activeInsIdx = pos + 1; }
+
   if (btn) { btn.style.background = "rgba(180,140,90,.6)"; setTimeout(function () { btn.style.background = ""; }, 250); }
   activeInsIdx = null;
   renderDetails();
@@ -114,7 +116,6 @@ function makePlusBtn(idx) {
   b.addEventListener("click", function () { activeInsIdx = (activeInsIdx === idx) ? null : idx; renderDetails(); });
   return b;
 }
-
 function makeItemBtn(item, idx) {
   var b = document.createElement("button"); b.className = "btn-item";
   b.innerHTML = '<span>' + esc(item.nameKr) + '</span><span class="sub">' + esc(item.size) + ' ×' + item.qty + 'pcs</span>';
@@ -126,39 +127,26 @@ function makeItemBtn(item, idx) {
    Total & Layout
 ══════════════════════════════════════════════ */
 function renderTotal() {
-  var total = 0;
-  details.forEach(function (d) { total += getSizeNumber(d.size) * d.qty; });
+  var total = 0; details.forEach(function (d) { total += getSizeNumber(d.size) * d.qty; });
   document.getElementById("total-disp").textContent = "Total Size " + total + "mm";
 }
 
-/**
- * PDF Layout 요약 (북클릿용)
- * 연속된 같은 nameKr 묶음
- * 예: 아파타이트(3pcs) - 화이트캐츠아이(1pcs) - 아쿠아마린(5pcs)
- */
+/** PDF 북클릿용 — 연속된 같은 nameKr 묶음 */
 function buildLayoutSummary() {
   if (!details.length) return "";
   var groups = [];
   details.forEach(function (d) {
-    if (groups.length && groups[groups.length - 1].nameKr === d.nameKr) {
-      groups[groups.length - 1].totalQty += d.qty;
-    } else {
-      groups.push({ nameKr: d.nameKr, totalQty: d.qty });
-    }
+    if (groups.length && groups[groups.length - 1].nameKr === d.nameKr) { groups[groups.length - 1].totalQty += d.qty; }
+    else { groups.push({ nameKr: d.nameKr, totalQty: d.qty }); }
   });
   return groups.map(function (g) { return g.nameKr + "(" + g.totalQty + "pcs)"; }).join(" - ");
 }
 
-/**
- * [FIX-3] A/S 정비용 상세 배열 문자열
- * 예: 아파타이트(4mm,1pcs) + 아파타이트(8mm,1pcs) + 화이트캐츠아이(12mm,1pcs)
- */
+/** A/S 정비용 상세 배열 */
 function buildDetailsString() {
   if (!details.length) return "";
   var parts = [];
-  details.forEach(function (d) {
-    for (var i = 0; i < d.qty; i++) { parts.push(d.nameKr + "(" + d.size + ",1pcs)"); }
-  });
+  details.forEach(function (d) { for (var i = 0; i < d.qty; i++) parts.push(d.nameKr + "(" + d.size + ",1pcs)"); });
   return parts.join(" + ");
 }
 
@@ -167,28 +155,23 @@ function renderLayout() {
 }
 
 /* ══════════════════════════════════════════════
-   저장 처리
+   저장 — confirmPopup(ui.js) 사용
 ══════════════════════════════════════════════ */
-function onSaveClick() {
-  if (!details.length) { alert("Details가 비어있습니다."); return; }
-  document.getElementById("popup").classList.add("show");
-}
-function hidePopup() { document.getElementById("popup").classList.remove("show"); }
+async function onSaveClick() {
+  if (!details.length) { toastErr("Details가 비어있습니다."); return; }
 
-async function execSave(deduct) {
-  document.getElementById("ld-ov").classList.add("show");
+  /* ui.js confirmPopup으로 팝업 표시 */
+  var deduct = await confirmPopup("Deduct from stock?");
+
+  showLoading("SAVING...");
   try {
-    /* Step1: Details 시트 저장 + 선택적 재고 차감 */
-    await apiSaveDesign(sc, details, deduct);
-    /* Step2: Archive.LayoutSummary (PDF 북클릿용) */
-    await apiUpdateLayoutSummary(sc, buildLayoutSummary());
-    /* [FIX-3] Step3: Archive.DetailsStr (A/S용 상세 문자열) */
-    await apiPost({ action: "updateDetailsStr", structureCode: sc, detailsStr: buildDetailsString() });
-    document.getElementById("ld-ov").classList.remove("show");
-    alert(deduct ? "저장 완료 (재고 차감됨)" : "저장 완료");
+    /* 단일 GAS 콜 — saveDetails + updateLayoutSummary + updateDetailsStr 통합 */
+    await apiSaveDesign(sc, details, deduct, buildLayoutSummary(), buildDetailsString());
+    hideLoading();
+    toastOk(deduct ? "저장 완료 (재고 차감됨)" : "저장 완료");
   } catch (err) {
-    document.getElementById("ld-ov").classList.remove("show");
+    hideLoading();
+    toastErr("저장 실패: " + err.message);
     console.error("[design] save 실패:", err);
   }
 }
-
