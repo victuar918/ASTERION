@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"/>
 <title>ASTERION</title>
 <!-- PWA -->
 <link rel="manifest" href="manifest.json"/>
@@ -12,8 +12,9 @@
 <meta name="apple-mobile-web-app-title" content="ASTERION"/>
 <meta name="theme-color" content="#0a0807"/>
 <link rel="apple-touch-icon" href="images/btn_icon.png"/>
+<link rel="stylesheet" href="css/common.css"/>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding-bottom: env(safe-area-inset-bottom, 48px);}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{
   background:url('images/bg_home.jpg') center/cover no-repeat fixed;
@@ -27,7 +28,7 @@ body{
   padding:0 12px 32px;gap:10px;
 }
 #btn-row img{
-  flex:1;max-width:93px;height:auto;padding-bottom: env(safe-area-inset-bottom, 48px);
+  flex:1;max-width:93px;height:auto;
   cursor:pointer;-webkit-tap-highlight-color:transparent;
   transition:opacity .15s;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));
 }
