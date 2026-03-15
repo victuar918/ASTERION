@@ -97,8 +97,17 @@ function showToast(msg, type, ms) {
   if (!ms) ms = 2400;
   var el = document.getElementById("_ui_toast"); if (!el) return;
   if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+
+  /* [FIX-2] className 직접 대입 제거 → classList 방식
+   *  이유: el.id = "_ui_toast" 이므로 id 셀렉터로 CSS가 적용됨.
+   *        className에 "_ui_toast"를 넣어도 스타일 효과가 없고 혼란만 줌.
+   *        classList로 상태 클래스만 명시적으로 관리 */
+  el.classList.remove("show", "t-ok", "t-err"); // 이전 상태 초기화
   el.textContent = String(msg || "");
-  el.className = "_ui_toast show" + (type === "ok" ? " t-ok" : type === "err" ? " t-err" : "");
+  el.classList.add("show");
+  if (type === "ok")  el.classList.add("t-ok");
+  if (type === "err") el.classList.add("t-err");
+
   _toastTimer = setTimeout(function () {
     el.classList.remove("show", "t-ok", "t-err"); _toastTimer = null;
   }, ms);
@@ -189,11 +198,21 @@ function initImageBox(opts) {
 
   input.addEventListener("change", function (e) {
     var file = e.target.files && e.target.files[0]; if (!file) return;
-    if (file.size > UPLOAD.MAX_BYTES) { toastErr("이미지는 4MB 이하여야 합니다."); e.target.value = ""; return; }
-    if (UPLOAD.ALLOWED_MIME.indexOf(file.type.toLowerCase()) === -1) { toastErr("허용 형식: JPG, PNG, WEBP, GIF"); e.target.value = ""; return; }
+
+    /* [FIX-1] UPLOAD 방어 코드
+     *  UPLOAD는 api_contract.js에서 정의되므로 config.js 로드와 무관.
+     *  그러나 api_contract.js 로드 실패 시 ReferenceError 방지를 위해
+     *  폴백값을 명시적으로 지정. */
+    var maxBytes   = (typeof UPLOAD !== "undefined" && UPLOAD.MAX_BYTES)   || 4194304;  // 4MB
+    var allowedMime = (typeof UPLOAD !== "undefined" && UPLOAD.ALLOWED_MIME) || ["image/jpeg","image/jpg","image/png","image/webp","image/gif"];
+
+    if (file.size > maxBytes) { toastErr("이미지는 4MB 이하여야 합니다."); e.target.value = ""; return; }
+    if (allowedMime.indexOf(file.type.toLowerCase()) === -1) { toastErr("허용 형식: JPG, PNG, WEBP, GIF"); e.target.value = ""; return; }
+
     var r = new FileReader();
     r.onload = function (ev) { overlay.src = ev.target.result; overlay.classList.add("show"); };
     r.readAsDataURL(file);
     if (typeof opts.onSelect === "function") opts.onSelect(file);
   });
 }
+
