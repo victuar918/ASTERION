@@ -27,7 +27,7 @@ body {
 .app-wrap {
   width: 100%;
   max-width: 480px;
-  height: 88vh;              /* 화면 높이의 90%만 사용 */
+  height: 93vh;              /* 화면 높이의 90%만 사용 */
   display: flex;
   flex-direction: column;
   align-items: center;
