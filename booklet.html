@@ -104,18 +104,20 @@ body{
   display:flex;flex-direction:column;
   align-items:center;
   text-align:center;
-  justify-content:flex-start;
+  justify-content:space-around;
   width:100%;height:100%;
-  padding:30px 14px 20px;
+  padding:24px 18px;
   box-sizing:border-box;
-  overflow:hidden;
 }
-.pg-sig-title{font-size:16px;font-weight:700;color:#1a2e5a;letter-spacing:3px;margin-bottom:4px;}
-.pg-sig-sub{font-size:11px;color:#1a2e5a;letter-spacing:1px;margin-bottom:20px;}
-.pg-sig-no{font-size:12px;color:#1a2e5a;margin-bottom:3px;}
-.pg-sig-for{font-size:12px;color:#1a2e5a;margin-bottom:20px;}
-.pg-sig-quote{font-size:11px;color:#1a2e5a;font-style:italic;line-height:1.9;margin-bottom:20px;}
-.pg-sig-auth{font-size:10px;color:#1a2e5a;font-style:italic;text-align:center;margin-top:auto;padding-top:8px;}
+/* 그룹 단위로 묶어 여백 제어 */
+.pg-sig-group{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.pg-sig-group-no{display:flex;flex-direction:column;align-items:center;gap:3px;}
+.pg-sig-title{font-size:15px;font-weight:700;color:#1a2e5a;letter-spacing:3px;}
+.pg-sig-sub{font-size:10px;color:#1a2e5a;letter-spacing:1px;}
+.pg-sig-no{font-size:11px;font-weight:600;color:#1a2e5a;}
+.pg-sig-for{font-size:11px;font-weight:600;color:#1a2e5a;}
+.pg-sig-quote{font-size:11px;color:#1a2e5a;font-style:italic;line-height:1.9;}
+.pg-sig-auth{font-size:10px;color:#1a2e5a;font-style:italic;text-align:right;width:100%;}
 
 /* PAGE 3: Product Image */
 .pg-product{
