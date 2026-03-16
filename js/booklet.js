@@ -174,7 +174,7 @@ function renderPage5(d){
   el.innerHTML =
     '<div class="pg-struct">' +
     '  <div class="pg-section-title">Structure Design</div>' +
-    '  <div class="pg-struct-code">' + esc(d.structureCode||"") + '</div>' +
+    '  <div class="pg-struct-layout">' + esc(d.layoutSummary||"").replace(/\n/g,"<br>") + '</div>' +
     '  <div class="pg-divider"></div>' +
     '  <div class="pg-section-title">Analysis</div>' +
     '  <div class="pg-analysis">' + esc(d.analysis||"—").replace(/\n/g,"<br>") + '</div>' +
