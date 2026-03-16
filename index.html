@@ -12,32 +12,35 @@
 <meta name="apple-mobile-web-app-title" content="ASTERION"/>
 <meta name="theme-color" content="#0a0807"/>
 <link rel="apple-touch-icon" href="images/btn_icon.png"/>
-<link rel="stylesheet" href="css/common.css"/>
+<!-- index.html은 common.css 로드 안 함 — 독립 스타일 사용 -->
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{
+html,body{height:100%}
+body{
   background:url('images/bg_home.jpg') center/cover no-repeat fixed;
-  min-height:100vh;
   display:flex;
   flex-direction:column;
   align-items:center;
-  justify-content:flex-end;
-}
-body{
-  background:url('images/bg_home.jpg') center/cover no-repeat fixed;
-  font-family:'Arial',sans-serif;color:#fff;
-  min-height:100vh;display:flex;flex-direction:column;
-  align-items:center;justify-content:flex-end;
+  justify-content:flex-end;   /* 버튼을 하단에 배치 */
+  min-height:100vh;
 }
 #btn-row{
-  width:100%;max-width:480px;
-  display:flex;justify-content:space-around;align-items:flex-end;
-  padding:0 12px 32px;gap:10px;
+  width:100%;
+  max-width:480px;
+  display:flex;
+  justify-content:space-around;
+  align-items:center;
+  padding:0 16px 10%;         /* 하단에서 10% 위에 배치 */
+  gap:10px;
 }
 #btn-row img{
-  flex:1;max-width:93px;height:auto;
-  cursor:pointer;-webkit-tap-highlight-color:transparent;
-  transition:opacity .15s;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));
+  flex:1;
+  max-width:93px;
+  height:auto;
+  cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  transition:opacity .15s;
+  filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));
 }
 #btn-row img:active{opacity:.7;transform:scale(.97)}
 </style>
@@ -55,10 +58,14 @@ document.getElementById("btn-inv").onclick = function(){ location.href="inventor
 </script>
 <script>
 if("serviceWorker" in navigator){
-  window.addEventListener("load",function(){
+  window.addEventListener("load", function(){
+    /* SW 캐시 강제 갱신 — 버전 변경 시 즉시 반영 */
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      regs.forEach(function(reg){ reg.update(); });
+    });
     navigator.serviceWorker.register("sw.js")
-      .then(function(reg){ console.log("[SW] 등록 완료:", reg.scope); })
-      .catch(function(err){ console.warn("[SW] 등록 실패:", err); });
+      .then(function(reg){ console.log("[SW] 등록:", reg.scope); })
+      .catch(function(err){ console.warn("[SW] 실패:", err); });
   });
 }
 </script>
