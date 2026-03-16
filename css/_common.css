@@ -1,22 +1,38 @@
 /* ============================================================
    ASTERION — common.css
    모든 HTML에서 공통으로 적용되는 스타일
-   <link rel="stylesheet" href="css/common.css"/> 로 불러오기
+   <link rel="stylesheet" href="css/common.css"/>
    ============================================================ */
 
 /* ── 리셋 ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 
-/* ── 기본 body ── */
+/* ── body: 배경만 담당, 수직 중앙 정렬 ── */
 body {
   font-family: 'Arial', sans-serif;
   color: #fff;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;   /* 수직 중앙 */
   min-height: 100vh;
   overflow: hidden;
+}
+
+/* ── 앱 래퍼 ──
+   배경(body)은 화면 100% 사용
+   모든 UI 구성요소는 이 안에서 90vh로 제한
+   → Android/iOS 네비게이션 바에 가릴 일 없음 */
+.app-wrap {
+  width: 100%;
+  max-width: 480px;
+  height: 90vh;              /* 화면 높이의 90%만 사용 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  position: relative;
 }
 
 /* ── 타이틀 이미지 ── */
@@ -38,9 +54,7 @@ body {
   flex-shrink: 0;
 }
 
-/* ── 하단 네비바 ──
-   투명 배경, 테두리 없음
-   margin-bottom 으로 Android 네비게이션 바 위에 고정 여백 확보 */
+/* ── 하단 네비바 ── */
 .nav-bar {
   flex-shrink: 0;
   width: 100%;
@@ -48,8 +62,7 @@ body {
   display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 8px 8px 8px;
-  margin-bottom: 100px;   /* 갤럭시 S24 Ultra 하단 네비바 여백 — 부족하면 늘릴 것 */
+  padding: 6px 8px;
   background: transparent;
   border-top: none;
 }
@@ -131,7 +144,7 @@ body {
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .15); border-radius: 3px; }
 
-/* ── 이미지 오버레이 박스 (productimage / stoneinfo 공통) ── */
+/* ── 이미지 오버레이 박스 ── */
 .img-wrap {
   position: relative;
   cursor: pointer;
