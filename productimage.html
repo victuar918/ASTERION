@@ -13,12 +13,13 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{
+  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
 }
-body{background:url('images/bg_all.jpg') center/cover no-repeat fixeddisplay:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
+
 .ttl{width:360px;max-width:92vw;display:block;margin:14px auto 6px;flex-shrink:0}
 
 /* 중앙 이미지 선택 영역 */
-.content{flex:1;width:100%;max-width:480pxjustify-content:center;padding:10px 16px;min-height:0}
+.content{flex:1;width:100%;max-width:480px;justify-content:center;padding:10px 16px;min-height:0}
 
 /* 이미지 선택 박스: btn_proimageselec.png 위에 선택 이미지 오버레이 */
 .img-wrap{position:relative;width:200px;height:200px;cursor:pointer;-webkit-tap-highlight-color:transparent}
