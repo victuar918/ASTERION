@@ -2,8 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"/>
 <title>ASTERION – Gemstone Select</title>
+<link rel="stylesheet" href="css/common.css"/>
 <script src="js/config.js"></script>
 <script src="js/api_contract.js"></script>
 <script src="js/state.js"></script>
@@ -11,8 +12,9 @@
 <script src="js/ui.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{background:url('images/bg_all.jpg') center/cover no-repeat fixed;font-family:'Arial',sans-serif;color:#fff;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
+html,body{
+}
+body{background:url('images/bg_all.jpg') center/cover no-repeat fixeddisplay:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
 .ttl{width:360px;max-width:92vw;display:block;margin:14px auto 6px;flex-shrink:0}
 .code-disp{font-size:13px;letter-spacing:1.5px;text-align:center;color:rgba(220,188,128,.9);padding:4px 0 6px;flex-shrink:0}
 .panes{flex:1;width:100%;max-width:480px;display:flex;flex-direction:column;gap:4px;padding:0 10px;min-height:0}
@@ -25,12 +27,13 @@ body{background:url('images/bg_all.jpg') center/cover no-repeat fixed;font-famil
 .stone-row{padding:12px 16px;font-size:14px;text-align:center;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.07);transition:background .15s;-webkit-tap-highlight-color:transparent}
 .stone-row:active{background:rgba(255,255,255,.15)}
 .empty-row{padding:18px;text-align:center;font-size:12px;color:rgba(255,255,255,.28)}
-.nav-bar{flex-shrink:0;width:100%;max-width:480px;display:flex;justify-content:space-around;align-items:center;padding:8px 8px env(safe-area-inset-bottom,10px);background:transparent;border-top:none}
+.nav-bar{flex-shrink:0;width:100%;max-width:480px;display:flex;justify-content:space-around;align-items:center;padding:8px;background:transparent;border-top:none}
 .nav-bar img{height:88px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
 .nav-bar img:active{opacity:.6}
 </style>
 </head>
 <body>
+<div class="app-wrap">
 <img class="ttl" src="images/ttl_stoneselect.png" alt="Gemstone Select"/>
 <div class="code-disp" id="code-disp">—</div>
 <div class="panes">
@@ -79,5 +82,6 @@ async function onDesign(){
   catch(err){hideLoading();toastErr("저장 실패: "+err.message);}
 }
 </script>
+</div>
 </body>
 </html>
