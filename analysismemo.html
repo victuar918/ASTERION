@@ -115,11 +115,21 @@ document.addEventListener("DOMContentLoaded", async function(){
   document.getElementById("b-save").onclick = onSave;
   document.getElementById("b-next").onclick = function(){ goPage("productimage.html", sc); };
 
-  /* 기존 Analysis 값 로드 */
+  /* 기존 Analysis + Memo 값 로드 */
   try{
     var item = await apiGetArchiveItem(sc);
-    if(item) document.getElementById("analysis-input").value =
-      String(item.analysis || item.Analysis || "");
+    if(item){
+      document.getElementById("analysis-input").value =
+        String(item.analysis || item.Analysis || "");
+      /* Memo는 추가 방식이라 입력창은 비워두고
+         기존 내용을 placeholder로 미리보기 표시 */
+      var prevMemo = String(item.memo || item.Memo || "");
+      if(prevMemo){
+        document.getElementById("memo-input").placeholder =
+          "기존 메모:\n" + prevMemo.slice(0,120) + (prevMemo.length>120?"...":"") +
+          "\n\n(새 내용을 입력하면 기존 메모 아래에 추가됩니다)";
+      }
+    }
   } catch(e){}
 });
 
