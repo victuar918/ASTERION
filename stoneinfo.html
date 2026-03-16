@@ -2,8 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"/>
 <title>ASTERION – Gemstone Information</title>
+<link rel="stylesheet" href="css/common.css"/>
 <script src="js/config.js"></script>
 <script src="js/api_contract.js"></script>
 <script src="js/state.js"></script>
@@ -11,13 +12,14 @@
 <script src="js/ui.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{background:url('images/bg_all.jpg') center/cover no-repeat fixed;font-family:'Arial',sans-serif;color:#fff;display:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
+html,body{
+}
+body{background:url('images/bg_all.jpg') center/cover no-repeat fixeddisplay:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
 .ttl{width:360px;max-width:92vw;display:block;margin:14px auto 4px;flex-shrink:0}
 .nk-disp{font-size:14px;color:rgba(220,188,128,.9);letter-spacing:1.5px;text-align:center;padding:4px 0 5px;flex-shrink:0}
 
 /* 이미지:NameEng:Exp = 45%:15%:40% */
-.content{flex:1;width:100%;max-width:400px;display:flex;flex-direction:column;align-items:center;min-height:0;padding:0 16px}
+.content{flex:1;width:100%;max-width:400pxmin-height:0;padding:0 16px}
 .zone-img{flex:4.5;display:flex;align-items:center;justify-content:center;width:100%;min-height:0}
 .zone-eng{flex:1.5;width:100%;display:flex;align-items:center;min-height:0;padding:4px 0}
 .zone-exp{flex:4;width:100%;display:flex;flex-direction:column;min-height:0;padding-bottom:4px}
@@ -40,12 +42,13 @@ body{background:url('images/bg_all.jpg') center/cover no-repeat fixed;font-famil
 .txt-input::placeholder{color:rgba(255,255,255,.3)}
 textarea.txt-input{flex:1;resize:none;min-height:0;overflow-y:auto;line-height:1.6}
 
-.nav-bar{flex-shrink:0;width:100%;max-width:400px;display:flex;justify-content:space-around;align-items:center;padding:8px 8px env(safe-area-inset-bottom,10px);background:transparent;border-top:none}
+.nav-bar{flex-shrink:0;width:100%;max-width:400px;display:flex;justify-content:space-around;align-items:center;padding:8px;background:transparent;border-top:none}
 .nav-bar img{height:88px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
 .nav-bar img:active{opacity:.6}
 </style>
 </head>
 <body>
+<div class="app-wrap">
 <img class="ttl" src="images/ttl_gemstoneinfo.png" alt="Gemstone Information"/>
 <div class="nk-disp" id="nk-disp">—</div>
 <div class="content">
@@ -110,6 +113,6 @@ async function onUpdate(){
   }catch(err){hideLoading();toastErr("실패: "+err.message);}
 }
 </script>
+</div>
 </body>
 </html>
-
