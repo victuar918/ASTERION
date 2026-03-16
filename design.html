@@ -27,30 +27,30 @@ body{
 .zone-det{flex:3;display:flex;flex-direction:column;min-height:0}
 .zone-tot{flex-shrink:0;padding:4px 2px}
 .zone-lay{flex:2;display:flex;flex-direction:column;min-height:0}
-.zone-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.35);padding:2px 4px;flex-shrink:0}
+.zone-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(80,55,25,.9);padding:2px 4px;flex-shrink:0}
 .scroll-pane{flex:1;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
 .scroll-pane::-webkit-scrollbar{width:3px}
 .scroll-pane::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15)}
 
 /* Stone 행 */
 .stone-row{display:flex;align-items:center;flex-wrap:wrap;gap:5px;padding:5px 4px;border-bottom:1px solid rgba(255,255,255,.05)}
-.stone-name{font-size:12px;color:rgba(255,255,255,.85);min-width:72px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+.stone-name{font-size:12px;color:#1a2e5a;min-width:72px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
 .btn-size{background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.22);border-radius:5px;font-size:11px;padding:4px 9px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .12s}
 .btn-size:active,.btn-size.flash{background:rgba(180,140,90,.6)}
 
 /* Details 가로 스크롤 */
-.details-wrap{flex:1;overflow-x:auto;overflow-y:hidden;min-height:0;display:flex;align-items:center;flex-wrap:nowrap;gap:3px;padding:4px;-webkit-overflow-scrolling:touch}
-.btn-plus{width:28px;height:28px;background:rgba(255,255,255,.07);border:1px dashed rgba(255,255,255,.28);border-radius:5px;color:rgba(255,255,255,.5);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent;transition:background .12s}
+.details-wrap{flex:1;overflow-x:hidden;overflow-y:auto;min-height:0;display:flex;align-items:flex-start;flex-wrap:wrap;gap:4px;padding:6px;-webkit-overflow-scrolling:touch}
+.btn-plus{width:28px;height:28px;background:rgba(180,140,80,.18);border:1px dashed rgba(120,85,30,.8);border-radius:5px;color:rgba(100,65,15,.9);font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent;transition:background .12s}
 .btn-plus.active-plus{background:rgba(170,130,75,.55);border:1px solid rgba(210,170,100,.9)}
-.btn-item{background:rgba(90,68,38,.5);border:1px solid rgba(190,150,90,.48);border-radius:7px;font-size:11px;padding:4px 8px;cursor:pointer;flex-shrink:0;line-height:1.4;text-align:center;-webkit-tap-highlight-color:transparent;transition:background .12s}
+.btn-item{background:rgba(90,60,15,.75);border:1px solid rgba(140,100,30,.85);border-radius:7px;color:#fff;font-size:11px;padding:4px 8px;cursor:pointer;flex-shrink:0;line-height:1.4;text-align:center;-webkit-tap-highlight-color:transparent;transition:background .12s}
 .btn-item:active{background:rgba(190,150,90,.45)}
-.btn-item .sub{font-size:9px;color:rgba(255,255,255,.55);display:block}
+.btn-item .sub{font-size:9px;color:rgba(255,235,200,.75);display:block}
 
 /* Total */
-.total-disp{font-size:14px;font-weight:bold;text-align:center;color:rgba(220,188,128,1);padding:3px}
+.total-disp{font-size:14px;font-weight:bold;text-align:center;color:#1a2e5a;padding:3px}
 
 /* Layout */
-.layout-text{font-size:11px;color:rgba(255,255,255,.7);line-height:1.75;white-space:pre-wrap;word-break:break-all;padding:2px 4px}
+.layout-text{font-size:11px;color:#1a2e5a;line-height:1.75;white-space:pre-wrap;word-break:break-all;padding:2px 4px}
 
 /* 네비 */
 .nav-bar{flex-shrink:0;width:100%;max-width:480px;display:flex;justify-content:space-around;align-items:center;padding:8px;background:transparent;border-top:none}
