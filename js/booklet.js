@@ -110,11 +110,19 @@ function renderPage2(d){
   var el = document.getElementById("pg2-c");
   el.innerHTML =
     '<div class="pg-sig">' +
-    '  <div class="pg-sig-title">ASTERION</div>' +
-    '  <div class="pg-sig-sub">Signature Archive</div>' +
-    '  <div class="pg-sig-no">Archive No. <strong>' + esc(d.structureCode||"") + '</strong></div>' +
-    '  <div class="pg-sig-for">Designed for <strong>' + esc(d.guestName||"—") + '</strong></div>' +
+    /* 그룹1: ASTERION + Signature Archive */
+    '  <div class="pg-sig-group">' +
+    '    <div class="pg-sig-title">ASTERION</div>' +
+    '    <div class="pg-sig-sub">Signature Archive</div>' +
+    '  </div>' +
+    /* 그룹2: Archive No + Designed for */
+    '  <div class="pg-sig-group-no">' +
+    '    <div class="pg-sig-no">Archive No. <strong>' + esc(d.structureCode||"") + '</strong></div>' +
+    '    <div class="pg-sig-for">Designed for <strong>' + esc(d.guestName||"—") + '</strong></div>' +
+    '  </div>' +
+    /* 그룹3: Beyond science */
     '  <div class="pg-sig-quote"><em>Beyond science,<br>We architect life\'s possibilities.</em></div>' +
+    /* 그룹4: ASTERION Architectural Authority — 오른쪽 */
     '  <div class="pg-sig-auth"><em>ASTERION<br>Architectural Authority</em></div>' +
     '</div>';
 }
