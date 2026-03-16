@@ -11,58 +11,79 @@
 <script src="js/api.js"></script>
 <script src="js/ui.js"></script>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{
-  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
+body{ background:url('images/bg_all.jpg') center/cover no-repeat fixed; }
+
+/* StructureCode : 입력란 = 1:2, 세로 중앙 정렬 */
+.content{
+  flex:1;width:100%;max-width:420px;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;  /* 세로 중앙 */
+  padding:0 22px;min-height:0;
+}
+.zone-code{
+  flex:1;display:flex;
+  align-items:center;justify-content:center;
+  width:100%;
+}
+.code-text{
+  font-size:15px;font-weight:600;color:#1a2e5a;
+  letter-spacing:2px;text-align:center;
+}
+.zone-inputs{
+  flex:2;width:100%;
+  display:flex;flex-direction:column;
+  justify-content:center;gap:16px;
+}
+.input-group{display:flex;flex-direction:column;gap:5px}
+.input-label{
+  font-size:11px;color:#1a2e5a;
+  font-weight:600;letter-spacing:.8px;padding-left:2px;
 }
 
-.ttl{width:360px;max-width:92vw;display:block;margin:14px auto 4px;flex-shrink:0}
-
-/* StructureCode 공간 : 두 입력란 공간 = 1:2 */
-.content{flex:1;width:100%;max-width:420px;justify-content:center;padding:0 22px;gap:0}
-.zone-code{flex:1;display:flex;align-items:center;justify-content:center}
-.code-text{font-size:15px;font-weight:600;color:rgba(220,188,128,.9);letter-spacing:2px;text-align:center}
-.zone-inputs{flex:2;width:100%;display:flex;flex-direction:column;justify-content:center;gap:16px}
-.input-group{display:flex;flex-direction:column;gap:5px}
-.input-label{font-size:11px;color:rgba(255,255,255,.55);letter-spacing:.8px;padding-left:2px}
+/* 투명도 80% */
 .date-input{
   width:100%;padding:11px 14px;
-  background:rgba(0,0,0,.60);
-  border:1px solid rgba(255,255,255,.18);border-radius:8px;
-  font-size:14px;outline:none;transition:border-color .15s;
-  -webkit-appearance:none;color-scheme:dark;
+  background:rgba(255,255,255,.20);
+  border:1px solid rgba(26,46,90,.2);
+  border-radius:8px;
+  color:#1a2e5a;font-size:14px;
+  outline:none;transition:border-color .15s;
+  -webkit-appearance:none;color-scheme:light;
 }
-.date-input:focus{border-color:rgba(210,170,100,.7)}
-.status-hint{font-size:11px;text-align:center;color:rgba(220,188,128,.65);min-height:16px;padding:4px 0}
+.date-input:focus{border-color:rgba(26,46,90,.5)}
 
-.nav-bar{flex-shrink:0;width:100%;max-width:420px;display:flex;justify-content:space-around;align-items:center;padding:8px;background:transparent;border-top:none}
-.nav-bar img{height:88px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
-.nav-bar img:active{opacity:.6}
+.status-hint{
+  font-size:11px;text-align:center;
+  color:rgba(26,46,90,.6);
+  min-height:16px;padding:6px 0;
+}
 </style>
 </head>
 <body>
 <div class="app-wrap">
-<img class="ttl" src="images/ttl_forwarding.png" alt="Forwarding Management"/>
-<div class="content">
-  <div class="zone-code"><div class="code-text" id="code-text">—</div></div>
-  <div class="zone-inputs">
-    <div class="input-group">
-      <div class="input-label">Forwarding Date</div>
-      <input class="date-input" type="date" id="fwd-date"/>
+  <img class="ttl" src="images/ttl_forwarding.png" alt="Forwarding Management"/>
+  <div class="content">
+    <div class="zone-code">
+      <div class="code-text" id="code-text">—</div>
     </div>
-    <div class="input-group">
-      <div class="input-label">Delivery Completed Date</div>
-      <input class="date-input" type="date" id="del-date"/>
+    <div class="zone-inputs">
+      <div class="input-group">
+        <div class="input-label">Forwarding Date</div>
+        <input class="date-input" type="date" id="fwd-date"/>
+      </div>
+      <div class="input-group">
+        <div class="input-label">Delivery Completed Date</div>
+        <input class="date-input" type="date" id="del-date"/>
+      </div>
     </div>
+    <div class="status-hint" id="status-hint"></div>
   </div>
-  <div class="status-hint" id="status-hint"></div>
-</div>
-<div class="nav-bar">
-  <img src="images/btn_go_home.png"   alt="Home"   id="b-home"/>
-  <img src="images/btn_go_before.png" alt="Before" id="b-back"/>
-  <img src="images/btn_update.png"    alt="Update" id="b-update"/>
+  <div class="nav-bar">
+    <img src="images/btn_go_home.png"   alt="Home"   id="b-home"/>
+    <img src="images/btn_go_before.png" alt="Before" id="b-back"/>
+    <img src="images/btn_update.png"    alt="Update" id="b-update"/>
+  </div>
 </div>
 <script src="js/forwarding.js"></script>
-</div>
 </body>
 </html>
