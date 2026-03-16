@@ -22,7 +22,7 @@ var PAGE_MAP = Object.freeze({
 
 /* 옅은 금색 배경 페이지 */
 var GOLD_PAGES = [1, 2, 7];
-var GOLD_BG    = "#fdf8ee";
+var GOLD_BG    = "#f2dfa0";
 var WHITE_BG   = "#ffffff";
 
 var sc   = null;
@@ -99,7 +99,7 @@ function renderAll(d){
 function renderPage1(d){
   var el = document.getElementById("pg1-c");
   el.innerHTML =
-    '<div class="pg-cover">' +
+    '<div class="pg-cover" style="height:100%">' +
     '  <div class="pg-brand">ASTERION</div>' +
     '  <div class="pg-sub">The Architecture of Fate</div>' +
     '</div>';
