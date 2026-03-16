@@ -11,74 +11,146 @@
 <script src="js/api.js"></script>
 <script src="js/ui.js"></script>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{
+body{
   background:url('images/bg_all.jpg') center/cover no-repeat fixed;
 }
 
-.ttl{width:360px;max-width:92vw;display:block;margin:14px auto 6px;flex-shrink:0}
+/* 타이틀~버튼 사이 공간: 이미지 선택 버튼을 중앙에 배치 */
+.content{
+  flex:1;
+  width:100%;
+  max-width:480px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;   /* 수직 중앙 */
+  padding:10px 16px;
+  min-height:0;
+}
 
-/* 중앙 이미지 선택 영역 */
-.content{flex:1;width:100%;max-width:480px;justify-content:center;padding:10px 16px;min-height:0}
-
-/* 이미지 선택 박스: btn_proimageselec.png 위에 선택 이미지 오버레이 */
-.img-wrap{position:relative;width:200px;height:200px;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.img-wrap input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:3}
-.img-bg{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1}
-.img-ov{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:8px;z-index:2;display:none}
+/* 이미지 선택 박스
+   btn_proimageselec.png 위에 선택 이미지가 오버레이 */
+.img-wrap{
+  position:relative;
+  width:200px;
+  height:200px;
+  cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+.img-wrap input[type=file]{
+  position:absolute;
+  inset:0;
+  opacity:0;
+  cursor:pointer;
+  width:100%;
+  height:100%;
+  z-index:3;
+}
+.img-bg{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  display:block;
+  position:relative;
+  z-index:1;
+}
+.img-ov{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  border-radius:8px;
+  z-index:2;
+  display:none;
+}
 .img-ov.show{display:block}
 
-.code-under{font-size:13px;color:rgba(220,188,128,.85);letter-spacing:1.5px;text-align:center;margin-top:10px}
-
-.nav-bar{flex-shrink:0;width:100%;max-width:480px;display:flex;justify-content:space-around;align-items:center;padding:8px;background:transparent;border-top:none}
-.nav-bar img{height:88px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
-.nav-bar img:active{opacity:.6}
+/* StructureCode 표시 — 짙은 네이비 */
+.code-under{
+  font-size:13px;
+  color:#1a2e5a;
+  font-weight:600;
+  letter-spacing:1.5px;
+  text-align:center;
+  margin-top:12px;
+}
 </style>
 </head>
 <body>
 <div class="app-wrap">
-<img class="ttl" src="images/ttl_productimage.png" alt="Product Image"/>
-<div class="content">
-  <div class="img-wrap" id="img-wrap">
-    <input type="file" id="file-input" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"/>
-    <img class="img-bg" src="images/btn_proimageselec.png" alt="Select"/>
-    <img class="img-ov" id="img-ov" src="" alt=""/>
+
+  <img class="ttl" src="images/ttl_productimage.png" alt="Product Image"/>
+
+  <div class="content">
+    <div class="img-wrap" id="img-wrap">
+      <input type="file" id="file-input"
+             accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"/>
+      <img class="img-bg" src="images/btn_proimageselec.png" alt="Select Image"/>
+      <img class="img-ov" id="img-ov" src="" alt=""/>
+    </div>
+    <div class="code-under" id="code-under">—</div>
   </div>
-  <div class="code-under" id="code-under">—</div>
-</div>
-<div class="nav-bar">
-  <img src="images/btn_go_home.png"   alt="Home"    id="b-home"/>
-  <img src="images/btn_go_before.png" alt="Before"  id="b-back"/>
-  <img src="images/btn_update.png"    alt="Update"  id="b-update"/>
-  <img src="images/btn_booklet.png"   alt="Next"    id="b-next"/>
+
+  <div class="nav-bar">
+    <img src="images/btn_go_home.png"   alt="Home"   id="b-home"/>
+    <img src="images/btn_go_before.png" alt="Before" id="b-back"/>
+    <img src="images/btn_update.png"    alt="Update" id="b-update"/>
+    <img src="images/btn_booklet.png"   alt="Next"   id="b-next"/>
+  </div>
+
 </div>
 <script>
 "use strict";
-var sc=null,selFile=null;
-document.addEventListener("DOMContentLoaded",async function(){
-  sc=requireStructureCode();if(!sc)return;
-  document.getElementById("code-under").textContent=sc;
-  document.getElementById("b-home").onclick=function(){clearAndGo("index.html");};
-  document.getElementById("b-back").onclick=function(){goPage("analysismemo.html",sc);};
-  document.getElementById("b-update").onclick=onUpdate;
-  document.getElementById("b-next").onclick=function(){goPage("booklet.html",sc);};
-  document.getElementById("file-input").addEventListener("change",onFileChange);
-  // 기존 이미지 로드
-  try{var item=await apiGetArchiveItem(sc);if(item&&(item.productImage||item.ProductImage)){var ov=document.getElementById("img-ov");ov.src=item.productImage||item.ProductImage;ov.classList.add("show");}}catch(e){}
+var sc = null, selFile = null;
+
+document.addEventListener("DOMContentLoaded", async function(){
+  sc = requireStructureCode(); if(!sc) return;
+  document.getElementById("code-under").textContent = sc;
+
+  document.getElementById("b-home").onclick   = function(){ clearAndGo("index.html"); };
+  document.getElementById("b-back").onclick   = function(){ goPage("analysismemo.html", sc); };
+  document.getElementById("b-update").onclick = onUpdate;
+  document.getElementById("b-next").onclick   = function(){ goPage("booklet.html", sc); };
+  document.getElementById("file-input").addEventListener("change", onFileChange);
+
+  /* 기존 저장된 이미지 로드 */
+  try{
+    var item = await apiGetArchiveItem(sc);
+    if(item && (item.productImage || item.ProductImage)){
+      var ov = document.getElementById("img-ov");
+      ov.src = item.productImage || item.ProductImage;
+      ov.classList.add("show");
+    }
+  } catch(e){}
 });
+
 function onFileChange(e){
-  var f=e.target.files&&e.target.files[0];if(!f)return;
-  if(f.size>4*1024*1024){toastErr("4MB 이하 이미지를 선택하세요");e.target.value="";return;}
-  selFile=f;
-  var r=new FileReader();r.onload=function(ev){var ov=document.getElementById("img-ov");ov.src=ev.target.result;ov.classList.add("show");};r.readAsDataURL(f);
+  var f = e.target.files && e.target.files[0]; if(!f) return;
+  if(f.size > 4*1024*1024){ toastErr("4MB 이하 이미지를 선택하세요"); e.target.value = ""; return; }
+  selFile = f;
+  var r = new FileReader();
+  r.onload = function(ev){
+    var ov = document.getElementById("img-ov");
+    ov.src = ev.target.result;
+    ov.classList.add("show");
+  };
+  r.readAsDataURL(f);
 }
+
 async function onUpdate(){
-  if(!selFile){toastErr("이미지를 먼저 선택하세요");return;}
+  if(!selFile){ toastErr("이미지를 먼저 선택하세요"); return; }
   showLoading("UPLOADING...");
-  try{await apiUploadProductImage(sc,selFile);hideLoading();toastOk("업로드 완료!");selFile=null;}
-  catch(err){hideLoading();toastErr("업로드 실패: "+err.message);}
+  try{
+    await apiUploadProductImage(sc, selFile);
+    hideLoading();
+    toastOk("업로드 완료!");
+    selFile = null;
+  } catch(err){
+    hideLoading();
+    toastErr("업로드 실패: " + err.message);
+  }
 }
 </script>
-</div>
 </body>
 </html>
