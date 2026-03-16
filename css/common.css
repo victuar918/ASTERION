@@ -14,7 +14,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;   /* 상단 정렬 */
+  justify-content: center;   /* 수직 중앙 */
   min-height: 100vh;
   overflow: hidden;
 }
@@ -27,7 +27,7 @@ body {
   color: #1a2e5a;           /* 기본 텍스트 색상 — 짙은 네이비 */
   width: 100%;
   max-width: 480px;
-  height: 93vh;              /* 화면 높이의 93%만 사용 */
+  height: 90vh;              /* 화면 높이의 90%만 사용 */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -49,7 +49,7 @@ body {
   font-size: 13px;
   letter-spacing: 1.5px;
   text-align: center;
-  color: rgba(220, 188, 128, .9);
+  color: #1a2e5a;
   padding: 4px 0 6px;
   flex-shrink: 0;
 }
