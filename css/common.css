@@ -11,11 +11,10 @@ html, body { height: 100%; }
 /* ── body: 배경만 담당, 수직 중앙 정렬 ── */
 body {
   font-family: 'Arial', sans-serif;
-  color: #fff;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;   /* 수정 — 상단 정렬 */
+  justify-content: center;   /* 수직 중앙 */
   min-height: 100vh;
   overflow: hidden;
 }
@@ -25,6 +24,7 @@ body {
    모든 UI 구성요소는 이 안에서 90vh로 제한
    → Android/iOS 네비게이션 바에 가릴 일 없음 */
 .app-wrap {
+  color: #1a2e5a;           /* 기본 텍스트 색상 — 짙은 네이비 */
   width: 100%;
   max-width: 480px;
   height: 93vh;              /* 화면 높이의 93%만 사용 */
@@ -107,7 +107,6 @@ body {
   background: rgba(0, 0, 0, .60);
   border: 1px solid rgba(255, 255, 255, .15);
   border-radius: 8px;
-  color: #fff;
   font-size: 13px;
   outline: none;
   transition: border-color .15s;
