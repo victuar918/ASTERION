@@ -4,99 +4,148 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"/>
 <title>ASTERION – Structure Code Index</title>
-<link rel="stylesheet" href="css/common.css"/>
 <script src="js/config.js"></script>
 <script src="js/api_contract.js"></script>
 <script src="js/state.js"></script>
 <script src="js/api.js"></script>
 <script src="js/ui.js"></script>
+<link rel="stylesheet" href="css/common.css"/>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{
+body{
+  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
 }
-body{background:url('images/bg_all.jpg') center/cover no-repeat fixeddisplay:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
-.ttl{width:360px;max-width:92vw;display:block;margin:14px auto 8px;flex-shrink:0}
 
-/* 타이틀~버튼 사이 중앙 배치 */
-.content{flex:1;width:100%;max-width:400pxjustify-content:center;padding:0 20px;gap:14px}
+/* 타이틀~버튼 사이 콘텐츠 */
+.content{
+  flex:1;
+  width:100%;
+  max-width:400px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:0 20px;
+  gap:16px;
+  min-height:0;
+}
 
 /* Select 후 표시되는 StructureCode */
-.selected-disp{font-size:16px;font-weight:bold;color:rgba(220,188,128,1);letter-spacing:2px;text-align:center;min-height:24px}
+.selected-disp{
+  font-size:17px;
+  font-weight:bold;
+  color:#1a2e5a;            /* 짙은 네이비 */
+  letter-spacing:2px;
+  text-align:center;
+  min-height:26px;
+}
 
 /* 입력란 */
 .code-input{
-  width:100%;padding:12px 16px;text-align:center;letter-spacing:3px;
-  background:rgba(0,0,0,.60);border:1px solid rgba(255,255,255,.2);border-radius:8px;
-  color:#fff;font-size:16px;outline:none;text-transform:uppercase;
+  width:100%;
+  padding:13px 16px;
+  text-align:center;
+  letter-spacing:3px;
+  background:rgba(0,0,0,.60);
+  border:1px solid rgba(255,255,255,.25);
+  border-radius:8px;
+  color:#fff;
+  font-size:16px;
+  outline:none;
+  text-transform:uppercase;
   transition:border-color .15s;
 }
-.code-input:focus{border-color:rgba(210,170,100,.7)}
-.code-input::placeholder{color:rgba(255,255,255,.3);font-size:13px;letter-spacing:1px}
+.code-input:focus{ border-color:rgba(210,170,100,.7); }
+.code-input::placeholder{ color:rgba(255,255,255,.3); font-size:13px; letter-spacing:1px; }
 
 /* 실시간 프리뷰 */
-.code-preview{font-size:12px;color:rgba(220,188,128,.6);text-align:center;letter-spacing:2px;min-height:16px}
-
-.nav-bar{flex-shrink:0;width:100%;max-width:400px;display:flex;justify-content:space-around;align-items:center;padding:8px;background:transparent;border-top:none}
-.nav-bar img{height:88px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
-.nav-bar img:active{opacity:.6}
+.code-preview{
+  font-size:12px;
+  color:#1a2e5a;            /* 짙은 네이비 */
+  text-align:center;
+  letter-spacing:2px;
+  min-height:18px;
+  font-weight:600;
+}
 </style>
 </head>
 <body>
 <div class="app-wrap">
-<img class="ttl" src="images/ttl_codeindex.png" alt="Structure Code Index"/>
-<div class="content">
-  <div class="selected-disp" id="sel-disp"></div>
-  <div style="width:100%">
-    <input class="code-input" id="code-input" type="text" maxlength="13" placeholder="S-00000-000000"/>
-    <div class="code-preview" id="code-preview">S-□□□□□-□□□□□□</div>
+  <img class="ttl" src="images/ttl_codeindex.png" alt="Structure Code Index"/>
+
+  <div class="content">
+    <div class="selected-disp" id="sel-disp"></div>
+    <div style="width:100%">
+      <input class="code-input" id="code-input" type="text"
+             maxlength="13" placeholder="S-00000-000000"/>
+      <div class="code-preview" id="code-preview">S-□□□□□-□□□□□□</div>
+    </div>
+  </div>
+
+  <div class="nav-bar">
+    <img src="images/btn_go_home.png"  alt="Home"     id="b-home"/>
+    <img src="images/btn_select.png"   alt="Select"   id="b-select"/>
+    <img src="images/btn_as.png"       alt="A/S"      id="b-as"/>
+    <img src="images/btn_complete.png" alt="Complete" id="b-complete"/>
   </div>
 </div>
-<div class="nav-bar">
-  <img src="images/btn_go_home.png"  alt="Home"     id="b-home"/>
-  <img src="images/btn_select.png"   alt="Select"   id="b-select"/>
-  <img src="images/btn_as.png"       alt="A/S"      id="b-as"/>
-  <img src="images/btn_complete.png" alt="Complete" id="b-complete"/>
-</div>
+
 <script>
 "use strict";
-var selCode=null;
-document.addEventListener("DOMContentLoaded",function(){
-  document.getElementById("b-home").onclick=function(){location.href="index.html";};
-  document.getElementById("b-select").onclick=onSelect;
-  document.getElementById("b-as").onclick=function(){onChangeStatus("A/S");};
-  document.getElementById("b-complete").onclick=function(){onChangeStatus("Complete");};
-  var inp=document.getElementById("code-input");
-  inp.addEventListener("input",function(){
-    var raw=this.value.toUpperCase().replace(/[^A-Z0-9\-]/g,"");
-    this.value=raw;
-    document.getElementById("code-preview").textContent=formatPreview(raw);
+var selCode = null;
+
+document.addEventListener("DOMContentLoaded", function(){
+  document.getElementById("b-home").onclick    = function(){ location.href = "index.html"; };
+  document.getElementById("b-select").onclick  = onSelect;
+  document.getElementById("b-as").onclick      = function(){ onChangeStatus("A/S"); };
+  document.getElementById("b-complete").onclick= function(){ onChangeStatus("Complete"); };
+
+  var inp = document.getElementById("code-input");
+  inp.addEventListener("input", function(){
+    var raw = this.value.toUpperCase().replace(/[^A-Z0-9\-]/g, "");
+    this.value = raw;
+    document.getElementById("code-preview").textContent = formatPreview(raw);
   });
-  inp.addEventListener("keydown",function(e){if(e.key==="Enter")onSelect();});
+  inp.addEventListener("keydown", function(e){
+    if(e.key === "Enter") onSelect();
+  });
 });
+
 function formatPreview(raw){
-  var clean=raw.replace(/\-/g,"");
-  return (clean.slice(0,1)||"S")+"-"+(clean.slice(1,6)||"").padEnd(5,"□")+"-"+(clean.slice(6,12)||"").padEnd(6,"□");
+  var c = raw.replace(/\-/g, "");
+  return (c.slice(0,1) || "S") + "-" +
+         (c.slice(1,6) || "").padEnd(5,"□") + "-" +
+         (c.slice(6,12) || "").padEnd(6,"□");
 }
+
 function getCode(){
-  var raw=document.getElementById("code-input").value.toUpperCase();
-  if(raw.indexOf("-")!==-1)return raw;
-  var c=raw.replace(/\-/g,"");
-  return c.length<7?raw:c.slice(0,1)+"-"+c.slice(1,6)+"-"+c.slice(6,12);
+  var raw = document.getElementById("code-input").value.toUpperCase();
+  if(raw.indexOf("-") !== -1) return raw;
+  var c = raw.replace(/\-/g,"");
+  return c.length < 7 ? raw : c.slice(0,1)+"-"+c.slice(1,6)+"-"+c.slice(6,12);
 }
+
 function onSelect(){
-  var code=getCode();
-  if(!code||code.replace(/\-/g,"").length<7){toastErr("코드를 입력하세요");return;}
-  selCode=code;
-  document.getElementById("sel-disp").textContent=code;
-  toastOk("선택됨: "+code);
+  var code = getCode();
+  if(!code || code.replace(/\-/g,"").length < 7){
+    toastErr("코드를 입력하세요"); return;
+  }
+  selCode = code;
+  document.getElementById("sel-disp").textContent = code;
+  toastOk("선택됨: " + code);
 }
+
 async function onChangeStatus(newStatus){
-  if(!selCode){toastErr("코드를 먼저 선택하세요");return;}
+  if(!selCode){ toastErr("코드를 먼저 선택하세요"); return; }
   showLoading("UPDATING...");
-  try{await apiUpdateStatus(selCode,newStatus);hideLoading();toastOk("Status → "+newStatus);}
-  catch(err){hideLoading();toastErr("실패: "+err.message);}
+  try{
+    await apiUpdateStatus(selCode, newStatus);
+    hideLoading();
+    toastOk("Status → " + newStatus);
+  } catch(err){
+    hideLoading();
+    toastErr("실패: " + err.message);
+  }
 }
 </script>
-</div>
 </body>
 </html>
