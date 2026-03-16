@@ -11,84 +11,97 @@
 <script src="js/api.js"></script>
 <script src="js/ui.js"></script>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{
-  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
+body{ background:url('images/bg_all.jpg') center/cover no-repeat fixed; }
+
+.nk-disp{
+  font-size:14px;color:#1a2e5a;font-weight:600;
+  letter-spacing:1.5px;text-align:center;
+  padding:4px 0 5px;flex-shrink:0;
 }
 
-.ttl{width:360px;max-width:92vw;display:block;margin:14px auto 4px;flex-shrink:0}
-.nk-disp{font-size:14px;color:rgba(220,188,128,.9);letter-spacing:1.5px;text-align:center;padding:4px 0 5px;flex-shrink:0}
+/* 이미지:NameEng:Exp = 45%:15%:40% — 세로 중앙 정렬 */
+.content{
+  flex:1;width:100%;max-width:400px;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center; /* 세로 중앙 */
+  min-height:0;padding:0 16px;gap:6px;
+}
 
-/* 이미지:NameEng:Exp = 45%:15%:40% */
-.content{flex:1;width:100%;max-width:400px;min-height:0;padding:0 16px}
-.zone-img{flex:4.5;display:flex;align-items:center;justify-content:center;width:100%;min-height:0}
-.zone-eng{flex:1.5;width:100%;display:flex;align-items:center;min-height:0;padding:4px 0}
-.zone-exp{flex:4;width:100%;display:flex;flex-direction:column;min-height:0;padding-bottom:4px}
-
-/* 이미지 선택 박스 */
-.img-wrap{position:relative;cursor:pointer;width:min(100%,180px);height:min(100%,180px);-webkit-tap-highlight-color:transparent}
-.img-wrap input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:3}
-.img-bg{width:100%;height:100%;object-fit:contain;display:block;z-index:1;position:relative}
+/* 이미지 45% */
+.zone-img{
+  flex:4.5;display:flex;align-items:center;
+  justify-content:center;width:100%;min-height:0;
+}
+.img-wrap{
+  position:relative;cursor:pointer;
+  width:min(100%,180px);height:min(100%,180px);
+  -webkit-tap-highlight-color:transparent;
+}
+.img-wrap input[type=file]{
+  position:absolute;inset:0;opacity:0;
+  cursor:pointer;width:100%;height:100%;z-index:3;
+}
+.img-bg{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1}
 .img-ov{position:absolute;inset:0;object-fit:cover;border-radius:8px;z-index:2;display:none}
 .img-ov.show{display:block}
 
-/* 투명도 60% 입력 */
+/* NameEng 15% */
+.zone-eng{
+  flex:1.5;width:100%;
+  display:flex;align-items:center;min-height:0;
+}
+
+/* Exp 40% — 기존 대비 3배 높이 확보 */
+.zone-exp{
+  flex:12;  /* 4 → 12 (3배) */
+  width:100%;display:flex;flex-direction:column;min-height:0;
+  padding-bottom:4px;
+}
+
+/* 투명도 80% 입력창 */
 .txt-input{
   width:100%;padding:9px 12px;
-  background:rgba(0,0,0,.60);
-  border:1px solid rgba(255,255,255,.15);border-radius:8px;
-  font-size:13px;outline:none;transition:border-color .15s;
+  background:rgba(255,255,255,.20);  /* 80% 투명 */
+  border:1px solid rgba(26,46,90,.2);
+  border-radius:8px;
+  color:#1a2e5a;font-size:13px;
+  outline:none;transition:border-color .15s;
 }
-.txt-input:focus{border-color:rgba(210,170,100,.65)}
-.txt-input::placeholder{color:rgba(255,255,255,.3)}
-textarea.txt-input{flex:1;resize:none;min-height:0;overflow-y:auto;line-height:1.6}
-
-.nav-bar{flex-shrink:0;width:100%;max-width:400px;display:flex;justify-content:space-around;align-items:center;padding:8px;background:transparent;border-top:none}
-.nav-bar img{height:88px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
-.nav-bar img:active{opacity:.6}
+.txt-input:focus{border-color:rgba(26,46,90,.5)}
+.txt-input::placeholder{color:rgba(26,46,90,.35)}
+textarea.txt-input{
+  flex:1;resize:none;min-height:0;
+  overflow-y:auto;line-height:1.6;
+}
 </style>
 </head>
 <body>
 <div class="app-wrap">
-<img class="ttl" src="images/ttl_gemstoneinfo.png" alt="Gemstone Information"/>
-<div class="nk-disp" id="nk-disp">—</div>
-<div class="content">
-  <div class="zone-img">
-    <div class="img-wrap" id="img-wrap">
-      <input type="file" id="file-input" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"/>
-      <img class="img-bg" src="images/btn_gemimageselec.png" alt=""/>
-      <img class="img-ov" id="img-ov" src="" alt=""/>
+  <img class="ttl" src="images/ttl_gemstoneinfo.png" alt="Gemstone Information"/>
+  <div class="nk-disp" id="nk-disp">—</div>
+  <div class="content">
+    <div class="zone-img">
+      <div class="img-wrap" id="img-wrap">
+        <input type="file" id="file-input" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"/>
+        <img class="img-bg" src="images/btn_gemimageselec.png" alt=""/>
+        <img class="img-ov" id="img-ov" src="" alt=""/>
+      </div>
+    </div>
+    <div class="zone-eng">
+      <input class="txt-input" id="nameeng-input" type="text" placeholder="English Name" maxlength="200"/>
+    </div>
+    <div class="zone-exp">
+      <textarea class="txt-input" id="exp-input" placeholder="Explanation..."></textarea>
     </div>
   </div>
-  <div class="zone-eng">
-    <input class="txt-input" id="nameeng-input" type="text" placeholder="English Name" maxlength="200"/>
+  <div class="nav-bar">
+    <img src="images/btn_go_home.png"   alt="Home"   id="b-home"/>
+    <img src="images/btn_go_before.png" alt="Before" id="b-back"/>
+    <img src="images/btn_update.png"    alt="Update" id="b-update"/>
   </div>
-  <div class="zone-exp">
-    <textarea class="txt-input" id="exp-input" placeholder="Explanation..."></textarea>
-  </div>
-</div>
-<div class="nav-bar">
-  <img src="images/btn_go_home.png"   alt="Home"   id="b-home"/>
-  <img src="images/btn_go_before.png" alt="Before" id="b-back"/>
-  <img src="images/btn_update.png"    alt="Update" id="b-update"/>
 </div>
 <script>
 "use strict";
-
-/* Drive URL을 thumbnail URL로 변환 (CORS 문제 해결) */
-function convertDriveUrl(url) {
-  if(!url) return "";
-  // 이미 thumbnail 형식이면 그대로
-  if(url.indexOf("thumbnail") !== -1) return url;
-  // uc?export=view&id=XXX → thumbnail?id=XXX&sz=w600
-  var m = url.match(/[?&]id=([a-zA-Z0-9_\-]+)/);
-  if(m) return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w600";
-  // /d/XXX/view 형식
-  m = url.match(/\/d\/([a-zA-Z0-9_\-]+)/);
-  if(m) return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w600";
-  return url;
-}
-
 var nk=null,selFile=null,origEng="",origExp="";
 document.addEventListener("DOMContentLoaded",async function(){
   nk=requireNameKr();if(!nk)return;
@@ -110,6 +123,12 @@ document.addEventListener("DOMContentLoaded",async function(){
     }
   }catch(e){hideLoading();}
 });
+function convertDriveUrl(url){
+  if(!url)return"";if(url.indexOf("thumbnail")!==-1)return url;
+  var m=url.match(/[?&]id=([a-zA-Z0-9_\-]+)/);
+  if(m)return"https://drive.google.com/thumbnail?id="+m[1]+"&sz=w400";
+  return url;
+}
 function onFileChange(e){
   var f=e.target.files&&e.target.files[0];if(!f)return;
   if(f.size>4*1024*1024){toastErr("4MB 이하");e.target.value="";return;}
@@ -129,6 +148,5 @@ async function onUpdate(){
   }catch(err){hideLoading();toastErr("실패: "+err.message);}
 }
 </script>
-</div>
 </body>
 </html>
