@@ -74,6 +74,8 @@ body{
   position:relative;
 }
 .preview-page.active{display:flex;flex-direction:column;}
+/* 핵심: #pgN-c 중간 div도 부모 높이 전체를 채워야 내부 height:100% 작동 */
+.preview-page > div{flex:1;min-height:0;display:flex;flex-direction:column;}
 
 /* ════════════════════════════
    페이지별 내부 스타일
