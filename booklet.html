@@ -67,13 +67,13 @@ body{
 
 .preview-page{
   display:none;
-  height:530px;          /* 고정 높이 — 페이지 비율 유지 */
+  height:530px;
   overflow-y:auto;
-  padding:16px 14px;
+  padding:0;
   transition:background .3s;
   position:relative;
 }
-.preview-page.active{display:block}
+.preview-page.active{display:flex;flex-direction:column;}
 
 /* ════════════════════════════
    페이지별 내부 스타일
@@ -83,10 +83,9 @@ body{
 .pg-cover{
   display:flex;flex-direction:column;
   align-items:center;
-  justify-content:flex-start;  /* 상단 기준 */
-  height:100%;
-  padding-top:30%;             /* 2/4 지점 — 위에서 약 50% 내려온 위치 */
-  padding-left:10px;padding-right:10px;
+  justify-content:flex-start;
+  width:100%;height:100%;
+  padding-top:32%;padding-left:14px;padding-right:14px;
   text-align:center;
   box-sizing:border-box;
 }
@@ -101,25 +100,26 @@ body{
 /* PAGE 2: Signature Archive */
 .pg-sig{
   display:flex;flex-direction:column;
-  align-items:center;          /* 중앙 정렬 */
+  align-items:center;
   text-align:center;
-  justify-content:center;
-  height:100%;
-  padding:10px 14px;
-  gap:0;
+  justify-content:space-between;  /* 상하 여백 자동 분배로 auth 안 잘림 */
+  width:100%;height:100%;
+  padding:28px 14px;
+  box-sizing:border-box;
 }
 .pg-sig-title{font-size:18px;font-weight:700;color:#1a2e5a;letter-spacing:2px;margin-bottom:2px;}
 .pg-sig-sub{font-size:12px;color:#1a2e5a;letter-spacing:1px;margin-bottom:22px;}
 .pg-sig-no{font-size:13px;color:#1a2e5a;margin-bottom:2px;}
 .pg-sig-for{font-size:13px;color:#1a2e5a;margin-bottom:22px;}
 .pg-sig-quote{font-size:12px;color:#1a2e5a;font-style:italic;line-height:1.8;margin-bottom:22px;}
-.pg-sig-auth{font-size:11px;color:#1a2e5a;font-style:italic;text-align:center;}
+.pg-sig-auth{font-size:11px;color:#1a2e5a;font-style:italic;text-align:center;padding-top:4px;}
 
 /* PAGE 3: Product Image */
 .pg-product{
   display:flex;flex-direction:column;
   align-items:center;justify-content:center;
-  height:100%;gap:14px;padding:10px 0;
+  width:100%;height:100%;gap:14px;
+  padding:16px 10px;box-sizing:border-box;
 }
 .pg-product-frame{
   width:160px;height:160px;
@@ -133,7 +133,7 @@ body{
 .pg-product-code{font-size:12px;color:#555;letter-spacing:1px}
 
 /* PAGE 4: Gemstone Description */
-.pg-gem{display:flex;flex-direction:column;justify-content:center;height:100%;padding:4px 6px;}
+.pg-gem{display:flex;flex-direction:column;justify-content:center;width:100%;height:100%;padding:12px 14px;box-sizing:border-box;}
 .pg-gem-title{
   font-size:14px;color:#c9a84c;
   text-align:center;letter-spacing:1px;
@@ -168,7 +168,7 @@ body{
 }
 
 /* PAGE 5: Structure Design + Analysis */
-.pg-struct{display:flex;flex-direction:column;justify-content:center;height:100%;padding:4px 6px;}
+.pg-struct{display:flex;flex-direction:column;justify-content:center;width:100%;height:100%;padding:12px 14px;box-sizing:border-box;}
 .pg-section-title{
   font-size:16px;color:#c9a84c;
   text-align:center;letter-spacing:1px;
@@ -188,7 +188,7 @@ body{
 }
 
 /* PAGE 6: 철학 텍스트 */
-.pg-phil{display:flex;flex-direction:column;justify-content:center;height:100%;padding:20px 14px;}
+.pg-phil{display:flex;flex-direction:column;justify-content:center;width:100%;height:100%;padding:24px 16px;box-sizing:border-box;}
 .pg-phil p{
   font-size:10px;color:#444;
   line-height:2.4;margin-bottom:10px;
@@ -199,8 +199,8 @@ body{
 .pg-slogan{
   display:flex;flex-direction:column;
   justify-content:center;
-  height:100%;padding:20px 14px;
-  gap:0;
+  width:100%;height:100%;padding:20px 20px;
+  box-sizing:border-box;gap:0;
 }
 .pg-slogan p{
   font-size:10px;color:#555;
