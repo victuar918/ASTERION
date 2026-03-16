@@ -17,7 +17,8 @@
    0. 공통 요소 자동 삽입 (DOMContentLoaded 전에도 안전)
 ══════════════════════════════════════════════════════ */
 (function () {
-  if (document.getElementById("_ui_loading")) return; // 중복 방지
+  function _initUI() {
+    if (document.getElementById("_ui_loading")) return; // 중복 방지
 
   /* 스타일 */
   var s = document.createElement("style");
@@ -68,6 +69,13 @@
   var p = document.createElement("div"); p.id = "_ui_popup";
   p.innerHTML = '<div class="pop-box"><div class="pop-q" id="_ui_pop_q"></div><div class="pop-btns"><button class="p-yes" id="_ui_pop_yes">Yes</button><button class="p-no" id="_ui_pop_no">No</button></div></div>';
   document.body.appendChild(p);
+  }
+  /* body가 준비됐으면 즉시, 아니면 DOMContentLoaded 이후 실행 */
+  if (document.body) {
+    _initUI();
+  } else {
+    document.addEventListener("DOMContentLoaded", _initUI);
+  }
 })();
 
 /* ══════════════════════════════════════════════════════
@@ -215,3 +223,4 @@ function initImageBox(opts) {
     if (typeof opts.onSelect === "function") opts.onSelect(file);
   });
 }
+
