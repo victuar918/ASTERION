@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"/>
-<title>ASTERION – Booklet</title>
+<title>ASTERION – Product Image</title>
 <link rel="stylesheet" href="css/common.css"/>
 <script src="js/config.js"></script>
 <script src="js/api_contract.js"></script>
@@ -15,67 +15,69 @@
 html,body{
 }
 body{background:url('images/bg_all.jpg') center/cover no-repeat fixeddisplay:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
-.ttl{width:360px;max-width:92vw;display:block;margin:14px auto 4px;flex-shrink:0}
-.code-disp{font-size:13px;letter-spacing:1.5px;text-align:center;color:rgba(220,188,128,.9);padding:3px 0 5px;flex-shrink:0}
+.ttl{width:360px;max-width:92vw;display:block;margin:14px auto 6px;flex-shrink:0}
 
-/* 콘텐츠: 좌(페이지 버튼 7개) + 우(미리보기) */
-.content{flex:1;width:100%;max-width:560px;display:flex;min-height:0;padding:0 8px;gap:8px}
+/* 중앙 이미지 선택 영역 */
+.content{flex:1;width:100%;max-width:480pxjustify-content:center;padding:10px 16px;min-height:0}
 
-/* 좌: 페이지 버튼 세로 7개 */
-.page-btns{display:flex;flex-direction:column;gap:5px;flex-shrink:0;padding:4px 0;justify-content:center}
-.pg-btn{width:38px;height:38px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);border-radius:7px;color:rgba(255,255,255,.7);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;-webkit-tap-highlight-color:transparent}
-.pg-btn.active{background:rgba(170,130,75,.5);border-color:rgba(210,170,100,.9);color:#fff}
+/* 이미지 선택 박스: btn_proimageselec.png 위에 선택 이미지 오버레이 */
+.img-wrap{position:relative;width:200px;height:200px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.img-wrap input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:3}
+.img-bg{width:100%;height:100%;object-fit:contain;display:block;position:relative;z-index:1}
+.img-ov{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:8px;z-index:2;display:none}
+.img-ov.show{display:block}
 
-/* 우: 미리보기 */
-.preview-wrap{flex:1;min-height:0;overflow-y:auto;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(0,0,0,.3)}
-.preview-wrap::-webkit-scrollbar{width:3px}
-.preview-wrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15)}
-.preview-page{display:none;padding:14px;min-height:140px}
-.preview-page.active{display:block}
-.pg-title{font-size:10px;letter-spacing:1.5px;color:rgba(220,188,128,.6);margin-bottom:8px}
-.pg-content{font-size:12px;line-height:1.8;color:rgba(255,255,255,.8);white-space:pre-wrap}
-.stone-block{margin-bottom:10px}
-.stone-block .s-name{font-size:13px;font-weight:bold;color:rgba(220,188,128,.9)}
-.stone-block .s-eng{font-size:11px;color:rgba(255,255,255,.55)}
-.stone-block .s-exp{font-size:11px;color:rgba(255,255,255,.65);margin-top:3px}
-.pg-img{max-width:100%;border-radius:8px;margin-top:8px;display:none}
-.pg-img.show{display:block}
+.code-under{font-size:13px;color:rgba(220,188,128,.85);letter-spacing:1.5px;text-align:center;margin-top:10px}
 
-.nav-bar{flex-shrink:0;width:100%;max-width:560px;display:flex;justify-content:space-around;align-items:center;padding:8px;background:transparent;border-top:none}
+.nav-bar{flex-shrink:0;width:100%;max-width:480px;display:flex;justify-content:space-around;align-items:center;padding:8px;background:transparent;border-top:none}
 .nav-bar img{height:88px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
 .nav-bar img:active{opacity:.6}
 </style>
 </head>
 <body>
 <div class="app-wrap">
-<img class="ttl" src="images/ttl_booklet.png" alt="Booklet"/>
-<div class="code-disp" id="code-disp">—</div>
+<img class="ttl" src="images/ttl_productimage.png" alt="Product Image"/>
 <div class="content">
-  <div class="page-btns" id="page-btns">
-    <button class="pg-btn active" data-pg="1">1</button>
-    <button class="pg-btn" data-pg="2">2</button>
-    <button class="pg-btn" data-pg="3">3</button>
-    <button class="pg-btn" data-pg="4">4</button>
-    <button class="pg-btn" data-pg="5">5</button>
-    <button class="pg-btn" data-pg="6">6</button>
-    <button class="pg-btn" data-pg="7">7</button>
+  <div class="img-wrap" id="img-wrap">
+    <input type="file" id="file-input" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"/>
+    <img class="img-bg" src="images/btn_proimageselec.png" alt="Select"/>
+    <img class="img-ov" id="img-ov" src="" alt=""/>
   </div>
-  <div class="preview-wrap" id="preview-wrap">
-    <div id="pg1" class="preview-page active"><div class="pg-title">PAGE 1 — Cover</div><div class="pg-content" id="pg1-c">Loading...</div></div>
-    <div id="pg2" class="preview-page"><div class="pg-title">PAGE 2 — Stone Info</div><div id="pg2-c"></div></div>
-    <div id="pg3" class="preview-page"><div class="pg-title">PAGE 3 — Product Image</div><img class="pg-img" id="pg3-img" src="" alt=""/><div class="pg-content" id="pg3-c"></div></div>
-    <div id="pg4" class="preview-page"><div class="pg-title">PAGE 4 — Layout Summary</div><div class="pg-content" id="pg4-c"></div></div>
-    <div id="pg5" class="preview-page"><div class="pg-title">PAGE 5 — Analysis</div><div class="pg-content" id="pg5-c"></div></div>
-    <div id="pg6" class="preview-page"><div class="pg-title">PAGE 6 — Memo</div><div class="pg-content" id="pg6-c"></div></div>
-    <div id="pg7" class="preview-page"><div class="pg-title">PAGE 7 — Sign / Name</div><div class="pg-content" id="pg7-c"></div></div>
-  </div>
+  <div class="code-under" id="code-under">—</div>
 </div>
 <div class="nav-bar">
-  <img src="images/btn_go_home.png"   alt="Home"   id="b-home"/>
-  <img src="images/btn_go_before.png" alt="Before" id="b-back"/>
-  <img src="images/btn_createpdf.png" alt="PDF"    id="b-pdf"/>
+  <img src="images/btn_go_home.png"   alt="Home"    id="b-home"/>
+  <img src="images/btn_go_before.png" alt="Before"  id="b-back"/>
+  <img src="images/btn_update.png"    alt="Update"  id="b-update"/>
+  <img src="images/btn_booklet.png"   alt="Next"    id="b-next"/>
 </div>
-<script src="js/booklet.js"></script>
+<script>
+"use strict";
+var sc=null,selFile=null;
+document.addEventListener("DOMContentLoaded",async function(){
+  sc=requireStructureCode();if(!sc)return;
+  document.getElementById("code-under").textContent=sc;
+  document.getElementById("b-home").onclick=function(){clearAndGo("index.html");};
+  document.getElementById("b-back").onclick=function(){goPage("analysismemo.html",sc);};
+  document.getElementById("b-update").onclick=onUpdate;
+  document.getElementById("b-next").onclick=function(){goPage("booklet.html",sc);};
+  document.getElementById("file-input").addEventListener("change",onFileChange);
+  // 기존 이미지 로드
+  try{var item=await apiGetArchiveItem(sc);if(item&&(item.productImage||item.ProductImage)){var ov=document.getElementById("img-ov");ov.src=item.productImage||item.ProductImage;ov.classList.add("show");}}catch(e){}
+});
+function onFileChange(e){
+  var f=e.target.files&&e.target.files[0];if(!f)return;
+  if(f.size>4*1024*1024){toastErr("4MB 이하 이미지를 선택하세요");e.target.value="";return;}
+  selFile=f;
+  var r=new FileReader();r.onload=function(ev){var ov=document.getElementById("img-ov");ov.src=ev.target.result;ov.classList.add("show");};r.readAsDataURL(f);
+}
+async function onUpdate(){
+  if(!selFile){toastErr("이미지를 먼저 선택하세요");return;}
+  showLoading("UPLOADING...");
+  try{await apiUploadProductImage(sc,selFile);hideLoading();toastOk("업로드 완료!");selFile=null;}
+  catch(err){hideLoading();toastErr("업로드 실패: "+err.message);}
+}
+</script>
 </div>
 </body>
 </html>
