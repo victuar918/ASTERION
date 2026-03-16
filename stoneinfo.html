@@ -74,6 +74,21 @@ textarea.txt-input{flex:1;resize:none;min-height:0;overflow-y:auto;line-height:1
 </div>
 <script>
 "use strict";
+
+/* Drive URL을 thumbnail URL로 변환 (CORS 문제 해결) */
+function convertDriveUrl(url) {
+  if(!url) return "";
+  // 이미 thumbnail 형식이면 그대로
+  if(url.indexOf("thumbnail") !== -1) return url;
+  // uc?export=view&id=XXX → thumbnail?id=XXX&sz=w600
+  var m = url.match(/[?&]id=([a-zA-Z0-9_\-]+)/);
+  if(m) return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w600";
+  // /d/XXX/view 형식
+  m = url.match(/\/d\/([a-zA-Z0-9_\-]+)/);
+  if(m) return "https://drive.google.com/thumbnail?id=" + m[1] + "&sz=w600";
+  return url;
+}
+
 var nk=null,selFile=null,origEng="",origExp="";
 document.addEventListener("DOMContentLoaded",async function(){
   nk=requireNameKr();if(!nk)return;
@@ -91,7 +106,7 @@ document.addEventListener("DOMContentLoaded",async function(){
       origEng=s.nameEng||"";origExp=s.exp||"";
       document.getElementById("nameeng-input").value=origEng;
       document.getElementById("exp-input").value=origExp;
-      if(s.image){var ov=document.getElementById("img-ov");ov.src=s.image;ov.classList.add("show");}
+      if(s.image){var ov=document.getElementById("img-ov");ov.src=convertDriveUrl(s.image);ov.classList.add("show");}
     }
   }catch(e){hideLoading();}
 });
