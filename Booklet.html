@@ -13,8 +13,9 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{
+  background:url('images/bg_all.jpg') center/cover no-repeat fixed;
 }
-body{background:url('images/bg_all.jpg') center/cover no-repeat fixeddisplay:flex;flex-direction:column;align-items:center;min-height:100vh;overflow:hidden}
+
 .ttl{width:360px;max-width:92vw;display:block;margin:14px auto 4px;flex-shrink:0}
 .code-disp{font-size:13px;letter-spacing:1.5px;text-align:center;color:rgba(220,188,128,.9);padding:3px 0 5px;flex-shrink:0}
 
@@ -24,7 +25,7 @@ body{background:url('images/bg_all.jpg') center/cover no-repeat fixeddisplay:fle
 /* 좌: 페이지 버튼 세로 7개 */
 .page-btns{display:flex;flex-direction:column;gap:5px;flex-shrink:0;padding:4px 0;justify-content:center}
 .pg-btn{width:38px;height:38px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);border-radius:7px;color:rgba(255,255,255,.7);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;-webkit-tap-highlight-color:transparent}
-.pg-btn.active{background:rgba(170,130,75,.5);border-color:rgba(210,170,100,.9);color:#fff}
+.pg-btn.active{background:rgba(170,130,75,.5);border-color:rgba(210,170,100,.9)}
 
 /* 우: 미리보기 */
 .preview-wrap{flex:1;min-height:0;overflow-y:auto;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(0,0,0,.3)}
