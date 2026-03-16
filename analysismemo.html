@@ -11,82 +11,133 @@
 <script src="js/api.js"></script>
 <script src="js/ui.js"></script>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{
+body{
   background:url('images/bg_all.jpg') center/cover no-repeat fixed;
 }
 
-.ttl{width:360px;max-width:92vw;display:block;margin:14px auto 6px;flex-shrink:0}
-.code-disp{font-size:13px;letter-spacing:1.5px;text-align:center;color:#1a2e5a;padding:3px 0 5px;flex-shrink:0}
-
 /* Memo / Analysis 1:1 분할 */
-.content{flex:1;width:100%;max-width:480px;display:flex;flex-direction:column;min-height:0;padding:0 12px;gap:6px}
-.zone{flex:1;display:flex;flex-direction:column;min-height:0}
-.zone-title{font-size:12px;letter-spacing:1px;text-align:center;color:rgba(255,255,255,.7);padding:3px 0;flex-shrink:0}
+.content{
+  flex:1;
+  width:100%;
+  max-width:480px;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  padding:0 12px;
+  gap:8px;
+}
+.zone{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
 
-/* 투명도 60% 텍스트 창 */
+/* 'Internal Memo' / 'Analysis' 레이블 — 짙은 네이비 */
+.zone-title{
+  font-size:13px;
+  font-weight:600;
+  letter-spacing:1.2px;
+  text-align:center;
+  color:#1a2e5a;
+  padding:4px 0;
+  flex-shrink:0;
+}
+
+/* 투명도 80% 텍스트창
+   rgba(0,0,0,.20) = 20% 불투명 = 80% 투명 */
 textarea.memo-area{
-  flex:1;width:100%;min-height:0;
-  background:rgba(0,0,0,.60);
-  border:1px solid rgba(255,255,255,.15);border-radius:10px;
-  font-size:13px;line-height:1.65;
-  padding:10px 12px;outline:none;resize:none;overflow-y:auto;
+  flex:1;
+  width:100%;
+  min-height:0;
+  background:rgba(0,0,0,.20);
+  border:1px solid rgba(26,46,90,.25);
+  border-radius:10px;
+  color:#1a2e5a;              /* 입력 텍스트 네이비 */
+  font-size:13px;
+  line-height:1.65;
+  padding:10px 12px;
+  outline:none;
+  resize:none;
+  overflow-y:auto;
   transition:border-color .15s;
 }
-textarea.memo-area:focus{border-color:rgba(210,170,100,.65)}
-textarea.memo-area::placeholder{color:rgba(255,255,255,.3)}
-
-.nav-bar{flex-shrink:0;width:100%;max-width:480px;display:flex;justify-content:space-around;align-items:center;padding:8px;background:transparent;border-top:none}
-.nav-bar img{height:88px;object-fit:contain;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:opacity .15s}
-.nav-bar img:active{opacity:.6}
+textarea.memo-area:focus{
+  border-color:rgba(26,46,90,.55);
+}
+/* placeholder: 중간 톤 네이비 — 배경이 밝아서 흰색보다 짙은 색이 보임 */
+textarea.memo-area::placeholder{
+  color:rgba(26,46,90,.4);
+}
 </style>
 </head>
 <body>
 <div class="app-wrap">
-<img class="ttl" src="images/ttl_analysisnmemo.png" alt="Analysis &amp; Memo"/>
-<div class="code-disp" id="code-disp">—</div>
-<div class="content">
-  <div class="zone">
-    <div class="zone-title">Internal Memo</div>
-    <textarea class="memo-area" id="memo-input" placeholder="메모를 입력하세요... (기존 내용에 추가됩니다)"></textarea>
+
+  <!-- 타이틀: 제작 의도 파일명 ttl_analysisnmemo.png 그대로 사용
+       만약 화면에 안 보이면 실제 images 폴더의 파일명을 확인할 것 -->
+  <img class="ttl" src="images/ttl_analysisnmemo.png" alt="Analysis &amp; Memo"/>
+  <div class="code-disp" id="code-disp">—</div>
+
+  <div class="content">
+    <!-- Memo: 추가 방식 (덮어쓰기 아님) -->
+    <div class="zone">
+      <div class="zone-title">Internal Memo</div>
+      <textarea class="memo-area" id="memo-input"
+        placeholder="메모를 입력하세요... (기존 내용에 추가됩니다)"></textarea>
+    </div>
+    <!-- Analysis: 덮어쓰기 -->
+    <div class="zone">
+      <div class="zone-title">Analysis</div>
+      <textarea class="memo-area" id="analysis-input"
+        placeholder="분석 내용을 입력하세요..."></textarea>
+    </div>
   </div>
-  <div class="zone">
-    <div class="zone-title">Analysis</div>
-    <textarea class="memo-area" id="analysis-input" placeholder="분석 내용을 입력하세요..."></textarea>
+
+  <div class="nav-bar">
+    <img src="images/btn_go_home.png"      alt="Home"   id="b-home"/>
+    <img src="images/btn_go_before.png"    alt="Before" id="b-back"/>
+    <img src="images/btn_save.png"         alt="Save"   id="b-save"/>
+    <img src="images/btn_productimage.png" alt="Next"   id="b-next"/>
   </div>
 </div>
-<div class="nav-bar">
-  <img src="images/btn_go_home.png"      alt="Home"    id="b-home"/>
-  <img src="images/btn_go_before.png"    alt="Before"  id="b-back"/>
-  <img src="images/btn_save.png"         alt="Save"    id="b-save"/>
-  <img src="images/btn_productimage.png" alt="Next"    id="b-next"/>
-</div>
+
 <script>
 "use strict";
-var sc=null;
-document.addEventListener("DOMContentLoaded",async function(){
-  sc=requireStructureCode();if(!sc)return;
-  document.getElementById("code-disp").textContent=sc;
-  document.getElementById("b-home").onclick=function(){clearAndGo("index.html");};
-  document.getElementById("b-back").onclick=function(){goPage("design.html",sc);};
-  document.getElementById("b-save").onclick=onSave;
-  document.getElementById("b-next").onclick=function(){goPage("productimage.html",sc);};
-  // 기존 Analysis 값 로드
-  try{var item=await apiGetArchiveItem(sc);if(item)document.getElementById("analysis-input").value=String(item.analysis||item.Analysis||"");}catch(e){}
+var sc = null;
+
+document.addEventListener("DOMContentLoaded", async function(){
+  sc = requireStructureCode(); if(!sc) return;
+  document.getElementById("code-disp").textContent = sc;
+
+  document.getElementById("b-home").onclick = function(){ clearAndGo("index.html"); };
+  document.getElementById("b-back").onclick = function(){ goPage("design.html", sc); };
+  document.getElementById("b-save").onclick = onSave;
+  document.getElementById("b-next").onclick = function(){ goPage("productimage.html", sc); };
+
+  /* 기존 Analysis 값 로드 */
+  try{
+    var item = await apiGetArchiveItem(sc);
+    if(item) document.getElementById("analysis-input").value =
+      String(item.analysis || item.Analysis || "");
+  } catch(e){}
 });
+
 async function onSave(){
-  var memo=document.getElementById("memo-input").value.trim();
-  var analysis=document.getElementById("analysis-input").value.trim();
+  var memo     = document.getElementById("memo-input").value.trim();
+  var analysis = document.getElementById("analysis-input").value.trim();
   showLoading("SAVING...");
   try{
-    if(memo) await apiAppendMemo(sc,memo);
-    await apiUpdateAnalysisMemo(sc,analysis);
+    if(memo) await apiAppendMemo(sc, memo);   /* Memo: 추가 */
+    await apiUpdateAnalysisMemo(sc, analysis); /* Analysis: 덮어쓰기 */
     hideLoading();
-    document.getElementById("memo-input").value="";
+    document.getElementById("memo-input").value = "";
     toastOk("저장 완료!");
-  }catch(err){hideLoading();toastErr("저장 실패: "+err.message);}
+  } catch(err){
+    hideLoading();
+    toastErr("저장 실패: " + err.message);
+  }
 }
 </script>
-</div>
 </body>
 </html>
