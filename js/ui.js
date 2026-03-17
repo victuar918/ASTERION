@@ -223,4 +223,3 @@ function initImageBox(opts) {
     if (typeof opts.onSelect === "function") opts.onSelect(file);
   });
 }
-
