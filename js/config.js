@@ -7,5 +7,5 @@
  *    배포 후 URL 복사 → 아래 값 교체
  */
 const CONFIG = {
-  API_BASE: "https://script.google.com/macros/s/AKfycbzlig3lk16TN7Mg_B5RqYfiyS0xgktb01rYeF_1fwarKCGcLAnLAICkzxYaZOcB7dW2RQ/exec"
+  API_BASE: "https://script.google.com/macros/s/AKfycbwmHkmqgIqeYKDNKBT7DH46hP6Xyv9-hj_pukJFEuE6pgfrhoVOrEjlLqo_1TfjuI3YQg/exec"
 };
