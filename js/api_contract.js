@@ -38,6 +38,8 @@ var A = Object.freeze({
   GET_STONE_INVENTORY   : "getStoneInventory",
   GET_SIZES             : "getSizes",
   UPDATE_STOCK          : "updateStock",
+  // structuretype.html
+  SAVE_STRUCTURE_TYPE   : "saveStructureType",
   // forwarding.html
   UPDATE_FORWARDING     : "updateForwarding",
   // 공통
