@@ -62,9 +62,9 @@ body{
 .err-msg{color:rgba(220,80,80,.8)!important}
 
 /*
- * 하단 네비: 버튼 7개 → 4 + 3 두 줄
- * 1열: Home / Stone Select / Design / Analysis&Memo
- * 2열: Product Image / Booklet / Forwarding
+ * 하단 네비: 버튼 8개 → 4 + 4 두 줄
+ * 1열: Home / Analysis&Memo / Structure Type / Stone Select
+ * 2열: Design / Product Image / Booklet / Forwarding
  */
 .nav-bar{
   width:100%;max-width:480px;flex-shrink:0;
@@ -73,7 +73,7 @@ body{
   background:transparent;border-top:none;
 }
 .nav-bar .row2{
-  grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:2px;
+  grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr);gap:2px;
 }
 .nav-bar img,.nav-bar .row2 img{
   width:100%;height:88px;object-fit:contain;
@@ -91,13 +91,14 @@ body{
 </div>
 
 <div class="nav-bar">
-  <!-- 1열 4개 -->
+  <!-- 1행 4개 -->
   <img src="images/btn_go_home.png"     alt="Home"     id="b-home"/>
-  <img src="images/btn_stoneselect.png" alt="Select"   id="b-sel"/>
-  <img src="images/btn_design.png"   alt="Design"   id="b-des"/>
   <img src="images/btn_analysis.png"    alt="Analysis" id="b-ana"/>
-  <!-- 2열 3개 -->
+  <img src="images/btn_type.png"        alt="Type"     id="b-typ"/>
+  <img src="images/btn_stoneselect.png" alt="Select"   id="b-sel"/>
+  <!-- 2행 4개 -->
   <div class="row2">
+    <img src="images/btn_design.png"       alt="Design"  id="b-des"/>
     <img src="images/btn_productimage.png" alt="Product" id="b-pro"/>
     <img src="images/btn_booklet.png"      alt="Booklet" id="b-bkl"/>
     <img src="images/btn_forwarding.png"   alt="Forward" id="b-fwd"/>
@@ -119,6 +120,7 @@ document.addEventListener("DOMContentLoaded", async function(){
     goPage(page, selCode);
   }
   document.getElementById("b-sel").onclick = function(){ requireSel("selectstone.html"); };
+  document.getElementById("b-typ").onclick = function(){ requireSel("structuretype.html"); };
   document.getElementById("b-des").onclick = function(){ requireSel("design.html"); };
   document.getElementById("b-ana").onclick = function(){ requireSel("analysismemo.html"); };
   document.getElementById("b-pro").onclick = function(){ requireSel("productimage.html"); };
@@ -193,4 +195,3 @@ async function loadList(){
 </div>
 </body>
 </html>
-
