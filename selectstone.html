@@ -59,7 +59,7 @@ document.addEventListener("DOMContentLoaded",async function(){
   sc=requireStructureCode();if(!sc)return;
   document.getElementById("code-disp").textContent=sc;
   document.getElementById("b-home").onclick=function(){clearAndGo("index.html");};
-  document.getElementById("b-back").onclick=function(){window._sc=null;location.href="worksdesk.html";};
+  document.getElementById("b-back").onclick=function(){ goPage("structuretype.html", sc); };
   document.getElementById("b-design").onclick=onDesign;
   showLoading("LOADING...");
   try{
