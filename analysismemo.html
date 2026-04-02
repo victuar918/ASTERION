@@ -98,7 +98,7 @@ textarea.memo-area::placeholder{
     <img src="images/btn_go_home.png"      alt="Home"   id="b-home"/>
     <img src="images/btn_go_before.png"    alt="Before" id="b-back"/>
     <img src="images/btn_save.png"         alt="Save"   id="b-save"/>
-    <img src="images/btn_productimage.png" alt="Next"   id="b-next"/>
+    <img src="images/btn_type.png" alt="Next"   id="b-next"/>
   </div>
 </div>
 
@@ -111,9 +111,9 @@ document.addEventListener("DOMContentLoaded", async function(){
   document.getElementById("code-disp").textContent = sc;
 
   document.getElementById("b-home").onclick = function(){ clearAndGo("index.html"); };
-  document.getElementById("b-back").onclick = function(){ goPage("design.html", sc); };
+  document.getElementById("b-back").onclick = function(){ goPage("worksdesk.html"); };
   document.getElementById("b-save").onclick = onSave;
-  document.getElementById("b-next").onclick = function(){ goPage("productimage.html", sc); };
+  document.getElementById("b-next").onclick = function(){ goPage("structuretype.html", sc); };
 
   /* 기존 Analysis + Memo 값 로드 */
   try{
