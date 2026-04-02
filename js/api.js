@@ -331,6 +331,20 @@ async function apiGetAllArchive() {
   return d;
 }
 
+/* ══════════════════════════════════════════════
+   13. structuretype.html
+══════════════════════════════════════════════ */
+async function apiSaveStructureType(structureCode, structureType, phaseStartDate, phaseEndDate) {
+  _clearArchiveCache(structureCode);
+  return await apiPost({
+    action         : A.SAVE_STRUCTURE_TYPE,
+    structureCode  : structureCode,
+    structureType  : String(structureType  || ""),
+    phaseStartDate : String(phaseStartDate || ""),
+    phaseEndDate   : String(phaseEndDate   || "")
+  });
+}
+
 /* ── 하위 호환 래퍼 ────────────────────────────────────────
    이전 버전 HTML에서 apiGetInventory()를 호출하는 경우 대비.
    실제로는 inventory.html이 apiGetAllStones()를 사용하지만,
