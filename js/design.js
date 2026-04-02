@@ -21,7 +21,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   document.getElementById("b-home").addEventListener("click", function () { clearAndGo("index.html"); });
   document.getElementById("b-back").addEventListener("click", function () { goPage("selectstone.html", sc); });
   document.getElementById("b-save").addEventListener("click", onSaveClick);
-  document.getElementById("b-next").addEventListener("click", function () { goPage("analysismemo.html", sc); });
+  document.getElementById("b-next").addEventListener("click", function () { goPage("productimage.html", sc); });
 
   await loadSavedDetails();
   await loadItems();
