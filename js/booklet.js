@@ -93,16 +93,19 @@ function renderPage2(d){
     '</div>';
 }
 
-/* PAGE 3: Product Image */
+/* PAGE 3: Product Image + Layout Summary (Structure Design) */
 function renderPage3(d){
   var imgUrl  = d.productImage || "";
   var imgHtml = imgUrl
     ? '<img src="' + convertDriveUrl(imgUrl) + '" class="pg-product-img" alt="Product"/>'
     : '<div class="pg-no-img">이미지 없음</div>';
+  var layout = esc(d.layoutSummary || "").replace(/\n/g, "<br>");
   document.getElementById("pg3-c").innerHTML =
-    '<div class="pg-product">' +
-    '<div class="pg-product-frame">' + imgHtml + '</div>' +
-    '<div class="pg-product-code">Archive No. ' + esc(d.structureCode||"") + '</div>' +
+    '<div class="pg-struct" style="justify-content:flex-start;padding-top:16px;">' +
+    '<div class="pg-section-title">Structure Design</div>' +
+    '<div class="pg-product-frame" style="width:140px;height:140px;margin:0 auto 10px;">' + imgHtml + '</div>' +
+    '<div class="pg-product-code" style="text-align:center;margin-bottom:10px;">Archive No. ' + esc(d.structureCode||"") + '</div>' +
+    '<div class="pg-struct-layout">' + layout + '</div>' +
     '</div>';
 }
 
@@ -124,15 +127,12 @@ function renderPage4(d){
     '<table class="stone-table"><tbody>' + rows + '</tbody></table></div>';
 }
 
-/* PAGE 5: Structure Design + Analysis */
+/* PAGE 5: Analysis (전체 단독 페이지) */
 function renderPage5(d){
   document.getElementById("pg5-c").innerHTML =
     '<div class="pg-struct">' +
-    '<div class="pg-section-title">Structure Design</div>' +
-    '<div class="pg-struct-layout">' + esc(d.layoutSummary||"").replace(/\n/g,"<br>") + '</div>' +
-    '<div class="pg-divider"></div>' +
     '<div class="pg-section-title">Analysis</div>' +
-    '<div class="pg-analysis">' + esc(d.analysis||"—").replace(/\n/g,"<br>") + '</div>' +
+    '<div class="pg-analysis" style="flex:1;overflow-y:auto;">' + esc(d.analysis||"—").replace(/\n/g,"<br>") + '</div>' +
     '</div>';
 }
 
@@ -246,3 +246,4 @@ async function onCreatePdf(){
     toastErr("PDF 생성 실패: " + err.message);
   }
 }
+
