@@ -47,14 +47,16 @@ body{
 </head>
 <body>
 <div id="btn-row">
-  <img src="images/btn_worksdesk.png"    alt="Structure Design" id="btn-wd"/>
-  <img src="images/btn_go_index.png"     alt="Code Index"       id="btn-si"/>
-  <img src="images/btn_go_inventory.png" alt="Inventory"        id="btn-inv"/>
+  <img src="images/btn_worksdesk.png"    alt="Structure Design"  id="btn-wd"/>
+  <img src="images/btn_go_index.png"     alt="Code Index"        id="btn-si"/>
+  <img src="images/btn_go_inventory.png" alt="Inventory"         id="btn-inv"/>
+  <img src="images/btn_neworder.png"     alt="New Registration"  id="btn-no"/>
 </div>
 <script>
 document.getElementById("btn-wd").onclick  = function(){ location.href="worksdesk.html"; };
 document.getElementById("btn-si").onclick  = function(){ location.href="structureindex.html"; };
 document.getElementById("btn-inv").onclick = function(){ location.href="inventory.html"; };
+document.getElementById("btn-no").onclick  = function(){ location.href="neworder.html"; };
 </script>
 <script>
 if("serviceWorker" in navigator){
