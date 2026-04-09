@@ -345,6 +345,27 @@ async function apiSaveStructureType(structureCode, structureType, phaseStartDate
   });
 }
 
+/* ══════════════════════════════════════════════
+   14. neworder.html
+══════════════════════════════════════════════ */
+
+/* SignReg / EvReg / PvReg 전체 행 조회 */
+async function apiGetAllRegRows() {
+  return await apiPost({ action: A.GET_ALL_REG_ROWS });
+}
+
+/* StructureCode 생성 + Archive 등록 + PDF 자동 생성 */
+async function apiCreateCodeAndRegister(payload) {
+  cacheClear("taskingList");
+  cacheClear("allArchive");
+  return await apiPost(Object.assign({ action: A.CREATE_CODE_AND_REGISTER }, payload));
+}
+
+/* PDF 재생성 + TempPDF 갱신 */
+async function apiRecreatePdf(structureCode) {
+  return await apiPost({ action: A.RECREATE_PDF, structureCode: structureCode });
+}
+
 /* ── 하위 호환 래퍼 ────────────────────────────────────────
    이전 버전 HTML에서 apiGetInventory()를 호출하는 경우 대비.
    실제로는 inventory.html이 apiGetAllStones()를 사용하지만,
