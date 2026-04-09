@@ -42,6 +42,10 @@ var A = Object.freeze({
   SAVE_STRUCTURE_TYPE   : "saveStructureType",
   // forwarding.html
   UPDATE_FORWARDING     : "updateForwarding",
+  // neworder.html
+  GET_ALL_REG_ROWS        : "getAllRegRows",
+  CREATE_CODE_AND_REGISTER: "createCodeAndRegister",
+  RECREATE_PDF            : "recreatePdf",
   // 공통
   GET_INVENTORY         : "getInventory",
   COMPACT_SHEET         : "compactSheet",
