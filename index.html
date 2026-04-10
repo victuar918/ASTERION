@@ -21,36 +21,34 @@ body{
   display:flex;
   flex-direction:column;
   align-items:center;
-  justify-content:flex-end;   /* 버튼을 하단에 배치 */
+  justify-content:flex-end;
   min-height:100vh;
 }
-#btn-row{
+#btn-grid{
   width:100%;
   max-width:480px;
-  display:flex;
-  justify-content:space-around;
-  align-items:center;
-  padding:0 16px 25%;         /* 하단에서 25% 위에 배치 */
-  gap:10px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:18px;
+  padding:0 28px 22% 28px;
 }
-#btn-row img{
-  flex:1;
-  max-width:93px;
+#btn-grid img{
+  width:100%;
   height:auto;
   cursor:pointer;
   -webkit-tap-highlight-color:transparent;
-  transition:opacity .15s;
-  filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));
+  transition:opacity .15s, transform .15s;
+  filter:drop-shadow(0 4px 12px rgba(0,0,0,.55));
 }
-#btn-row img:active{opacity:.7;transform:scale(.97)}
+#btn-grid img:active{opacity:.7;transform:scale(.95)}
 </style>
 </head>
 <body>
-<div id="btn-row">
-  <img src="images/btn_worksdesk.png"    alt="Structure Design"  id="btn-wd"/>
-  <img src="images/btn_go_index.png"     alt="Code Index"        id="btn-si"/>
-  <img src="images/btn_go_inventory.png" alt="Inventory"         id="btn-inv"/>
-  <img src="images/btn_neworder.png"     alt="New Registration"  id="btn-no"/>
+<div id="btn-grid">
+  <img src="images/btn_worksdesk.png"    alt="Works Desk"       id="btn-wd"/>
+  <img src="images/btn_go_index.png"     alt="Index"            id="btn-si"/>
+  <img src="images/btn_go_inventory.png" alt="Inventory"        id="btn-inv"/>
+  <img src="images/btn_neworder.png"     alt="New Registration" id="btn-no"/>
 </div>
 <script>
 document.getElementById("btn-wd").onclick  = function(){ location.href="worksdesk.html"; };
@@ -61,7 +59,6 @@ document.getElementById("btn-no").onclick  = function(){ location.href="neworder
 <script>
 if("serviceWorker" in navigator){
   window.addEventListener("load", function(){
-    /* SW 캐시 강제 갱신 — 버전 변경 시 즉시 반영 */
     navigator.serviceWorker.getRegistrations().then(function(regs){
       regs.forEach(function(reg){ reg.update(); });
     });
