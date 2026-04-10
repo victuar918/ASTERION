@@ -4,7 +4,6 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"/>
 <title>ASTERION</title>
-<!-- PWA -->
 <link rel="manifest" href="manifest.json"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -12,7 +11,6 @@
 <meta name="apple-mobile-web-app-title" content="ASTERION"/>
 <meta name="theme-color" content="#0a0807"/>
 <link rel="apple-touch-icon" href="images/btn_icon.png"/>
-<!-- index.html은 common.css 로드 안 함 — 독립 스타일 사용 -->
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
@@ -31,9 +29,11 @@ body{
   grid-template-columns:1fr 1fr;
   gap:18px;
   padding:0 28px 22% 28px;
+  justify-items:center;
 }
 #btn-grid img{
-  width:100%;
+  /* 기존 대비 30% 축소: 그리드 셀의 70%만 사용 */
+  width:70%;
   height:auto;
   cursor:pointer;
   -webkit-tap-highlight-color:transparent;
