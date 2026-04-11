@@ -14,8 +14,6 @@
 body{
   background:url('images/bg_all.jpg') center/cover no-repeat fixed;
 }
-
-/* 타이틀~버튼 사이 콘텐츠 */
 .content{
   flex:1;
   width:100%;
@@ -28,18 +26,14 @@ body{
   gap:16px;
   min-height:0;
 }
-
-/* Select 후 표시되는 StructureCode */
 .selected-disp{
   font-size:17px;
   font-weight:bold;
-  color:#1a2e5a;            /* 짙은 네이비 */
+  color:#1a2e5a;
   letter-spacing:2px;
   text-align:center;
   min-height:26px;
 }
-
-/* 입력란 */
 .code-input{
   width:100%;
   padding:13px 16px;
@@ -49,22 +43,28 @@ body{
   border:1px solid rgba(255,255,255,.25);
   border-radius:8px;
   color:#fff;
-  font-size:16px;
+  font-size:15px;
   outline:none;
   text-transform:uppercase;
   transition:border-color .15s;
 }
 .code-input:focus{ border-color:rgba(210,170,100,.7); }
-.code-input::placeholder{ color:rgba(255,255,255,.3); font-size:13px; letter-spacing:1px; }
-
-/* 실시간 프리뷰 */
+/* 새 형식: S-00001AA-260410 (16자) */
+.code-input::placeholder{ color:rgba(255,255,255,.3); font-size:12px; letter-spacing:1px; }
 .code-preview{
   font-size:12px;
-  color:#1a2e5a;            /* 짙은 네이비 */
+  color:#1a2e5a;
   text-align:center;
   letter-spacing:2px;
   min-height:18px;
   font-weight:600;
+}
+.code-guide{
+  font-size:10px;
+  color:rgba(26,46,90,.6);
+  text-align:center;
+  letter-spacing:.5px;
+  line-height:1.7;
 }
 </style>
 </head>
@@ -76,8 +76,15 @@ body{
     <div class="selected-disp" id="sel-disp"></div>
     <div style="width:100%">
       <input class="code-input" id="code-input" type="text"
-             maxlength="13" placeholder="S-00000-000000"/>
-      <div class="code-preview" id="code-preview">S-□□□□□-□□□□□□</div>
+             maxlength="16"
+             placeholder="S-00001AA-260410"/>
+      <!-- 실시간 프리뷰 -->
+      <div class="code-preview" id="code-preview">S-□□□□□□□-□□□□□□</div>
+      <!-- 입력 가이드 -->
+      <div class="code-guide">
+        S / V / L &nbsp;-&nbsp; 5자리 순번 + 2자리 알파 &nbsp;-&nbsp; YYMMDD<br>
+        예) S-00001AA-260410
+      </div>
     </div>
   </div>
 
@@ -101,6 +108,7 @@ document.addEventListener("DOMContentLoaded", function(){
 
   var inp = document.getElementById("code-input");
   inp.addEventListener("input", function(){
+    // 허용 문자: 알파벳·숫자·하이픈
     var raw = this.value.toUpperCase().replace(/[^A-Z0-9\-]/g, "");
     this.value = raw;
     document.getElementById("code-preview").textContent = formatPreview(raw);
@@ -110,24 +118,42 @@ document.addEventListener("DOMContentLoaded", function(){
   });
 });
 
+/**
+ * 새 형식: [PREFIX]-[5자리][2자리알파]-[YYMMDD]
+ * 예: S-00001AA-260410  (총 16자)
+ *
+ * raw 입력 예) "S00001AA260410" 또는 "S-00001AA-260410"
+ * 하이픈 제거 후: PREFIX(1) + NUM(5) + ALPHA(2) + DATE(6)
+ */
 function formatPreview(raw){
-  var c = raw.replace(/\-/g, "");
-  return (c.slice(0,1) || "S") + "-" +
-         (c.slice(1,6) || "").padEnd(5,"□") + "-" +
-         (c.slice(6,12) || "").padEnd(6,"□");
+  var c = raw.replace(/\-/g, "");                // 하이픈 제거
+  var pre   = c.slice(0, 1)  || "S";            // S/V/L
+  var num   = (c.slice(1, 6) || "").padEnd(5, "□");  // 5자리 숫자
+  var alpha = (c.slice(6, 8) || "").padEnd(2, "□");  // 2자리 알파
+  var date  = (c.slice(8, 14)|| "").padEnd(6, "□");  // YYMMDD
+  return pre + "-" + num + alpha + "-" + date;
 }
 
+/**
+ * 입력값을 정규화된 코드로 변환
+ * 이미 하이픈 포함 형식이면 그대로, 없으면 자동 조합
+ */
 function getCode(){
-  var raw = document.getElementById("code-input").value.toUpperCase();
-  if(raw.indexOf("-") !== -1) return raw;
-  var c = raw.replace(/\-/g,"");
-  return c.length < 7 ? raw : c.slice(0,1)+"-"+c.slice(1,6)+"-"+c.slice(6,12);
+  var raw = document.getElementById("code-input").value.toUpperCase().trim();
+  if(!raw) return "";
+  // 이미 올바른 형식: X-XXXXXXX-XXXXXX (하이픈 2개)
+  if((raw.match(/\-/g)||[]).length === 2) return raw;
+  // 하이픈 없이 입력된 경우 자동 조합
+  var c = raw.replace(/\-/g, "");
+  if(c.length < 8) return raw; // 최소 길이 미달
+  return c.slice(0,1) + "-" + c.slice(1,8) + "-" + c.slice(8,14);
 }
 
 function onSelect(){
   var code = getCode();
-  if(!code || code.replace(/\-/g,"").length < 7){
-    toastErr("코드를 입력하세요"); return;
+  // 최소 유효성: PREFIX-NNNNNAA (7자 이상)
+  if(!code || code.replace(/\-/g,"").length < 8){
+    toastErr("코드를 올바르게 입력하세요"); return;
   }
   selCode = code;
   document.getElementById("sel-disp").textContent = code;
