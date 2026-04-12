@@ -63,8 +63,7 @@ body{
   transition:border-color .15s;
   -moz-appearance:textfield;
 }
-.btr-input::-webkit-outer-spin-button,
-.btr-input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+
 .btr-input:focus{ border-color:rgba(26,46,90,.55); }
 .btr-input::placeholder{ color:rgba(26,46,90,.35); font-size:12px; letter-spacing:1px; }
 .btr-preview{
@@ -132,7 +131,7 @@ textarea.memo-area::placeholder{ color:rgba(26,46,90,.4); }
     <div class="zone-btr">
       <span class="btr-label">BTR</span>
       <div style="flex:1;display:flex;flex-direction:column;gap:2px;">
-        <input class="btr-input" id="btr-input" type="number"
+        <input class="btr-input" id="btr-input" type="text" inputmode="numeric" pattern="[0-9]*"
                maxlength="12" placeholder="197911070525"/>
         <div class="btr-preview" id="btr-preview"></div>
       </div>
