@@ -96,7 +96,7 @@ window.onunhandledrejection = function(e) {
 };
 
 /* ══════════════════════════════════════════════
-   5. Size/숫자 유틸
+   5. Size / 숫자 유틸
 ══════════════════════════════════════════════ */
 function getSizeNumber(s) {
   if (!s && s !== 0) return 0;
@@ -105,12 +105,34 @@ function getSizeNumber(s) {
 }
 function formatSize(s) { return getSizeNumber(s) + "mm"; }
 
+/**
+ * normalizeSize — GAS와 프론트 간 Size 형식 통일
+ * "4" → "4mm" / "4mm" → "4mm" / "12" → "12mm"
+ */
+function normalizeSize(s) {
+  var n = parseFloat(String(s || "").replace(/mm/gi, "").trim());
+  return isNaN(n) ? String(s || "").trim() : n + "mm";
+}
+
 /* ══════════════════════════════════════════════
    6. HTML 이스케이프
 ══════════════════════════════════════════════ */
 function esc(s) {
   return String(s || "")
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
+/* ══════════════════════════════════════════════
+   7. Status 상수
+   — forwarding.js 등에서 STATUS.COMPLETE 형태로 참조
+══════════════════════════════════════════════ */
+var STATUS = {
+  TASKING    : "Tasking",
+  FORWARDING : "Forwarding",
+  COMPLETE   : "Complete",
+  AS         : "A/S",
+  ARCHIVED   : "Archived",
+};
