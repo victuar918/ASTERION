@@ -106,13 +106,14 @@ async function onUpdate() {
 }
 
 /* ── UI 헬퍼 ───────────────────────────────────────── */
+// showLoading / hideLoading → ui.js 전역 함수 사용 (common.css 오버레이 연동)
+// setStatus → status-hint 요소에 직접 출력
 function setStatus(msg, type) {
-  var el = document.getElementById("st-msg");
+  var el = document.getElementById("status-hint");
+  if (!el) return;
   el.textContent = msg;
-  el.className = "st-msg " +
-    (type === "err"  ? "st-err"  :
-     type === "ok"   ? "st-ok"   :
-     type === "info" ? "st-info" : "");
+  el.style.color =
+    type === "err"  ? "rgba(220,100,80,.9)"  :
+    type === "ok"   ? "rgba(80,180,120,.9)"   :
+    type === "info" ? "rgba(26,46,90,.7)"     : "rgba(26,46,90,.6)";
 }
-function showLoading() { document.getElementById("ld-ov").classList.add("show"); }
-function hideLoading() { document.getElementById("ld-ov").classList.remove("show"); }
