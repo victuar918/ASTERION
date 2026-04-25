@@ -30,22 +30,29 @@ body{
   flex-direction:column;
   gap:16px;
 }
+/* 모든 버튼 행 공통: 간격과 배치 통일 */
 .btn-row{
   display:flex;
   justify-content:center;
   gap:16px;
 }
-.btn-row img{
-  /* 기존(70%) 대비 30% 축소 → 49% */
-  width:calc((100% - 16px) / 2 * 0.49);
+/* 2개 행 — 1행: 70% 너비 사용 */
+.btn-row.two img{
+  width:calc((100% - 16px) * 0.35);
   height:auto;
   cursor:pointer;
   -webkit-tap-highlight-color:transparent;
-  transition:opacity .15s, transform .15s;
+  transition:opacity .15s,transform .15s;
   filter:drop-shadow(0 4px 12px rgba(0,0,0,.55));
 }
+/* 3개 행 — 2행: 동일 사이즈, 간격만 조정 */
 .btn-row.three img{
-  width:calc((100% - 32px) / 3 * 0.49);
+  width:calc((100% - 16px) * 0.35);
+  height:auto;
+  cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  transition:opacity .15s,transform .15s;
+  filter:drop-shadow(0 4px 12px rgba(0,0,0,.55));
 }
 .btn-row img:active{opacity:.7;transform:scale(.95)}
 </style>
@@ -57,7 +64,7 @@ body{
     <img src="images/btn_worksdesk.png"    alt="Works Desk"       id="btn-wd"/>
     <img src="images/btn_go_index.png"     alt="Index"            id="btn-si"/>
   </div>
-  <!-- 2행: 3개 -->
+  <!-- 2행: 3개 (동일 사이즈) -->
   <div class="btn-row three">
     <img src="images/btn_go_inventory.png" alt="Inventory"        id="btn-inv"/>
     <img src="images/btn_neworder.png"     alt="New Registration" id="btn-no"/>
@@ -78,8 +85,8 @@ if("serviceWorker" in navigator){
       regs.forEach(function(reg){ reg.update(); });
     });
     navigator.serviceWorker.register("sw.js")
-      .then(function(reg){ console.log("[SW] 등록:", reg.scope); })
-      .catch(function(err){ console.warn("[SW] 실패:", err); });
+      .then(function(reg){ console.log("[SW] 등록:",reg.scope); })
+      .catch(function(err){ console.warn("[SW] 실패:",err); });
   });
 }
 </script>
