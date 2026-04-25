@@ -22,39 +22,54 @@ body{
   justify-content:flex-end;
   min-height:100vh;
 }
-#btn-grid{
+#btn-wrap{
   width:100%;
   max-width:480px;
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:18px;
-  padding:0 28px 22% 28px;
-  justify-items:center;
+  padding:0 28px 20% 28px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
 }
-#btn-grid img{
-  /* 기존 대비 30% 축소: 그리드 셀의 70%만 사용 */
-  width:70%;
+.btn-row{
+  display:flex;
+  justify-content:center;
+  gap:16px;
+}
+.btn-row img{
+  /* 기존(70%) 대비 30% 축소 → 49% */
+  width:calc((100% - 16px) / 2 * 0.49);
   height:auto;
   cursor:pointer;
   -webkit-tap-highlight-color:transparent;
   transition:opacity .15s, transform .15s;
   filter:drop-shadow(0 4px 12px rgba(0,0,0,.55));
 }
-#btn-grid img:active{opacity:.7;transform:scale(.95)}
+.btn-row.three img{
+  width:calc((100% - 32px) / 3 * 0.49);
+}
+.btn-row img:active{opacity:.7;transform:scale(.95)}
 </style>
 </head>
 <body>
-<div id="btn-grid">
-  <img src="images/btn_worksdesk.png"    alt="Works Desk"       id="btn-wd"/>
-  <img src="images/btn_go_index.png"     alt="Index"            id="btn-si"/>
-  <img src="images/btn_go_inventory.png" alt="Inventory"        id="btn-inv"/>
-  <img src="images/btn_neworder.png"     alt="New Registration" id="btn-no"/>
+<div id="btn-wrap">
+  <!-- 1행: 2개 -->
+  <div class="btn-row two">
+    <img src="images/btn_worksdesk.png"    alt="Works Desk"       id="btn-wd"/>
+    <img src="images/btn_go_index.png"     alt="Index"            id="btn-si"/>
+  </div>
+  <!-- 2행: 3개 -->
+  <div class="btn-row three">
+    <img src="images/btn_go_inventory.png" alt="Inventory"        id="btn-inv"/>
+    <img src="images/btn_neworder.png"     alt="New Registration" id="btn-no"/>
+    <img src="images/btn_stock.png"        alt="Stock"            id="btn-st"/>
+  </div>
 </div>
 <script>
 document.getElementById("btn-wd").onclick  = function(){ location.href="worksdesk.html"; };
 document.getElementById("btn-si").onclick  = function(){ location.href="structureindex.html"; };
 document.getElementById("btn-inv").onclick = function(){ location.href="inventory.html"; };
 document.getElementById("btn-no").onclick  = function(){ location.href="neworder.html"; };
+document.getElementById("btn-st").onclick  = function(){ location.href="checkstock.html"; };
 </script>
 <script>
 if("serviceWorker" in navigator){
