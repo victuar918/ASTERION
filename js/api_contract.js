@@ -47,6 +47,7 @@ var A = Object.freeze({
   COMPACT_SHEET         : "compactSheet",
   // neworder.html
   GET_ALL_REG_ROWS         : "getAllRegRows",
+  GET_STOCK_LIST           : "getStockList",
   CREATE_CODE_AND_REGISTER : "createCodeAndRegister",
   RECREATE_PDF             : "recreatePdf",
 });
