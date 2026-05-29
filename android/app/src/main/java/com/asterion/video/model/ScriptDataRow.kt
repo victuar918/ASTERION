@@ -1,0 +1,68 @@
+package com.asterion.video.model
+
+data class VideoMeta(
+    val youtubeTitle: String = "",
+    val topWatermark: String = "ASTERION",
+    val thumbnailText: String = "",
+    val mainBgm: String = "default_bgm.mp3"
+)
+
+data class ScriptDataRow(
+    val rowIndex: Int,
+    val section: String,
+    val speaker: Int,
+    val cardMain: String,
+    val cardSub: String,
+    val cardDesc: String,
+    val highlightWord: String,
+    val script: String,
+    val bgFile: String,
+    val animation: String,
+    val cardStyle: String,
+    val status: String,
+    val note: String,
+    val bgEffect: String,
+    val bgTransition: String,
+    val cardExtraEffect: String,
+    val lottieFile: String,
+    val stickerFile: String,
+    val gradientPreset: String
+) {
+    val bgFileName: String get() = bgFile.split("|").getOrElse(0) { bgFile }
+    val bgTransitionDuration: Float get() = bgFile.split("|").getOrElse(2) { "1.0" }.toFloatOrNull() ?: 1.0f
+    val bgEffectCode: String get() = bgFile.split("|").getOrElse(3) { "NONE" }
+    val isReady: Boolean get() = status == "READY"
+    val sectionType: SectionType get() = when {
+        section.startsWith("TPL-INT") -> SectionType.INTRO
+        section.startsWith("TPL-PLA") -> SectionType.PLANET
+        section.startsWith("TPL-TIM") -> SectionType.TIMING
+        section.startsWith("TPL-SUM") -> SectionType.SUMMARY
+        section.startsWith("TPL-SYN") -> SectionType.SYNTHESIS
+        section.startsWith("TPL-BUF") -> SectionType.BUFFER
+        else -> SectionType.UNKNOWN
+    }
+}
+
+enum class SectionType { INTRO, PLANET, TIMING, SUMMARY, SYNTHESIS, BUFFER, UNKNOWN }
+enum class CardStyle(val alpha: Float) {
+    DEFAULT(0.75f), TITLE(0.85f), CONCLUSION(0.90f), NOTICE(0.80f), MINIMAL(0f), NONE(0f);
+    companion object { fun from(v: String) = values().firstOrNull { it.name == v } ?: DEFAULT }
+}
+enum class AnimationPattern { A,B,C,D,E,F,G,NONE;
+    companion object { fun from(v: String) = values().firstOrNull { it.name == v } ?: NONE }
+}
+enum class BgTransition { FADE,SLIDE_LEFT,SLIDE_UP,ZOOM_IN,ZOOM_OUT,BLUR_FADE,WIPE_RIGHT;
+    companion object { fun from(v: String) = values().firstOrNull { it.name == v } ?: FADE }
+}
+enum class CardExtraEffect { NONE,HEARTBEAT,VIBRATE;
+    companion object { fun from(v: String) = values().firstOrNull { it.name == v } ?: NONE }
+}
+data class GradientPreset(val topColor: Int, val bottomColor: Int) {
+    companion object {
+        val DEFAULT = GradientPreset(0xD9000000.toInt(), 0x990A051E.toInt())
+        val TITLE   = GradientPreset(0xD91E0032.toInt(), 0xE6000000.toInt())
+        val CONCLUSION = GradientPreset(0xE600051E.toInt(), 0xE6000000.toInt())
+        val NOTICE  = GradientPreset(0xD9320505.toInt(), 0xE6000000.toInt())
+        fun from(v: String) = when(v) { "TITLE"->TITLE; "CONCLUSION"->CONCLUSION; "NOTICE"->NOTICE; else->DEFAULT }
+    }
+}
