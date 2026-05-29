@@ -1,8 +1,10 @@
-# ASTERION Video — Cloud Build APK 빌드 파이프라인
-# 실행: gcloud builds submit --config android/cloudbuild.yaml .
-# 또는 MCP gcloud_submit 도구 사용
-
 steps:
+  # Step 1: GitHub에서 소스 clone
+  - name: 'gcr.io/cloud-builders/git'
+    id: 'clone'
+    args: ['clone', '--depth=1', 'https://github.com/victuar918/ASTERION.git', '.']
+
+  # Step 2: Android SDK 설치 + Gradle APK 빌드
   - name: 'eclipse-temurin:17-jdk'
     id: 'build-apk'
     entrypoint: 'bash'
@@ -10,11 +12,17 @@ steps:
       - '-c'
       - |
         set -e
+
+        echo "=== 패키지 설치 ==="
+        apt-get update -qq
+        apt-get install -y -qq wget unzip curl
+
         echo "=== Android SDK 설치 ==="
         export ANDROID_HOME=/workspace/android-sdk
         mkdir -p $ANDROID_HOME/cmdline-tools
 
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdtools.zip
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+             -O /tmp/cmdtools.zip
         unzip -q /tmp/cmdtools.zip -d $ANDROID_HOME/cmdline-tools
         mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
         rm /tmp/cmdtools.zip
@@ -22,17 +30,22 @@ steps:
         export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
 
         echo "=== SDK 라이선스 동의 ==="
-        yes | sdkmanager --licenses > /dev/null 2>&1 || true
-        sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;26.1.10909125"
+        yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses > /dev/null 2>&1 || true
+        sdkmanager --sdk_root=$ANDROID_HOME \
+          "platform-tools" \
+          "platforms;android-35" \
+          "build-tools;35.0.0"
 
         echo "=== Gradle APK 빌드 ==="
         cd android
         chmod +x gradlew
-        ./gradlew assembleDebug --no-daemon --stacktrace
+        export ANDROID_HOME=/workspace/android-sdk
+        ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tail -50
 
-        echo "=== 빌드 완료 ==="
-        ls -lh app/build/outputs/apk/debug/
+        echo "=== 빌드 결과 ==="
+        ls -lh app/build/outputs/apk/debug/ || echo "APK 없음"
 
+  # Step 3: APK를 Cloud Storage에 업로드
   - name: 'gcr.io/cloud-builders/gsutil'
     id: 'upload-apk'
     args:
@@ -45,7 +58,7 @@ artifacts:
     location: 'gs://$PROJECT_ID-asterion-apk/'
     paths: ['android/app/build/outputs/apk/debug/app-debug.apk']
 
-timeout: '2400s'
+timeout: '3600s'
 
 options:
   machineType: 'E2_HIGHCPU_8'
