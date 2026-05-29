@@ -1,0 +1,52 @@
+# ASTERION Video — Cloud Build APK 빌드 파이프라인
+# 실행: gcloud builds submit --config android/cloudbuild.yaml .
+# 또는 MCP gcloud_submit 도구 사용
+
+steps:
+  - name: 'eclipse-temurin:17-jdk'
+    id: 'build-apk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        echo "=== Android SDK 설치 ==="
+        export ANDROID_HOME=/workspace/android-sdk
+        mkdir -p $ANDROID_HOME/cmdline-tools
+
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdtools.zip
+        unzip -q /tmp/cmdtools.zip -d $ANDROID_HOME/cmdline-tools
+        mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+        rm /tmp/cmdtools.zip
+
+        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+
+        echo "=== SDK 라이선스 동의 ==="
+        yes | sdkmanager --licenses > /dev/null 2>&1 || true
+        sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;26.1.10909125"
+
+        echo "=== Gradle APK 빌드 ==="
+        cd android
+        chmod +x gradlew
+        ./gradlew assembleDebug --no-daemon --stacktrace
+
+        echo "=== 빌드 완료 ==="
+        ls -lh app/build/outputs/apk/debug/
+
+  - name: 'gcr.io/cloud-builders/gsutil'
+    id: 'upload-apk'
+    args:
+      - 'cp'
+      - 'android/app/build/outputs/apk/debug/app-debug.apk'
+      - 'gs://$PROJECT_ID-asterion-apk/asterion-video-debug.apk'
+
+artifacts:
+  objects:
+    location: 'gs://$PROJECT_ID-asterion-apk/'
+    paths: ['android/app/build/outputs/apk/debug/app-debug.apk']
+
+timeout: '2400s'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
