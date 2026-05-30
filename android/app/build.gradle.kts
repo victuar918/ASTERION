@@ -9,7 +9,7 @@ android {
     defaultConfig {
         applicationId = "com.asterion.video"
         minSdk = 26; targetSdk = 35
-        versionCode = 9; versionName = "1.8.0"
+        versionCode = 10; versionName = "1.9.0"
         ndk { abiFilters += "arm64-v8a" }
     }
     buildTypes { debug { isDebuggable = true } }
@@ -33,6 +33,7 @@ dependencies {
     // sherpa-onnx: 로컈 AAR (GitHub Actions tar.bz2 추출)
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
 
-    // FFmpeg Kit: Maven Central 실제 파일 없음 — AAR 직접 커밋 시 이 줄 활성화
-    // implementation("com.arthenica:ffmpeg-kit-full:6.0.LTS")
+    // mobile-ffmpeg-full 4.4.LTS — Maven Central 실제 파일 확인 (ffmpeg-kit 전신)
+    // freetype, fontconfig, libass 내장 — 자막/회전 지원
+    implementation("com.arthenica:mobile-ffmpeg-full:4.4.LTS")
 }
