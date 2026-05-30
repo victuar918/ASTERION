@@ -9,7 +9,7 @@ android {
     defaultConfig {
         applicationId = "com.asterion.video"
         minSdk = 26; targetSdk = 35
-        versionCode = 4; versionName = "1.3.0"
+        versionCode = 5; versionName = "1.4.0"
         ndk { abiFilters += "arm64-v8a" }
     }
     buildTypes { debug { isDebuggable = true } }
@@ -30,11 +30,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // sherpa-onnx: 로컈 AAR (GitHub Actions에서 다운로드, JitPack 우회)
+    // sherpa-onnx: 로컬 AAR (GitHub Actions에서 tar.bz2 → 추출)
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
 
-    // FFmpeg Kit
-    implementation("com.arthenica:ffmpeg-kit-full:6.0-2") {
+    // FFmpeg Kit — 올바른 버전: 6.0-2.LTS
+    implementation("com.arthenica:ffmpeg-kit-full:6.0-2.LTS") {
         exclude(group = "com.arthenica", module = "smart-exception-java")
     }
 }
