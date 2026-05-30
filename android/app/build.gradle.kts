@@ -9,7 +9,7 @@ android {
     defaultConfig {
         applicationId = "com.asterion.video"
         minSdk = 26; targetSdk = 35
-        versionCode = 11; versionName = "2.0.0-tts"
+        versionCode = 12; versionName = "2.1.0"
         ndk { abiFilters += "arm64-v8a" }
     }
     buildTypes { debug { isDebuggable = true } }
@@ -30,10 +30,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // sherpa-onnx TTS — GitHub Actions tar.bz2에서 추출된 로컈 AAR
-    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
-
-    // FFmpeg: app/libs/에 AAR 직접 커밋 시 자동 활성화
-    // 이 줄은 주석 상태로 유지 (Maven 자동 다운로드 불가)
-    // implementation("com.arthenica:mobile-ffmpeg-full:4.4.LTS")
+    // sherpa-onnx: AAR(네이티브 .so) + JAR(Java API 클래스)
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
 }
