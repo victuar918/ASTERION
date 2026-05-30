@@ -9,7 +9,7 @@ android {
     defaultConfig {
         applicationId = "com.asterion.video"
         minSdk = 26; targetSdk = 35
-        versionCode = 6; versionName = "1.5.0"
+        versionCode = 7; versionName = "1.6.0"
         ndk { abiFilters += "arm64-v8a" }
     }
     buildTypes { debug { isDebuggable = true } }
@@ -33,8 +33,6 @@ dependencies {
     // sherpa-onnx: 로컈 AAR (GitHub Actions tar.bz2 추출)
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
 
-    // FFmpeg Kit full — Maven Central
-    implementation("com.arthenica:ffmpeg-kit-full:6.0-2.LTS") {
-        exclude(group = "com.arthenica", module = "smart-exception-java")
-    }
+    // FFmpeg Kit: Maven Central 배포 중단(없음) — 렌더링은 추후 네이티브 NDK로 충당
+    // implementation("com.arthenica:ffmpeg-kit-full:6.0-2.LTS")
 }
