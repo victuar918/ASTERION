@@ -4,7 +4,10 @@ on:
   push:
     paths:
       - 'android/**'
-  workflow_dispatch:   # 수동 실행 버튼
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -23,25 +26,33 @@ jobs:
       - name: Android SDK 설정
         uses: android-actions/setup-android@v3
 
+      - name: Gradle 설정
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.6'
+
+      - name: Gradle Wrapper 생성 (gradlew 없으므로)
+        run: |
+          cd android
+          gradle wrapper --gradle-version 8.6
+
       - name: Gradle 캐시
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
-
-      - name: Gradle 실행 권한
-        run: chmod +x android/gradlew
+          key: gradle-${{ hashFiles('android/**/*.gradle*') }}
 
       - name: APK 빌드
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
         env:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
 
-      - name: APK 업로드 (아티팩트)
+      - name: APK 업로드
         uses: actions/upload-artifact@v4
         with:
           name: asterion-video-debug
