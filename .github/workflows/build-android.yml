@@ -31,18 +31,35 @@ jobs:
         with:
           gradle-version: '8.6'
 
-      - name: sherpa-onnx AAR 다운렓드 (JitPack 우회)
+      - name: sherpa-onnx AAR 추출 (tar.bz2 → AAR)
         run: |
           mkdir -p android/app/libs
-          echo "=== sherpa-onnx 1.10.31 AAR 다운로드 ==="
+          echo "=== tar.bz2 다운로드 ==="
           wget -q --show-progress \
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.31/sherpa-onnx-android-1.10.31.aar" \
-            -O android/app/libs/sherpa-onnx-android.aar 2>&1 || \
-          wget -q --show-progress \
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.31/sherpa_onnx-1.10.31.aar" \
-            -O android/app/libs/sherpa-onnx-android.aar 2>&1 || \
-          echo "AAR 다운로드 실패 — 버전 목록 확인"
-          ls -lh android/app/libs/ || echo "비어있음"
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.31/sherpa-onnx-v1.10.31-android.tar.bz2" \
+            -O /tmp/sherpa-onnx-android.tar.bz2
+          echo "다운로드 완료: $(du -sh /tmp/sherpa-onnx-android.tar.bz2)"
+
+          echo "=== 압축 해제 ==="
+          mkdir -p /tmp/sherpa-extract
+          tar -xjf /tmp/sherpa-onnx-android.tar.bz2 -C /tmp/sherpa-extract
+
+          echo "=== AAR 파일 검색 ==="
+          find /tmp/sherpa-extract -name "*.aar" | tee /tmp/aar_list.txt
+          AAR_COUNT=$(wc -l < /tmp/aar_list.txt)
+          echo "발견된 AAR: $AAR_COUNT개"
+
+          if [ "$AAR_COUNT" -gt 0 ]; then
+            # arm64-v8a 우선, 없으면 첫 번째
+            AAR=$(grep "arm64" /tmp/aar_list.txt | head -1 || head -1 /tmp/aar_list.txt)
+            cp "$AAR" android/app/libs/sherpa-onnx-android.aar
+            echo "✅ 복사 완료: $AAR → android/app/libs/sherpa-onnx-android.aar"
+          else
+            echo "⚠ AAR 없음 — 디렉토리 구조:"
+            find /tmp/sherpa-extract -type f | head -20
+          fi
+
+          ls -lh android/app/libs/
 
       - name: Gradle Wrapper 생성
         run: |
