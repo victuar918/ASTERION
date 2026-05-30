@@ -9,7 +9,7 @@ android {
     defaultConfig {
         applicationId = "com.asterion.video"
         minSdk = 26; targetSdk = 35
-        versionCode = 10; versionName = "1.9.0"
+        versionCode = 11; versionName = "2.0.0-tts"
         ndk { abiFilters += "arm64-v8a" }
     }
     buildTypes { debug { isDebuggable = true } }
@@ -30,10 +30,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // sherpa-onnx: 로컈 AAR (GitHub Actions tar.bz2 추출)
+    // sherpa-onnx TTS — GitHub Actions tar.bz2에서 추출된 로컈 AAR
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
 
-    // mobile-ffmpeg-full 4.4.LTS — Maven Central 실제 파일 확인 (ffmpeg-kit 전신)
-    // freetype, fontconfig, libass 내장 — 자막/회전 지원
-    implementation("com.arthenica:mobile-ffmpeg-full:4.4.LTS")
+    // FFmpeg: app/libs/에 AAR 직접 커밋 시 자동 활성화
+    // 이 줄은 주석 상태로 유지 (Maven 자동 다운로드 불가)
+    // implementation("com.arthenica:mobile-ffmpeg-full:4.4.LTS")
 }
