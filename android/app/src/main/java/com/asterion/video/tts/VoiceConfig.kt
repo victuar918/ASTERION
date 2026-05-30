@@ -39,7 +39,6 @@ class SupertonicTtsEngine(private val context: Context) {
     suspend fun init(onProgress: (String)->Unit = {}) = withContext(Dispatchers.IO) {
         val dir = prepareModelDir(onProgress).absolutePath
 
-        // sherpa-onnx Java Builder 패턴
         val vitsConfig = OfflineTtsVitsModelConfig.builder()
             .setModel("$dir/model.onnx")
             .setLexicon("$dir/lexicon.txt")
@@ -61,15 +60,16 @@ class SupertonicTtsEngine(private val context: Context) {
             .build()
 
         tts = OfflineTts(config)
-        onProgress("✅ TTS 준비 — Supertonic 3 (${tts!!.sampleRate()}Hz)")
+        // sampleRate는 프로퍼티 (함수 아님)
+        onProgress("✅ TTS 준비 — Supertonic 3 (${tts!!.sampleRate}Hz)")
     }
 
     fun synthesize(text: String, sid: Int, speed: Float, outputFile: File): Boolean {
         val engine = tts ?: return false
         if (text.isBlank()) return false
         return try {
-            val audio = engine.generateWithCallbackAndNumberOfThreads(
-                text=text, sid=sid, speed=speed, callback=null, numThreads=4)
+            // generate() 메서드 사용
+            val audio = engine.generate(text, sid, speed)
             outputFile.writeBytes(float32ToWav(audio.samples, audio.sampleRate))
             true
         } catch(e: Exception) { Log.e(TAG, "TTS: $e"); false }
@@ -90,14 +90,14 @@ class SupertonicTtsEngine(private val context: Context) {
         val dest = File(context.filesDir, AppConfig.TTS_MODEL_SUBDIR)
         val marker = File(dest, ".ready")
         if (marker.exists() && File(dest, "model.onnx").exists()) {
-            onProgress("TTS 모델 캐시 재사용 (Supertonic 3)")
+            onProgress("TTS 모델 캐시 재사용")
             return@withContext dest
         }
         dest.deleteRecursively(); dest.mkdirs()
         val client = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS).readTimeout(300, TimeUnit.SECONDS).build()
         AppConfig.TTS_MODEL_FILES.forEach { name ->
-            onProgress("⬇ Supertonic-3: $name")
+            onProgress("⬇ $name")
             downloadFile(client, "${AppConfig.TTS_HF_BASE}/$name", File(dest, name))
         }
         onProgress("⬇ espeak-ng-data.zip")
