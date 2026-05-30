@@ -31,6 +31,19 @@ jobs:
         with:
           gradle-version: '8.6'
 
+      - name: sherpa-onnx AAR 다운렓드 (JitPack 우회)
+        run: |
+          mkdir -p android/app/libs
+          echo "=== sherpa-onnx 1.10.31 AAR 다운로드 ==="
+          wget -q --show-progress \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.31/sherpa-onnx-android-1.10.31.aar" \
+            -O android/app/libs/sherpa-onnx-android.aar 2>&1 || \
+          wget -q --show-progress \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.31/sherpa_onnx-1.10.31.aar" \
+            -O android/app/libs/sherpa-onnx-android.aar 2>&1 || \
+          echo "AAR 다운로드 실패 — 버전 목록 확인"
+          ls -lh android/app/libs/ || echo "비어있음"
+
       - name: Gradle Wrapper 생성
         run: |
           cd android
@@ -40,7 +53,8 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee /tmp/build_log.txt
+          exit ${PIPESTATUS[0]}
 
       - name: APK 업로드
         uses: actions/upload-artifact@v4
@@ -48,3 +62,11 @@ jobs:
           name: asterion-video-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
+
+      - name: 빌드 로그 업로드 (실패 시)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /tmp/build_log.txt
+          retention-days: 3
