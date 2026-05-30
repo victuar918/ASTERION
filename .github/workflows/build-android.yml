@@ -31,30 +31,31 @@ jobs:
         with:
           gradle-version: '8.6'
 
-      - name: Gradle Wrapper 생성 (gradlew 없으므로)
+      - name: Gradle Wrapper 생성
         run: |
           cd android
           gradle wrapper --gradle-version 8.6
 
-      - name: Gradle 캐시
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('android/**/*.gradle*') }}
-
-      - name: APK 빌드
+      - name: APK 빌드 (로그 저장)
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+          echo "=== 환경 확인 ==="
+          echo "ANDROID_HOME: $ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
+          echo "Java: $(java -version 2>&1)"
+          echo "=== 파일 목록 ==="
+          ls -la
+          echo "=== Gradle 버전 ==="
+          ./gradlew --version 2>&1 || true
+          echo "=== 빌드 시작 ==="
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee /tmp/build_log.txt
+          exit ${PIPESTATUS[0]}
 
-      - name: APK 업로드
+      - name: 빌드 로그 업로드 (실패 시에도)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: asterion-video-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 7
+          name: build-log
+          path: /tmp/build_log.txt
+          retention-days: 3
