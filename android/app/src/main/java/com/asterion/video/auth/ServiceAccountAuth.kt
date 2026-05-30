@@ -3,10 +3,10 @@ package com.asterion.video.auth
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.security.KeyFactory
 import java.security.spec.PKCS8EncodedKeySpec
@@ -52,10 +52,13 @@ class ServiceAccountAuth(private val context: Context) {
 
     private fun exchangeJwtForToken(jwt: String): String {
         val body = "grant_type=${java.net.URLEncoder.encode("urn:ietf:params:oauth:grant-type:jwt-bearer","UTF-8")}&assertion=$jwt"
-        val resp = client.newCall(Request.Builder().url(TOKEN_URL)
-            .post(RequestBody.create(MediaType.parse("application/x-www-form-urlencoded"), body)).build()).execute()
-        val rb = resp.body()?.string() ?: throw Exception("토큰 응답 없음")
-        if (!resp.isSuccessful) throw Exception("토큰 실패 ${resp.code()}: $rb")
+        val req = Request.Builder()
+            .url(TOKEN_URL)
+            .post(body.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
+            .build()
+        val resp = client.newCall(req).execute()
+        val rb = resp.body?.string() ?: throw Exception("토큰 응답 없음")
+        if (!resp.isSuccessful) throw Exception("토큰 실패 ${resp.code}: $rb")
         return JSONObject(rb).getString("access_token")
     }
 

@@ -4,8 +4,10 @@ import android.util.Log
 import com.asterion.video.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
 private const val TAG = "SheetsVideoReader"
@@ -40,8 +42,12 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
             val range = java.net.URLEncoder.encode("$sheetName!K$sheetRow", "UTF-8")
             val url = "$base/$spreadsheetId/values/$range?valueInputOption=USER_ENTERED"
             val body = org.json.JSONObject().apply { put("values", org.json.JSONArray().apply { put(org.json.JSONArray().apply { put(status) }) }) }
-            val req = Request.Builder().url(url).addHeader("Authorization","Bearer $accessToken").addHeader("Content-Type","application/json")
-                .put(okhttp3.RequestBody.create(okhttp3.MediaType.parse("application/json"), body.toString())).build()
+            val req = Request.Builder()
+                .url(url)
+                .addHeader("Authorization","Bearer $accessToken")
+                .addHeader("Content-Type","application/json")
+                .put(body.toString().toRequestBody("application/json".toMediaType()))
+                .build()
             client.newCall(req).execute().isSuccessful
         }.getOrElse { false }
     }
@@ -71,6 +77,7 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
             r.getOrElse(14){"NONE"},r.getOrElse(15){"NONE"},r.getOrElse(16){"NONE"},r.getOrElse(17){"DEFAULT"})
     }
 
-    private fun get(url: String): JSONObject? = Request.Builder().url(url).addHeader("Authorization","Bearer $accessToken").get().build()
-        .let { client.newCall(it).execute().use { resp -> if (resp.isSuccessful) JSONObject(resp.body()!!.string()) else null } }
+    private fun get(url: String): JSONObject? = Request.Builder()
+        .url(url).addHeader("Authorization","Bearer $accessToken").get().build()
+        .let { client.newCall(it).execute().use { resp -> if (resp.isSuccessful) JSONObject(resp.body?.string() ?: "{}") else null } }
 }
