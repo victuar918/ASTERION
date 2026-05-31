@@ -40,7 +40,7 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
             val start = rows.indexOfFirst { it.getOrElse(0){""} == "Section" }
                 .let { if (it >= 0) it + 1 else -1 }
             val script = if (start >= 0) parseScriptRows(rows, start) else emptyList()
-            Log.i(TAG, "readScript: $sheetName rows=${script.size}")
+            Log.i(TAG, "readScript: $sheetName rows=${script.size} ready=${script.count{it.isReady}}")
             VideoScriptData(sheetName, meta, script)
         }
     }
@@ -51,6 +51,7 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
     suspend fun updateStatus(sheetName: String, rowIndex: Int, status: String = "DONE"): Boolean =
         withContext(Dispatchers.IO) {
             runCatching {
+                // rowIndex=0 → 시트 7행 (Video_Meta 5행 + 헤더 1행 + 1-index)
                 val sheetRow = 7 + rowIndex
                 val encoded  = java.net.URLEncoder.encode("$sheetName!K$sheetRow", "UTF-8")
                 val url  = "$base/$spreadsheetId/values/$encoded?valueInputOption=USER_ENTERED"
@@ -82,10 +83,12 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
     private fun parseVideoMeta(rows: List<List<String>>): VideoMeta {
         val m = mutableMapOf<String, String>()
         for (r in rows) {
-            if (r.getOrElse(0){""} == "Section") break
-            val key = r.getOrElse(1){""}
-            val value = r.getOrElse(2){""}
-            if (key.isNotBlank()) m[key] = value
+            val col0 = r.getOrElse(0){""}
+            if (col0 == "Section") break
+            // 시트 형식: A열=Key, B열=Value
+            val key   = col0
+            val value = r.getOrElse(1){""}
+            if (key.isNotBlank() && key != "Key") m[key] = value
         }
         return VideoMeta(
             youtubeTitle  = m["YouTube_Title"] ?: "",
@@ -106,14 +109,14 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
                 cardMain       = r.getOrElse(2){""},
                 cardSub        = r.getOrElse(3){""},
                 cardDesc       = r.getOrElse(4){""},
-                highlightWord  = r.getOrElse(5){""},   // ← 정확한 파라미터명
+                highlightWord  = r.getOrElse(5){""},
                 script         = r.getOrElse(6){""},
                 bgFile         = r.getOrElse(7){"VedicEnergyByPlanet_XRP_MovingChart.mp4|FADE|1.0|NONE"},
                 animation      = r.getOrElse(8){"A"},
                 cardStyle      = r.getOrElse(9){"DEFAULT"},
                 status         = r.getOrElse(10){"READY"},
                 note           = r.getOrElse(11){""},
-                bgEffect       = r.getOrElse(12){"NONE"},  // ← 정확한 파라미터명
+                bgEffect       = r.getOrElse(12){"NONE"},
                 bgTransition   = r.getOrElse(13){"FADE"},
                 cardExtraEffect= r.getOrElse(14){"NONE"},
                 lottieFile     = r.getOrElse(15){"NONE"},
