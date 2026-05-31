@@ -18,7 +18,6 @@ data class VideoScriptData(val sheetName: String, val videoMeta: VideoMeta, val 
 
 class SheetsVideoReader(private val accessToken: String, private val spreadsheetId: String = VIDEO_SS_ID) {
 
-    // 타임아웃 명시
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -29,9 +28,10 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
     suspend fun readScript(sheetName: String): Result<VideoScriptData> = withContext(Dispatchers.IO) {
         runCatching {
             val encoded = java.net.URLEncoder.encode(sheetName, "UTF-8")
-            val url = "$base/$spreadsheetId/values/$encoded"
-            val resp = get(url) ?: throw Exception("Sheets 응답 없음: $sheetName")
-            val values = resp.optJSONArray("values") ?: throw Exception("시트 비어있음: $sheetName")
+            val resp = get("$base/$spreadsheetId/values/$encoded")
+                ?: throw Exception("Sheets 응답 없음: $sheetName")
+            val values = resp.optJSONArray("values")
+                ?: throw Exception("시트 비어있음: $sheetName")
             val rows = (0 until values.length()).map { i ->
                 val row = values.getJSONArray(i)
                 (0 until row.length()).map { j -> row.getString(j) }
@@ -40,7 +40,7 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
             val start = rows.indexOfFirst { it.getOrElse(0){""} == "Section" }
                 .let { if (it >= 0) it + 1 else -1 }
             val script = if (start >= 0) parseScriptRows(rows, start) else emptyList()
-            Log.i(TAG, "readScript: $sheetName, rows=${script.size}")
+            Log.i(TAG, "readScript: $sheetName rows=${script.size}")
             VideoScriptData(sheetName, meta, script)
         }
     }
@@ -51,7 +51,7 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
     suspend fun updateStatus(sheetName: String, rowIndex: Int, status: String = "DONE"): Boolean =
         withContext(Dispatchers.IO) {
             runCatching {
-                val sheetRow = 7 + rowIndex   // Video_Meta 5행 + 헤더 1행 + 1-index
+                val sheetRow = 7 + rowIndex
                 val encoded  = java.net.URLEncoder.encode("$sheetName!K$sheetRow", "UTF-8")
                 val url  = "$base/$spreadsheetId/values/$encoded?valueInputOption=USER_ENTERED"
                 val body = JSONObject().apply {
@@ -70,8 +70,8 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
 
     suspend fun listScriptSheets(): List<String> = withContext(Dispatchers.IO) {
         runCatching {
-            val url  = "$base/$spreadsheetId?fields=sheets.properties.title"
-            val resp = get(url) ?: return@runCatching emptyList<String>()
+            val resp = get("$base/$spreadsheetId?fields=sheets.properties.title")
+                ?: return@runCatching emptyList<String>()
             val arr  = resp.optJSONArray("sheets") ?: return@runCatching emptyList<String>()
             (0 until arr.length())
                 .map { arr.getJSONObject(it).getJSONObject("properties").getString("title") }
@@ -84,14 +84,14 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
         for (r in rows) {
             if (r.getOrElse(0){""} == "Section") break
             val key = r.getOrElse(1){""}
-            val val_ = r.getOrElse(2){""}
-            if (key.isNotBlank()) m[key] = val_
+            val value = r.getOrElse(2){""}
+            if (key.isNotBlank()) m[key] = value
         }
         return VideoMeta(
-            m["YouTube_Title"] ?: "",
-            m["Top_Watermark"] ?: "ASTERION",
-            m["Thumbnail_Text"] ?: "",
-            m["Main_BGM"] ?: "bgm01.mp3"
+            youtubeTitle  = m["YouTube_Title"] ?: "",
+            topWatermark  = m["Top_Watermark"] ?: "ASTERION",
+            thumbnailText = m["Thumbnail_Text"] ?: "",
+            mainBgm       = m["Main_BGM"] ?: "bgm01.mp3"
         )
     }
 
@@ -100,20 +100,20 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
             val sec = r.getOrElse(0){""}
             if (sec.isBlank()) null
             else ScriptDataRow(
-                rowIndex  = idx,
-                section   = sec,
-                speaker   = r.getOrElse(1){"1"}.toIntOrNull() ?: 1,
-                cardMain  = r.getOrElse(2){""},
-                cardSub   = r.getOrElse(3){""},
-                cardDesc  = r.getOrElse(4){""},
-                highlight = r.getOrElse(5){""},
-                script    = r.getOrElse(6){""},
-                bgFileName= r.getOrElse(7){"default_bg.mp4|FADE|1.0|NONE"},
-                cardStyle = r.getOrElse(8){"A"},
-                animation = r.getOrElse(9){"DEFAULT"},
-                status    = r.getOrElse(10){"READY"},
-                note      = r.getOrElse(11){""},
-                bgEffectCode   = r.getOrElse(12){"NONE"},
+                rowIndex       = idx,
+                section        = sec,
+                speaker        = r.getOrElse(1){"1"}.toIntOrNull() ?: 1,
+                cardMain       = r.getOrElse(2){""},
+                cardSub        = r.getOrElse(3){""},
+                cardDesc       = r.getOrElse(4){""},
+                highlightWord  = r.getOrElse(5){""},   // ← 정확한 파라미터명
+                script         = r.getOrElse(6){""},
+                bgFile         = r.getOrElse(7){"VedicEnergyByPlanet_XRP_MovingChart.mp4|FADE|1.0|NONE"},
+                animation      = r.getOrElse(8){"A"},
+                cardStyle      = r.getOrElse(9){"DEFAULT"},
+                status         = r.getOrElse(10){"READY"},
+                note           = r.getOrElse(11){""},
+                bgEffect       = r.getOrElse(12){"NONE"},  // ← 정확한 파라미터명
                 bgTransition   = r.getOrElse(13){"FADE"},
                 cardExtraEffect= r.getOrElse(14){"NONE"},
                 lottieFile     = r.getOrElse(15){"NONE"},
@@ -128,12 +128,8 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
             .addHeader("Authorization", "Bearer $accessToken")
             .get().build()
         return client.newCall(req).execute().use { resp ->
-            if (resp.isSuccessful)
-                JSONObject(resp.body?.string() ?: "{}")
-            else {
-                Log.e(TAG, "GET ${resp.code}: $url")
-                null
-            }
+            if (resp.isSuccessful) JSONObject(resp.body?.string() ?: "{}")
+            else { Log.e(TAG, "GET ${resp.code}: $url"); null }
         }
     }
 }
