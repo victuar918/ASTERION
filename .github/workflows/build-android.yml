@@ -34,44 +34,20 @@ jobs:
       - name: sherpa-onnx AAR + JAR 다운로드
         run: |
           mkdir -p android/app/libs
-
-          echo "=== sherpa-onnx 1.10.31 Android tar.bz2 ==="
+          echo "=== sherpa-onnx AAR ==="
           wget -q "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.31/sherpa-onnx-v1.10.31-android.tar.bz2" \
                -O /tmp/sherpa-onnx-android.tar.bz2
           mkdir -p /tmp/sherpa-extract
           tar -xjf /tmp/sherpa-onnx-android.tar.bz2 -C /tmp/sherpa-extract
           AAR=$(find /tmp/sherpa-extract -name "*.aar" | head -1)
-          if [ -n "$AAR" ]; then
-            cp "$AAR" android/app/libs/sherpa-onnx-android.aar
-            echo "✅ AAR: $AAR"
-          else
-            echo "⚠ AAR 없음 — tar.bz2 내부:"
-            find /tmp/sherpa-extract -type f | head -10
-          fi
+          [ -n "$AAR" ] && cp "$AAR" android/app/libs/sherpa-onnx-android.aar && echo "✅ AAR: $AAR"
 
-          echo "=== sherpa-onnx Java17 JAR (API 클래스) ==="
+          echo "=== sherpa-onnx Java17 JAR ==="
           wget -q "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.31/sherpa-onnx-v1.10.31-java17.jar" \
                -O android/app/libs/sherpa-onnx-java.jar
           echo "✅ JAR: $(du -sh android/app/libs/sherpa-onnx-java.jar)"
 
-          echo "=== 실펴 pub.dev FFmpeg 추출 ==="
-          mkdir -p android/temp_ffmpeg
-          curl -L --max-time 120 \
-            -o android/temp_ffmpeg/archive.tar.gz \
-            "https://pub.dev/api/archives/ffmpeg_kit_flutter_full-6.0.3.tar.gz"
-          tar -xzf android/temp_ffmpeg/archive.tar.gz -C android/temp_ffmpeg/
-          find android/temp_ffmpeg -name "*.aar" | tee /tmp/ffmpeg_aar_list.txt
-          AAR_COUNT=$(wc -l < /tmp/ffmpeg_aar_list.txt)
-          if [ "$AAR_COUNT" -gt 0 ]; then
-            cp $(head -1 /tmp/ffmpeg_aar_list.txt) android/app/libs/ffmpeg-kit-full.aar
-            echo "✅ FFmpeg AAR 추출 성공"
-          else
-            echo "⚠ FFmpeg AAR 없음 (Flutter 패키지는 바이너리 미포함)"
-            find android/temp_ffmpeg -type f | head -10
-          fi
-          rm -rf android/temp_ffmpeg
-
-          echo "=== libs 최종 목록 ==="
+          echo "=== libs 목록 ==="
           ls -lh android/app/libs/
 
       - name: Gradle Wrapper 생성
@@ -83,14 +59,21 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee /tmp/build_log.txt
+          ./gradlew assembleDebug --no-daemon 2>&1 | tee /tmp/build_log.txt
           exit ${PIPESTATUS[0]}
+
+      - name: APK 위치 확인
+        if: always()
+        run: |
+          echo "=== APK 검색 ==="
+          find android -name "*.apk" 2>/dev/null || echo "APK 파일 없음"
 
       - name: APK 업로드
         uses: actions/upload-artifact@v4
         with:
           name: asterion-video-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
           retention-days: 7
 
       - name: 빌드 로그 업로드 (실패 시)
