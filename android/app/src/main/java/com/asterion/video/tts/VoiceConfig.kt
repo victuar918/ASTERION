@@ -33,14 +33,14 @@ data class VoiceConfig(
 }
 
 class SupertonicTtsEngine(private val context: Context) {
-    private var env: OrtEnvironment? = null
+    private var env: OrtEnvironment?  = null
     private var textEncoder: OrtSession? = null
     private var durationPredictor: OrtSession? = null
     private var vectorEstimator: OrtSession? = null
     private var vocoder: OrtSession? = null
     private var unicodeIndexer: Map<String, Long> = emptyMap()
     private var ttsConfig: JSONObject? = null
-    private val totalSteps = 4  // Supertonic 품질 스텝 (2=빠름/누락, 4=권장)
+    private val totalSteps = 4
 
     suspend fun init(onProgress: (String)->Unit = {}) = withContext(Dispatchers.IO) {
         val dir = prepareModelDir(onProgress)
@@ -50,41 +50,41 @@ class SupertonicTtsEngine(private val context: Context) {
             setIntraOpNumThreads(4)
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
         }
-        textEncoder      = env!!.createSession("${dir.absolutePath}/onnx/text_encoder.onnx", opts)
-        durationPredictor = env!!.createSession("${dir.absolutePath}/onnx/duration_predictor.onnx", opts)
-        vectorEstimator  = env!!.createSession("${dir.absolutePath}/onnx/vector_estimator.onnx", opts)
-        vocoder          = env!!.createSession("${dir.absolutePath}/onnx/vocoder.onnx", opts)
-        unicodeIndexer   = loadUnicodeIndexer(File(dir, "onnx/unicode_indexer.json"))
-        ttsConfig        = JSONObject(File(dir, "onnx/tts.json").readText())
+        val p = dir.absolutePath
+        textEncoder       = env!!.createSession("$p/onnx/text_encoder.onnx",       opts)
+        durationPredictor = env!!.createSession("$p/onnx/duration_predictor.onnx", opts)
+        vectorEstimator   = env!!.createSession("$p/onnx/vector_estimator.onnx",   opts)
+        vocoder           = env!!.createSession("$p/onnx/vocoder.onnx",            opts)
+        unicodeIndexer    = loadUnicodeIndexer(File(dir, "onnx/unicode_indexer.json"))
+        ttsConfig         = JSONObject(File(dir, "onnx/tts.json").readText())
         onProgress("✅ Supertonic 2 온디바이스 준비 완료")
     }
 
     fun synthesize(text: String, voiceFile: String, speed: Float, outputFile: File): Boolean {
-        val te = textEncoder ?: return false
-        val dp = durationPredictor ?: return false
-        val ve = vectorEstimator ?: return false
-        val vc = vocoder ?: return false
+        if (textEncoder == null) return false
         if (text.isBlank()) return false
         return try {
-            val modelDir = File(context.filesDir, AppConfig.TTS_MODEL_SUBDIR)
+            val modelDir   = File(context.filesDir, AppConfig.TTS_MODEL_SUBDIR)
             val voiceStyle = loadVoiceStyle(File(modelDir, "voice_styles/$voiceFile"))
+            val tokenIds   = tokenize(text)
 
             // Step 1: 텍스트 인코딩
-            val tokenIds = tokenize(text)
-            val encoded  = runTextEncoder(te, tokenIds)
+            val encoded = runTextEncoder(tokenIds)
 
             // Step 2: 지속 시간 예측
-            val durations = runDurationPredictor(dp, encoded, voiceStyle, speed)
+            val durations = runDurationPredictor(encoded, voiceStyle, speed)
 
-            // Step 3: Vector Estimator (diffusion, totalSteps 반복)
-            val latent = runVectorEstimator(ve, encoded, durations, voiceStyle)
+            // Step 3: Vector Estimator (diffusion)
+            val latent = runVectorEstimator(encoded, durations, voiceStyle)
 
             // Step 4: Vocoder → 오디오 샘플
-            val samples = runVocoder(vc, latent)
+            val samples = runVocoder(latent)
+
+            encoded.close(); durations.close(); latent.close()
 
             val sr = ttsConfig?.optInt("sample_rate", 44100) ?: 44100
             outputFile.writeBytes(float32ToWav(samples, sr))
-            Log.i(TAG, "Supertonic 완료: ${outputFile.name} (${outputFile.length()/1024}KB)")
+            Log.i(TAG, "완료: ${outputFile.name} (${outputFile.length()/1024}KB)")
             true
         } catch(e: Exception) { Log.e(TAG, "synthesize: $e"); false }
     }
@@ -105,38 +105,41 @@ class SupertonicTtsEngine(private val context: Context) {
         vectorEstimator = null; vocoder = null; env = null
     }
 
-    // ── ONNX 실행 헬퍼 ──
-    private fun runTextEncoder(sess: OrtSession, tokenIds: LongArray): OrtTensor {
+    // ── ONNX 실행 헬퍼 (OnnxTensor 사용) ──
+    private fun runTextEncoder(tokenIds: LongArray): OnnxTensor {
         val shape = longArrayOf(1, tokenIds.size.toLong())
-        val input = OrtTensor.createTensor(env!!, LongBuffer.wrap(tokenIds), shape)
-        return sess.run(mapOf("token_ids" to input)).use { it[0].value as OrtTensor }
+        val input = OnnxTensor.createTensor(env!!, LongBuffer.wrap(tokenIds), shape)
+        val result = textEncoder!!.run(mapOf("token_ids" to input))
+        input.close()
+        return result[0].value as OnnxTensor
     }
 
-    private fun runDurationPredictor(sess: OrtSession, encoded: OrtTensor,
-                                      voiceStyle: FloatArray, speed: Float): OrtTensor {
-        val styleShape = longArrayOf(1, voiceStyle.size.toLong())
-        val styleTensor = OrtTensor.createTensor(env!!, FloatBuffer.wrap(voiceStyle), styleShape)
-        val speedTensor = OrtTensor.createTensor(env!!, FloatBuffer.wrap(floatArrayOf(speed)), longArrayOf(1))
-        return sess.run(mapOf("encoded" to encoded, "style" to styleTensor, "speed" to speedTensor))
-            .use { it[0].value as OrtTensor }
+    private fun runDurationPredictor(encoded: OnnxTensor, voiceStyle: FloatArray, speed: Float): OnnxTensor {
+        val styleShape  = longArrayOf(1, voiceStyle.size.toLong())
+        val styleTensor = OnnxTensor.createTensor(env!!, FloatBuffer.wrap(voiceStyle), styleShape)
+        val speedTensor = OnnxTensor.createTensor(env!!, FloatBuffer.wrap(floatArrayOf(speed)), longArrayOf(1))
+        val result = durationPredictor!!.run(mapOf(
+            "encoded" to encoded, "style" to styleTensor, "speed" to speedTensor))
+        styleTensor.close(); speedTensor.close()
+        return result[0].value as OnnxTensor
     }
 
-    private fun runVectorEstimator(sess: OrtSession, encoded: OrtTensor,
-                                    durations: OrtTensor, voiceStyle: FloatArray): OrtTensor {
-        val styleShape = longArrayOf(1, voiceStyle.size.toLong())
-        val styleTensor = OrtTensor.createTensor(env!!, FloatBuffer.wrap(voiceStyle), styleShape)
-        val stepTensor  = OrtTensor.createTensor(env!!, LongBuffer.wrap(longArrayOf(totalSteps.toLong())), longArrayOf(1))
-        return sess.run(mapOf("encoded" to encoded, "durations" to durations,
-                              "style" to styleTensor, "total_step" to stepTensor))
-            .use { it[0].value as OrtTensor }
+    private fun runVectorEstimator(encoded: OnnxTensor, durations: OnnxTensor, voiceStyle: FloatArray): OnnxTensor {
+        val styleShape  = longArrayOf(1, voiceStyle.size.toLong())
+        val styleTensor = OnnxTensor.createTensor(env!!, FloatBuffer.wrap(voiceStyle), styleShape)
+        val stepTensor  = OnnxTensor.createTensor(env!!, LongBuffer.wrap(longArrayOf(totalSteps.toLong())), longArrayOf(1))
+        val result = vectorEstimator!!.run(mapOf(
+            "encoded" to encoded, "durations" to durations,
+            "style" to styleTensor, "total_step" to stepTensor))
+        styleTensor.close(); stepTensor.close()
+        return result[0].value as OnnxTensor
     }
 
-    private fun runVocoder(sess: OrtSession, latent: OrtTensor): FloatArray {
-        return sess.run(mapOf("latent" to latent)).use { result ->
-            val tensor = result[0].value as OrtTensor
-            val buf = tensor.floatBuffer
-            FloatArray(buf.remaining()).also { buf.get(it) }
-        }
+    private fun runVocoder(latent: OnnxTensor): FloatArray {
+        val result = vocoder!!.run(mapOf("latent" to latent))
+        val tensor = result[0].value as OnnxTensor
+        val buf    = tensor.floatBuffer
+        return FloatArray(buf.remaining()).also { buf.get(it) }
     }
 
     // ── 텍스트 전처리 ──
@@ -158,24 +161,17 @@ class SupertonicTtsEngine(private val context: Context) {
     private suspend fun prepareModelDir(onProgress: (String)->Unit): File = withContext(Dispatchers.IO) {
         val dest   = File(context.filesDir, AppConfig.TTS_MODEL_SUBDIR)
         val marker = File(dest, ".ready_v2")
-        if (marker.exists()) { onProgress("Supertonic 2 모델 캐시 재사용"); return@withContext dest }
+        if (marker.exists()) { onProgress("Supertonic 2 캐시 재사용"); return@withContext dest }
         dest.deleteRecursively(); dest.mkdirs()
         val client = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS).readTimeout(300, TimeUnit.SECONDS).build()
-        val base   = "https://huggingface.co/Supertone/supertonic/resolve/main"
-        val files  = listOf(
-            "onnx/text_encoder.onnx",
-            "onnx/duration_predictor.onnx",
-            "onnx/vector_estimator.onnx",
-            "onnx/vocoder.onnx",
-            "onnx/unicode_indexer.json",
-            "onnx/tts.json",
-            "voice_styles/M1.json",
-            "voice_styles/M2.json",
-            "voice_styles/M3.json",
-            "voice_styles/F1.json",
-            "voice_styles/F2.json",
-            "voice_styles/F3.json"
+        val base  = "https://huggingface.co/Supertone/supertonic/resolve/main"
+        val files = listOf(
+            "onnx/text_encoder.onnx", "onnx/duration_predictor.onnx",
+            "onnx/vector_estimator.onnx", "onnx/vocoder.onnx",
+            "onnx/unicode_indexer.json", "onnx/tts.json",
+            "voice_styles/M1.json", "voice_styles/M2.json", "voice_styles/M3.json",
+            "voice_styles/F1.json", "voice_styles/F2.json", "voice_styles/F3.json"
         )
         files.forEach { path ->
             onProgress("⬇ $path")
