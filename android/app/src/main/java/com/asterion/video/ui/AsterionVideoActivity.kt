@@ -40,7 +40,7 @@ class AsterionVideoActivity : AppCompatActivity() {
     private val auth by lazy { ServiceAccountAuth(this) }
     private var reader: SheetsVideoReader? = null
     private var engine: AsterionRenderEngine? = null
-    private var ttsEngine: SupertonicTtsEngine? = null
+    private var ttsEngine: SupertonicTtsEngine? = null  // testSpeaker + engine이 공유
     private var isRendering = false
     private var mediaPlayer: MediaPlayer? = null
 
@@ -105,8 +105,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                 layoutParams=LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)
                 setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
                     override fun onProgressChanged(s:SeekBar?,v:Int,u:Boolean){speedLabel.text="  속도: ${progressToSpeed(v)}x"}
-                    override fun onStartTrackingTouch(s:SeekBar?){} override fun onStopTrackingTouch(s:SeekBar?){}})
-            }
+                    override fun onStartTrackingTouch(s:SeekBar?){} override fun onStopTrackingTouch(s:SeekBar?){}})}
             speedLabel.text="  속도: ${progressToSpeed(seekBar.progress)}x"
             speakerSeekBars[sid]=seekBar; llSpeakers.addView(seekBar); llSpeakers.addView(speedLabel)
         }
@@ -119,10 +118,10 @@ class AsterionVideoActivity : AppCompatActivity() {
         AppConfig.ensureDirs()
         val errFile = File(AppConfig.OUTPUT_DIR, "tts_error.txt")
         errFile.delete()
-        updateStatus("🔊 [$sid] $voiceFile speed=$speed ...")
+        updateStatus("🔊 [$sid] $voiceFile speed=$speed 합성 중...")
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val te  = ttsEngine ?: return@launch
+                val te  = ttsEngine ?: run { withContext(Dispatchers.Main) { updateStatus("❌ TTS 엔진 미초기화") }; return@launch }
                 val out = File(AppConfig.OUTPUT_DIR, "test_sid${sid}.wav")
                 val ok  = te.synthesize(testText, voiceFile, speed, out)
                 withContext(Dispatchers.Main) {
@@ -131,15 +130,13 @@ class AsterionVideoActivity : AppCompatActivity() {
                         mediaPlayer = MediaPlayer().apply { setDataSource(out.absolutePath); prepare(); start() }
                         updateStatus("🔊 [$sid] ${out.length()/1024}KB 재생 중")
                     } else {
-                        // 오류 파일 읽기
-                        val errMsg = if (errFile.exists()) errFile.readText() else "synthesize false (오류 파일 없음)"
-                        updateStatus("❌ TTS 실패\n$errMsg")
+                        val errMsg = if (errFile.exists()) errFile.readText() else "synthesize() false (오류 파일 없음)"
+                        updateStatus("❌ TTS 실패:\n$errMsg")
                         appendLog("❌ $errMsg")
                     }
                 }
             } catch(e: Exception) {
-                val msg = "${e.javaClass.simpleName}: ${e.message}"
-                withContext(Dispatchers.Main) { updateStatus("❌ 예외: $msg") }
+                withContext(Dispatchers.Main) { updateStatus("❌ 예외: ${e.javaClass.simpleName}: ${e.message}") }
             }
         }
     }
@@ -177,11 +174,18 @@ class AsterionVideoActivity : AppCompatActivity() {
         try {
             val token = auth.getAccessToken()
             reader    = SheetsVideoReader(token, VIDEO_SS_ID)
-            ttsEngine = SupertonicTtsEngine(this).also { it.init { msg -> appendLog(msg) } }
-            engine    = AsterionRenderEngine(this)
+
+            // TTS 엔진 1회 init
+            val te = SupertonicTtsEngine(this)
+            te.init { msg -> appendLog(msg) }
+            ttsEngine = te
+
+            // 렌더링 엔진: 동일한 ttsEngine 공유 (dpSess null 문제 해결)
+            engine = AsterionRenderEngine(this, te)
+
             val sheets = reader!!.listScriptSheets()
             withContext(Dispatchers.Main) {
-                if (sheets.isEmpty()) tvStatus.text = "대본 없음 — Claude로 대본 작성 후 VS_으로 시작하는 시트명 사용"
+                if (sheets.isEmpty()) tvStatus.text = "대본 없음 — VS_로 시작하는 시트명 사용"
                 else {
                     spinnerSheet.adapter = ArrayAdapter(this@AsterionVideoActivity,
                         android.R.layout.simple_spinner_item, sheets)
@@ -206,7 +210,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                 val result = reader!!.readReadyRows(sheet)
                 if (result.isFailure) { updateStatus("❌ 대본 로드 실패: ${result.exceptionOrNull()?.message}"); return@launch }
                 val data = result.getOrThrow()
-                if (data.scriptRows.isEmpty()) { updateStatus("⚠ READY 행 없음 — Status K열 확인"); return@launch }
+                if (data.scriptRows.isEmpty()) { updateStatus("⚠ READY 행 없음"); return@launch }
                 withContext(Dispatchers.Main) { progressBar.max=data.scriptRows.size }
                 var done=0
                 for (row in data.scriptRows) {
@@ -216,7 +220,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                     if (f!=null) done++
                     withContext(Dispatchers.Main) { progressBar.progress=++done }
                 }
-                updateStatus("✅ TTS 완료 ${done}/${data.scriptRows.size} | 렌더링 stub")
+                updateStatus("✅ TTS 완료 ${done}/${data.scriptRows.size}세션 | 렌더링 stub")
             } catch(e:Exception) { updateStatus("❌ ${e.message}") }
             finally { isRendering=false; withContext(Dispatchers.Main){btnStart.isEnabled=true;btnStop.isEnabled=false} }
         }
@@ -227,5 +231,5 @@ class AsterionVideoActivity : AppCompatActivity() {
     private fun appendLog(msg: String) = lifecycleScope.launch(Dispatchers.Main) {
         tvLog.text = (tvLog.text.toString().lines().takeLast(15)+msg).joinToString("\n")
     }
-    override fun onDestroy() { super.onDestroy(); mediaPlayer?.release(); engine?.release() }
+    override fun onDestroy() { super.onDestroy(); mediaPlayer?.release(); ttsEngine?.release() }
 }
