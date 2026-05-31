@@ -1,0 +1,1 @@
+        val wavTensor   = decOut.get(decoder!!.outputNames.first()).get() as OnnxTensor
