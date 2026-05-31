@@ -1,0 +1,7 @@
+// synthesize() 디버그 버전 - VoiceConfig.kt 안에 이 함수를 교체하세요
+// (실제로는 gh_push_files로 전체 파일 교체)
+
+// testSpeaker()에서 실패 시:
+// val errFile = File(AppConfig.OUTPUT_DIR, "tts_error.txt")
+// val errMsg = if (errFile.exists()) errFile.readText() else "오류 파일 없음"
+// updateStatus("❌ TTS 실패:\n$errMsg")
