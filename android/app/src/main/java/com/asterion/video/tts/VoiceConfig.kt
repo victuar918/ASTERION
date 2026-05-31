@@ -39,16 +39,15 @@ data class VoiceConfig(val speakers: Map<Int, SpeakerConfig>) {
 }
 
 class SupertonicTtsEngine(private val context: Context) {
-    // onnx-community/Supertonic-TTS-2-ONNX 상수 (config.json 기준)
     companion object {
-        const val SAMPLE_RATE         = 44100
-        const val CHUNK_COMPRESS      = 6
-        const val BASE_CHUNK_SIZE     = 512
-        const val LATENT_DIM          = 24
-        const val STYLE_DIM           = 128
-        const val LATENT_SIZE         = BASE_CHUNK_SIZE * CHUNK_COMPRESS    // 3072
-        const val FULL_LATENT_DIM     = LATENT_DIM * CHUNK_COMPRESS         // 144
-        const val NUM_STEPS           = 10
+        const val SAMPLE_RATE     = 44100
+        const val CHUNK_COMPRESS  = 6
+        const val BASE_CHUNK_SIZE = 512
+        const val LATENT_DIM      = 24
+        const val STYLE_DIM       = 128
+        const val LATENT_SIZE     = BASE_CHUNK_SIZE * CHUNK_COMPRESS   // 3072
+        const val FULL_LATENT_DIM = LATENT_DIM * CHUNK_COMPRESS        // 144
+        const val NUM_STEPS       = 10
     }
 
     private var env: OrtEnvironment? = null
@@ -70,7 +69,6 @@ class SupertonicTtsEngine(private val context: Context) {
         denoiser = env!!.createSession("$p/onnx/latent_denoiser.onnx", opts)
         decoder  = env!!.createSession("$p/onnx/voice_decoder.onnx",   opts)
         vocab    = loadVocab(File(dir, "tokenizer.json"))
-        // 입출력 이름 확인 로그
         Log.i(TAG, "text_encoder    IN=${textEnc!!.inputNames.toList()}")
         Log.i(TAG, "latent_denoiser IN=${denoiser!!.inputNames.toList()}")
         Log.i(TAG, "voice_decoder   IN=${decoder!!.inputNames.toList()}")
@@ -116,7 +114,6 @@ class SupertonicTtsEngine(private val context: Context) {
         textEnc = null; denoiser = null; decoder = null; env = null
     }
 
-    // ── 추론 파이프라인 ─────────────────────────────────────────────────────
     private fun inferChunk(text: String, lang: String, style: FloatArray, speed: Float): FloatArray {
         val env = env!!
 
@@ -125,34 +122,30 @@ class SupertonicTtsEngine(private val context: Context) {
         val tagged     = "<$lang>$normalized</$lang>"
         val ids        = LongArray(tagged.length) { i -> vocab[tagged[i].toString()] ?: vocab[" "] ?: 0L }
         val seqLen     = ids.size
+        val attnMask   = FloatArray(seqLen) { 1.0f }
 
-        // attention_mask: float32 [1, seqLen]
-        val attnMask = FloatArray(seqLen) { 1.0f }
+        val styleSeqLen = style.size / STYLE_DIM
+        val styleShape  = longArrayOf(1L, STYLE_DIM.toLong(), styleSeqLen.toLong())
+        val styleTensor = env.f32(style, styleShape)
+        val idsTensor   = env.i64(ids,   longArrayOf(1L, seqLen.toLong()))
+        val attnTensor  = env.f32(attnMask, longArrayOf(1L, seqLen.toLong()))
 
-        // style: [1, STYLE_DIM, seq_len_style]  seq_len_style = style.size / STYLE_DIM
-        val styleSeqLen  = style.size / STYLE_DIM
-        val styleShape   = longArrayOf(1L, STYLE_DIM.toLong(), styleSeqLen.toLong())
-        val styleTensor  = env.f32(style, styleShape)
-        val idsTensor    = env.i64(ids, longArrayOf(1L, seqLen.toLong()))
-        val attnTensor   = env.f32(attnMask, longArrayOf(1L, seqLen.toLong()))
-
-        // 2. Text Encoder → last_hidden_state, raw_durations
-        val teOut = textEnc!!.run(mapOf(
+        // 2. Text Encoder
+        val teOut       = textEnc!!.run(mapOf(
             "input_ids"      to idsTensor,
             "attention_mask" to attnTensor,
-            "style"          to styleTensor
-        ))
-        val hiddenState  = teOut["last_hidden_state"].get() as OnnxTensor
-        val rawDurTensor = teOut["raw_durations"].get() as OnnxTensor
+            "style"          to styleTensor))
+        val hiddenState  = teOut.get("last_hidden_state").get() as OnnxTensor
+        val rawDurTensor = teOut.get("raw_durations").get() as OnnxTensor
         @Suppress("UNCHECKED_CAST")
         val rawDur = (rawDurTensor.value as Array<FloatArray>)[0]
 
-        // 3. Duration → latent 크기
+        // 3. Duration
         val durations    = LongArray(rawDur.size) { i -> maxOf(0L, (rawDur[i] / speed * SAMPLE_RATE).toLong()) }
         val totalSamples = durations.sum()
         val latentLen    = maxOf(1, ((totalSamples + LATENT_SIZE - 1) / LATENT_SIZE).toInt())
 
-        // 4. Noisy latents (Box-Muller)  shape [1, FULL_LATENT_DIM, latentLen]
+        // 4. Noisy latents (Box-Muller)
         val rng = java.util.Random()
         var latents = FloatArray(FULL_LATENT_DIM * latentLen)
         var idx = 0
@@ -164,45 +157,41 @@ class SupertonicTtsEngine(private val context: Context) {
             latents[idx+1] = r * sin(2.0 * PI * u2).toFloat()
             idx += 2
         }
-        val latentShape = longArrayOf(1L, FULL_LATENT_DIM.toLong(), latentLen.toLong())
-
-        // latent_mask: float32 [1, 1, latentLen] — latent_denoiser에 float32로 전달
-        val latentMaskF = FloatArray(latentLen) { 1.0f }
+        val latentShape  = longArrayOf(1L, FULL_LATENT_DIM.toLong(), latentLen.toLong())
+        val latentMaskF  = FloatArray(latentLen) { 1.0f }
         val latentMask3d = longArrayOf(1L, 1L, latentLen.toLong())
 
         // 5. Denoising loop
         for (step in 0 until NUM_STEPS) {
-            val timeStep    = floatArrayOf(step.toFloat() / NUM_STEPS)
             val latTensor   = env.f32(latents,     latentShape)
-            val timeTensor  = env.f32(timeStep,    longArrayOf(1L))
+            val timeTensor  = env.f32(floatArrayOf(step.toFloat() / NUM_STEPS), longArrayOf(1L))
             val lmTensor    = env.f32(latentMaskF, latentMask3d)
             val attn2Tensor = env.f32(attnMask,    longArrayOf(1L, seqLen.toLong()))
             val style2      = env.f32(style,       styleShape)
-
-            val denoised = denoiser!!.run(mapOf(
-                "latents"          to latTensor,
-                "time_step"        to timeTensor,
+            val denoised    = denoiser!!.run(mapOf(
+                "latents"           to latTensor,
+                "time_step"         to timeTensor,
                 "last_hidden_state" to hiddenState,
-                "attention_mask"   to attn2Tensor,
-                "latent_mask"      to lmTensor,
-                "style"            to style2
-            ))
-            val outTensor = denoised["latents"].get() as OnnxTensor
+                "attention_mask"    to attn2Tensor,
+                "latent_mask"       to lmTensor,
+                "style"             to style2))
+            val outTensor = denoised.get("latents").get() as OnnxTensor
             val buf = outTensor.floatBuffer
             latents = FloatArray(buf.remaining()).also { buf.get(it) }
             latTensor.close(); timeTensor.close(); lmTensor.close()
             attn2Tensor.close(); style2.close(); denoised.close(); outTensor.close()
         }
 
-        // 6. Voice Decoder — latents * latent_mask 적용 후 단일 "latent" 입력
-        val maskedLatents = FloatArray(latents.size)
+        // 6. Voice Decoder — masked latent
+        val masked = FloatArray(latents.size)
         for (d in 0 until FULL_LATENT_DIM)
             for (t in 0 until latentLen)
-                maskedLatents[d * latentLen + t] = latents[d * latentLen + t] * latentMaskF[t]
+                masked[d * latentLen + t] = latents[d * latentLen + t] * latentMaskF[t]
 
-        val finalLatent = env.f32(maskedLatents, latentShape)
+        val finalLatent = env.f32(masked, latentShape)
         val decOut      = decoder!!.run(mapOf("latent" to finalLatent))
-        val wavTensor   = decOut.values.first() as OnnxTensor
+        val wavOutName  = decoder!!.outputNames.first()
+        val wavTensor   = decOut.get(wavOutName).get() as OnnxTensor  // ← .values 제거
         val wavBuf      = wavTensor.floatBuffer
         val wavAll      = FloatArray(wavBuf.remaining()).also { wavBuf.get(it) }
         val wav         = wavAll.copyOfRange(0, minOf(totalSamples.toInt(), wavAll.size))
@@ -213,7 +202,6 @@ class SupertonicTtsEngine(private val context: Context) {
         return wav
     }
 
-    // ── 헬퍼 ─────────────────────────────────────────────────────────────
     private fun OrtEnvironment.f32(data: FloatArray, shape: LongArray): OnnxTensor =
         OnnxTensor.createTensor(this, FloatBuffer.wrap(data), shape)
 
@@ -230,7 +218,6 @@ class SupertonicTtsEngine(private val context: Context) {
         val bytes = f.readBytes()
         val buf   = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer()
         return FloatArray(buf.remaining()).also { buf.get(it) }
-        // shape → [1, STYLE_DIM, size/STYLE_DIM] 은 inferChunk에서 처리
     }
 
     private fun chunkText(text: String, max: Int): List<String> {
@@ -245,7 +232,6 @@ class SupertonicTtsEngine(private val context: Context) {
         return chunks.filter { it.isNotBlank() }
     }
 
-    // ── 모델 다운로드 (.ready_v3) ─────────────────────────────────────────
     private suspend fun prepareModelDir(onProgress: (String)->Unit): File = withContext(Dispatchers.IO) {
         val dest   = File(context.filesDir, AppConfig.TTS_MODEL_SUBDIR)
         val marker = File(dest, ".ready_v3")
@@ -254,15 +240,14 @@ class SupertonicTtsEngine(private val context: Context) {
         val client = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS).readTimeout(600, TimeUnit.SECONDS).build()
         val base = "https://huggingface.co/onnx-community/Supertonic-TTS-2-ONNX/resolve/main"
-        val files = listOf(
-            "onnx/text_encoder.onnx",      "onnx/text_encoder.onnx_data",
-            "onnx/latent_denoiser.onnx",   "onnx/latent_denoiser.onnx_data",
-            "onnx/voice_decoder.onnx",     "onnx/voice_decoder.onnx_data",
+        listOf(
+            "onnx/text_encoder.onnx",    "onnx/text_encoder.onnx_data",
+            "onnx/latent_denoiser.onnx", "onnx/latent_denoiser.onnx_data",
+            "onnx/voice_decoder.onnx",   "onnx/voice_decoder.onnx_data",
             "tokenizer.json", "config.json",
             "voices/M1.bin","voices/M2.bin","voices/M3.bin","voices/M4.bin","voices/M5.bin",
             "voices/F1.bin","voices/F2.bin","voices/F3.bin","voices/F4.bin","voices/F5.bin"
-        )
-        files.forEach { path ->
+        ).forEach { path ->
             onProgress("⬇ $path")
             val out = File(dest, path).also { it.parentFile?.mkdirs() }
             client.newCall(Request.Builder().url("$base/$path").build()).execute().use { resp ->
@@ -273,7 +258,6 @@ class SupertonicTtsEngine(private val context: Context) {
         marker.createNewFile(); dest
     }
 
-    // ── WAV ──────────────────────────────────────────────────────────────
     private fun toWav(s: FloatArray, sr: Int): ByteArray {
         val ds = s.size * 2
         return java.io.ByteArrayOutputStream(44+ds).apply {
