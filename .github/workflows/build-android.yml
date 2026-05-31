@@ -31,25 +31,6 @@ jobs:
         with:
           gradle-version: '8.6'
 
-      - name: sherpa-onnx AAR + JAR 다운로드
-        run: |
-          mkdir -p android/app/libs
-          echo "=== sherpa-onnx AAR ==="
-          wget -q "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.31/sherpa-onnx-v1.10.31-android.tar.bz2" \
-               -O /tmp/sherpa-onnx-android.tar.bz2
-          mkdir -p /tmp/sherpa-extract
-          tar -xjf /tmp/sherpa-onnx-android.tar.bz2 -C /tmp/sherpa-extract
-          AAR=$(find /tmp/sherpa-extract -name "*.aar" | head -1)
-          [ -n "$AAR" ] && cp "$AAR" android/app/libs/sherpa-onnx-android.aar && echo "✅ AAR: $AAR"
-
-          echo "=== sherpa-onnx Java17 JAR ==="
-          wget -q "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.10.31/sherpa-onnx-v1.10.31-java17.jar" \
-               -O android/app/libs/sherpa-onnx-java.jar
-          echo "✅ JAR: $(du -sh android/app/libs/sherpa-onnx-java.jar)"
-
-          echo "=== libs 목록 ==="
-          ls -lh android/app/libs/
-
       - name: Gradle Wrapper 생성
         run: |
           cd android
@@ -61,12 +42,6 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon 2>&1 | tee /tmp/build_log.txt
           exit ${PIPESTATUS[0]}
-
-      - name: APK 위치 확인
-        if: always()
-        run: |
-          echo "=== APK 검색 ==="
-          find android -name "*.apk" 2>/dev/null || echo "APK 파일 없음"
 
       - name: APK 업로드
         uses: actions/upload-artifact@v4

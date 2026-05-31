@@ -9,7 +9,7 @@ android {
     defaultConfig {
         applicationId = "com.asterion.video"
         minSdk = 26; targetSdk = 35
-        versionCode = 12; versionName = "2.1.0"
+        versionCode = 13; versionName = "3.0.0"
         ndk { abiFilters += "arm64-v8a" }
     }
     buildTypes { debug { isDebuggable = true } }
@@ -18,7 +18,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    aaptOptions { noCompress("onnx", "bin") }
+    aaptOptions { noCompress("onnx", "bin", "json") }
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 
@@ -30,6 +30,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // sherpa-onnx: AAR(네이티브 .so) + JAR(Java API 클래스)
-    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
+    // ONNX Runtime Android — Supertonic 2 온디바이스 TTS
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
 }

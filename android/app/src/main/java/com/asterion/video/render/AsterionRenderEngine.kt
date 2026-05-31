@@ -10,8 +10,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * v2.0.0 — TTS 실제 동작, 영상 합성 stub
- * FFmpeg AAR를 app/libs/에 커밋하면 영상 합성 자동 활성화
+ * v3.0.0 — Supertonic 2 온디바이스 TTS (ONNX Runtime 직접 실행)
+ * 영상 합성: FFmpeg AAR 커밋 후 활성화
  */
 class AsterionRenderEngine(
     private val context: Context,
@@ -22,7 +22,6 @@ class AsterionRenderEngine(
     suspend fun init(onProgress: (String)->Unit = {}) {
         AppConfig.ensureDirs()
         tts.init(onProgress)
-        onProgress("✅ v2.0.0 | TTS 준비 | 렌더링 stub")
     }
 
     suspend fun renderScene(
@@ -30,17 +29,17 @@ class AsterionRenderEngine(
         onProgress: (String)->Unit = {}
     ): File? = withContext(Dispatchers.IO) {
         val id  = "scene_${row.rowIndex.toString().padStart(4,'0')}"
-        val mp3 = File(AppConfig.OUTPUT_DIR, "${id}.mp3")
+        val wav = File(AppConfig.OUTPUT_DIR, "${id}.wav")
         val cfg = voiceConfig.forSpeaker(row.speaker)
         if (row.script.isNotBlank()) {
-            val ok = tts.synthesize(row.script, cfg.sid, cfg.speed, mp3)
-            onProgress("[$id] ${if(ok) "✅ ${mp3.length()/1024}KB" else "❌ TTS"} | stub")
+            val ok = tts.synthesize(row.script, cfg.voiceFile, cfg.speed, wav)
+            onProgress("[$id] ${if(ok) "✅ TTS ${wav.length()/1024}KB" else "❌ TTS"} | 렌더링 stub")
         }
-        null
+        null // 영상 합성: FFmpeg 커밋 후 활성화
     }
 
     suspend fun concatSubclips(name: String, bgm: String, onProgress: (String)->Unit = {}): File? {
-        onProgress("🔧 stub | FFmpeg AAR 커밋 후 활성화")
+        onProgress("🔧 렌더링 stub — FFmpeg AAR 커밋 후 활성화")
         return null
     }
 
