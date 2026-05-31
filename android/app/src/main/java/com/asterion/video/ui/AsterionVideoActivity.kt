@@ -97,12 +97,12 @@ class AsterionVideoActivity : AppCompatActivity() {
         if (speakers.isEmpty()) return
 
         llSpeakers.addView(TextView(this).apply {
-            text = "🎤 화자 음성 설정"
-            textSize = 13f; setTextColor(0xFFCCCCCC.toInt())
+            text = "🎤 화자 음성 설정 (VS_ 시트명으로 구분 가능)"
+            textSize = 12f; setTextColor(0xFFCCCCCC.toInt())
             setPadding(0, 16, 0, 4)
         })
 
-        val defaultVoice = mapOf(1 to 0, 2 to 5, 3 to 1)   // M1, F1, M2
+        val defaultVoice = mapOf(1 to 0, 2 to 5, 3 to 1)
         val defaultSpeed = mapOf(1 to 50, 2 to 42, 3 to 58)
 
         for (sid in speakers.sorted()) {
@@ -114,7 +114,6 @@ class AsterionVideoActivity : AppCompatActivity() {
                 setPadding(0, 12, 0, 2)
             })
 
-            // 모델 Spinner + 🔊 테스트 버튼 가로 배치
             val rowModel = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
@@ -139,7 +138,6 @@ class AsterionVideoActivity : AppCompatActivity() {
             rowModel.addView(spinner); rowModel.addView(btnTest)
             llSpeakers.addView(rowModel)
 
-            // 속도 SeekBar + 라벨
             val speedLabel = TextView(this).apply {
                 textSize = 11f; setTextColor(0xFF999999.toInt()); setPadding(0, 4, 0, 0)
             }
@@ -235,12 +233,12 @@ class AsterionVideoActivity : AppCompatActivity() {
             val sheets = reader!!.listScriptSheets()
             withContext(Dispatchers.Main) {
                 if (sheets.isEmpty()) {
-                    tvStatus.text = "대본 없음 — Claude로 대본을 먼저 작성하세요"
+                    tvStatus.text = "대본 없음 — Claude로 대본을 먼저 작성하세요\n(시트명: VS_코인_구분자_날짜 형식 권장)"
                 } else {
                     spinnerSheet.adapter = ArrayAdapter(this@AsterionVideoActivity,
                         android.R.layout.simple_spinner_item, sheets)
                         .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-                    tvStatus.text = "시트 ${sheets.size}개 — 선택 후 화자 설정"
+                    tvStatus.text = "VS_ 시트 ${sheets.size}개 — 선택 후 화자 설정"
                 }
             }
         } catch(e: Exception) {
@@ -256,6 +254,11 @@ class AsterionVideoActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
+                // 토큰 만료 방지: 매 렌더링마다 갱신
+                updateStatus("[$sheet] 토큰 갱신 중...")
+                val token = auth.getAccessToken()
+                reader = SheetsVideoReader(token, VIDEO_SS_ID)
+
                 updateStatus("[$sheet] 대본 읽는 중...")
                 val result = reader!!.readReadyRows(sheet)
                 if (result.isFailure) {
@@ -264,7 +267,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                 }
                 val data = result.getOrThrow()
                 if (data.scriptRows.isEmpty()) {
-                    updateStatus("⚠ READY 행 없음 — Status 확인")
+                    updateStatus("⚠ READY 행 없음 — Status K열 확인")
                     return@launch
                 }
                 withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
