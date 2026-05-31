@@ -1,0 +1,105 @@
+    // ── 단일 청크 추론 ──
+    private fun inferChunk(text: String, lang: String, style: VoiceStyle, speed: Float): FloatArray {
+        val env  = env!!
+        val conf = ttsConf!!
+
+        // ★ NFKD 정규화: 한국어 완성형 → 자모 분해 (공식 Java 코드와 동일)
+        val normalizedText = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFKD)
+        val taggedText = "<$lang>$normalizedText</$lang>"
+
+        val codePoints = taggedText.codePoints().toArray()
+        val maxLen = codePoints.size
+        val textIdsFlat = LongArray(maxLen) { j ->
+            val cp = codePoints[j]
+            if (cp >= 0 && cp < indexer.size) indexer[cp] else 0L
+        }
+
+        val textIds  = Array(1) { textIdsFlat }
+        val textMask = Array(1) { Array(1) { FloatArray(maxLen) { 1.0f } } }
+
+        val textIdsTensor  = createLong2D(textIds, env)
+        val textMaskTensor = createFloat3D(textMask, env)
+
+        // duration predictor
+        val dpInputs = mapOf(
+            "text_ids"  to textIdsTensor,
+            "style_dp"  to OnnxTensor.createTensor(env, FloatBuffer.wrap(style.dpFlat),  style.dpShape),
+            "text_mask" to textMaskTensor
+        )
+        val dpResult = dpSess!!.run(dpInputs)
+        val dpVal = dpResult[0].value
+        var duration = when (dpVal) {
+            is Array<*>   -> (dpVal as Array<FloatArray>)[0]
+            is FloatArray -> dpVal
+            else -> throw Exception("duration type: ${dpVal?.javaClass}")
+        }
+        dpResult.close()
+
+        // speed: ONNX 입력이 아닌 duration에 직접 나눔
+        for (i in duration.indices) duration[i] /= speed
+        val totalDur = duration.sum()
+
+        // text encoder
+        val teInputs = mapOf(
+            "text_ids"  to textIdsTensor,
+            "style_ttl" to OnnxTensor.createTensor(env, FloatBuffer.wrap(style.ttlFlat), style.ttlShape),
+            "text_mask" to textMaskTensor
+        )
+        val teResult = teSess!!.run(teInputs)
+        val textEmb  = teResult[0] as OnnxTensor
+
+        // noisy latent (Box-Muller)
+        val sr = conf.sampleRate
+        val chunkSize = conf.baseChunkSize * conf.chunkCompressFactor
+        val wavLenMax = (totalDur * sr).toLong()
+        val latentLen = ((wavLenMax + chunkSize - 1) / chunkSize).toInt()
+        val latentDim = conf.latentDim * conf.chunkCompressFactor
+        val wavLen    = (totalDur * sr).toLong()
+        val latentLength = ((wavLen + chunkSize - 1) / chunkSize).toInt()
+
+        val rng = java.util.Random()
+        var xt = Array(1) { Array(latentDim) { FloatArray(latentLen) { 0f } } }
+        val latentMask = Array(1) { Array(1) { FloatArray(latentLen) { t -> if (t < latentLength) 1f else 0f } } }
+        for (d in 0 until latentDim)
+            for (t in 0 until latentLen) {
+                val u1 = maxOf(1e-10, rng.nextDouble())
+                val u2 = rng.nextDouble()
+                xt[0][d][t] = (sqrt(-2.0 * ln(u1)) * cos(2.0 * PI * u2)).toFloat() * latentMask[0][0][t]
+            }
+
+        // vector estimator loop
+        val totalStepArr = FloatArray(1) { totalSteps.toFloat() }
+        for (step in 0 until totalSteps) {
+            val curTensor   = OnnxTensor.createTensor(env, FloatBuffer.wrap(floatArrayOf(step.toFloat())), longArrayOf(1))
+            val totTensor   = OnnxTensor.createTensor(env, FloatBuffer.wrap(totalStepArr), longArrayOf(1))
+            val noisyTensor = createFloat3D(xt, env)
+            val lmTensor    = createFloat3D(latentMask, env)
+            val tm2Tensor   = createFloat3D(textMask, env)
+            val veInputs = mapOf(
+                "noisy_latent" to noisyTensor,
+                "text_emb"     to textEmb,
+                "style_ttl"    to OnnxTensor.createTensor(env, FloatBuffer.wrap(style.ttlFlat), style.ttlShape),
+                "latent_mask"  to lmTensor,
+                "text_mask"    to tm2Tensor,
+                "current_step" to curTensor,
+                "total_step"   to totTensor
+            )
+            val veResult = veSess!!.run(veInputs)
+            @Suppress("UNCHECKED_CAST")
+            xt = veResult[0].value as Array<Array<FloatArray>>
+            veResult.close()
+            curTensor.close(); totTensor.close(); noisyTensor.close(); lmTensor.close(); tm2Tensor.close()
+        }
+
+        // vocoder
+        val finalLatent = createFloat3D(xt, env)
+        val vocResult   = vocSess!!.run(mapOf("latent" to finalLatent))
+        @Suppress("UNCHECKED_CAST")
+        val wavBatch    = vocResult[0].value as Array<FloatArray>
+        val actualLen   = (totalDur * sr).toInt()
+        val wav = wavBatch[0].copyOfRange(0, minOf(actualLen, wavBatch[0].size))
+
+        textIdsTensor.close(); textMaskTensor.close(); textEmb.close()
+        teResult.close(); finalLatent.close(); vocResult.close()
+        return wav
+    }
