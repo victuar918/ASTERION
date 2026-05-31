@@ -1,5 +1,6 @@
 package com.asterion.video.ui
 
+import android.media.MediaPlayer
 import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.*
@@ -7,38 +8,40 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
+import com.asterion.video.AppConfig
 import com.asterion.video.auth.ServiceAccountAuth
 import com.asterion.video.render.AsterionRenderEngine
 import com.asterion.video.sheets.SheetsVideoReader
 import com.asterion.video.sheets.VIDEO_SS_ID
 import com.asterion.video.tts.SpeakerConfig
+import com.asterion.video.tts.SupertonicTtsEngine
 import com.asterion.video.tts.VoiceConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class AsterionVideoActivity : AppCompatActivity() {
 
-    // UI
     private lateinit var tvKeyStatus: TextView
     private lateinit var spinnerSheet: Spinner
-    private lateinit var llSpeakers: LinearLayout   // 화자 설정 컨테이너
+    private lateinit var llSpeakers: LinearLayout
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
     private lateinit var progressBar: ProgressBar
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
 
-    // 화자 UI 다이나믹 저장
-    private val speakerSpinners = mutableMapOf<Int, Spinner>()    // sid → 모델 Spinner
-    private val speakerSeekBars = mutableMapOf<Int, SeekBar>()    // sid → 속도 SeekBar
-    private val speakerLabels   = mutableMapOf<Int, TextView>()   // sid → 속도 라벨
+    private val speakerSpinners  = mutableMapOf<Int, Spinner>()
+    private val speakerSeekBars  = mutableMapOf<Int, SeekBar>()
+    private val speakerSpeedLabels = mutableMapOf<Int, TextView>()
 
     private val auth by lazy { ServiceAccountAuth(this) }
     private var reader: SheetsVideoReader? = null
     private var engine: AsterionRenderEngine? = null
+    private var ttsEngine: SupertonicTtsEngine? = null
     private var isRendering = false
-    private var detectedSpeakers: List<Int> = emptyList()
+    private var mediaPlayer: MediaPlayer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,29 +54,21 @@ class AsterionVideoActivity : AppCompatActivity() {
         scroll.addView(layout)
         setContentView(scroll)
 
-        ViewCompat.setOnApplyWindowInsetsListener(scroll) { v, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(scroll) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             layout.setPadding(48, bars.top + 16, 48, bars.bottom + 48)
             insets
         }
 
-        // 키 상태
-        tvKeyStatus = TextView(this).apply { textSize = 12f; setTextColor(0xFFAAAAAA.toInt()) }
-
-        // 시트 선택 Spinner
+        tvKeyStatus  = TextView(this).apply { textSize = 12f; setTextColor(0xFFAAAAAA.toInt()) }
         spinnerSheet = Spinner(this)
-
-        // 화자 설정 컨테이너 (시트 로드 후 동적 생성)
-        llSpeakers = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-
-        // 버튼
-        btnStart = Button(this).apply { text = "▶ 영상 제작 시작"; isEnabled = false }
-        btnStop  = Button(this).apply { text = "⏹ 중지"; isEnabled = false }
-
-        // 프로그레스 + 상태
-        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+        llSpeakers   = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        btnStart     = Button(this).apply { text = "▶ 영상 제작 시작"; isEnabled = false }
+        btnStop      = Button(this).apply { text = "⏹ 중지"; isEnabled = false }
+        progressBar  = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).also { it.topMargin = 12 }
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT).also { it.topMargin = 12 }
         }
         tvStatus = TextView(this).apply { text = "시작 중..."; textSize = 14f; setPadding(0, 16, 0, 8) }
         tvLog    = TextView(this).apply { textSize = 11f; setTextColor(0xFF777777.toInt()); maxLines = 14 }
@@ -84,11 +79,9 @@ class AsterionVideoActivity : AppCompatActivity() {
         btnStart.setOnClickListener { startRendering() }
         btnStop.setOnClickListener  { stopRendering() }
 
-        // 시트 변경 시 화자 자동 감지
         spinnerSheet.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: android.view.View?, pos: Int, id: Long) {
-                val sheet = spinnerSheet.selectedItem?.toString() ?: return
-                loadSpeakersFromSheet(sheet)
+                loadSpeakersFromSheet(spinnerSheet.selectedItem?.toString() ?: return)
             }
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
@@ -96,64 +89,73 @@ class AsterionVideoActivity : AppCompatActivity() {
         lifecycleScope.launch { initCore() }
     }
 
-    // 화자 설정 UI 동적 생성
+    // 화자 UI 동적 생성
     private fun buildSpeakerUI(speakers: List<Int>) {
         llSpeakers.removeAllViews()
-        speakerSpinners.clear(); speakerSeekBars.clear(); speakerLabels.clear()
-
+        speakerSpinners.clear(); speakerSeekBars.clear(); speakerSpeedLabels.clear()
         if (speakers.isEmpty()) return
 
-        val header = TextView(this).apply {
+        llSpeakers.addView(TextView(this).apply {
             text = "🎤 화자 음성 설정"
-            textSize = 13f
-            setTextColor(0xFFCCCCCC.toInt())
+            textSize = 13f; setTextColor(0xFFCCCCCC.toInt())
             setPadding(0, 16, 0, 4)
-        }
-        llSpeakers.addView(header)
+        })
 
-        // 기본 매핑 (1=M1, 2=F1, 3=M2)
-        val defaultVoice = mapOf(1 to 0, 2 to 5, 3 to 1)  // VoiceConfig.VOICE_FILES 인덱스
-        val defaultSpeed = mapOf(1 to 50, 2 to 47, 3 to 52) // SeekBar 값 (0~100, 중간=50 →1.0x)
+        val defaultVoice = mapOf(1 to 0, 2 to 5, 3 to 1)
+        val defaultSpeed = mapOf(1 to 50, 2 to 42, 3 to 58)
 
         for (sid in speakers.sorted()) {
             val name = when(sid) { 1 -> "아스터"; 2 -> "리언"; 3 -> "나레이터"; else -> "Speaker $sid" }
 
-            // 화자 라벨
+            // 화자 이름 라벨
             llSpeakers.addView(TextView(this).apply {
                 text = "[$sid] $name"
-                textSize = 12f
-                setTextColor(0xFFEEEEEE.toInt())
+                textSize = 12f; setTextColor(0xFFEEEEEE.toInt())
                 setPadding(0, 12, 0, 2)
             })
 
-            // 모델 Spinner
-            val spinner = Spinner(this)
-            spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, VoiceConfig.VOICE_LABELS)
-                .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-            spinner.setSelection(defaultVoice[sid] ?: 0)
+            // 모델 Spinner + 테스트 버튼 가로 배치
+            val rowModel = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+            val spinner = Spinner(this).apply {
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                adapter = ArrayAdapter(this@AsterionVideoActivity,
+                    android.R.layout.simple_spinner_item, VoiceConfig.VOICE_LABELS)
+                    .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+                setSelection(defaultVoice[sid] ?: 0)
+            }
             speakerSpinners[sid] = spinner
-            llSpeakers.addView(spinner)
+
+            val btnTest = Button(this).apply {
+                text = "🔊"
+                textSize = 14f
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                setOnClickListener { testSpeaker(sid) }
+            }
+
+            rowModel.addView(spinner); rowModel.addView(btnTest)
+            llSpeakers.addView(rowModel)
 
             // 속도 SeekBar + 라벨
             val speedLabel = TextView(this).apply {
-                textSize = 11f
-                setTextColor(0xFF999999.toInt())
-                setPadding(0, 4, 0, 0)
+                textSize = 11f; setTextColor(0xFF999999.toInt()); setPadding(0, 4, 0, 0)
             }
-            speakerLabels[sid] = speedLabel
+            speakerSpeedLabels[sid] = speedLabel
 
             val seekBar = SeekBar(this).apply {
                 max = 100
                 progress = defaultSpeed[sid] ?: 50
                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(s: SeekBar?, v: Int, u: Boolean) {
+                        speedLabel.text = "  속도: ${progressToSpeed(v)}x"
+                    }
+                    override fun onStartTrackingTouch(s: SeekBar?) {}
+                    override fun onStopTrackingTouch(s: SeekBar?) {}
+                })
             }
-            seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(s: SeekBar?, v: Int, u: Boolean) {
-                    speedLabel.text = "  속도: ${progressToSpeed(v)}x"
-                }
-                override fun onStartTrackingTouch(s: SeekBar?) {}
-                override fun onStopTrackingTouch(s: SeekBar?) {}
-            })
             speedLabel.text = "  속도: ${progressToSpeed(seekBar.progress)}x"
             speakerSeekBars[sid] = seekBar
             llSpeakers.addView(seekBar)
@@ -161,11 +163,41 @@ class AsterionVideoActivity : AppCompatActivity() {
         }
     }
 
-    // SeekBar 0~100 → 속도 0.7~1.3
-    private fun progressToSpeed(p: Int): Float =
-        (0.7f + p.toFloat() / 100f * 0.6f).let { String.format("%.2f", it).toFloat() }
+    // 테스트 재생
+    private fun testSpeaker(sid: Int) {
+        val voiceFile = VoiceConfig.VOICE_FILES[speakerSpinners[sid]?.selectedItemPosition ?: 0]
+        val speed     = progressToSpeed(speakerSeekBars[sid]?.progress ?: 50)
+        val testText  = when(sid) {
+            1 -> "안녕하세요. 에너지 분석을 시작합니다."
+            2 -> "안녕하세요. 그게 어떤 의미인가요?"
+            else -> "운명은 해석하는 순간 바뀌지 않습니다."
+        }
+        updateStatus("🔊 [$sid] $voiceFile speed=$speed 테스트 중...")
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val te = ttsEngine ?: return@launch
+                val out = File(AppConfig.OUTPUT_DIR, "test_sid${sid}.wav").also { AppConfig.ensureDirs() }
+                val ok  = te.synthesize(testText, voiceFile, speed, out)
+                if (ok) {
+                    withContext(Dispatchers.Main) {
+                        mediaPlayer?.release()
+                        mediaPlayer = MediaPlayer().apply {
+                            setDataSource(out.absolutePath)
+                            prepare()
+                            start()
+                        }
+                        updateStatus("🔊 [$sid] $voiceFile 재생 중")
+                    }
+                } else {
+                    updateStatus("❌ [$sid] TTS 실패")
+                }
+            } catch(e: Exception) { updateStatus("❌ 테스트 오류: ${e.message}") }
+        }
+    }
 
-    // 현재 UI 설정으로 VoiceConfig 생성
+    private fun progressToSpeed(p: Int): Float =
+        String.format("%.2f", 0.7f + p.toFloat() / 100f * 0.6f).toFloat()
+
     private fun buildVoiceConfig(): VoiceConfig {
         val map = speakerSpinners.keys.associateWith { sid ->
             val voiceFile = VoiceConfig.VOICE_FILES[speakerSpinners[sid]?.selectedItemPosition ?: 0]
@@ -176,32 +208,28 @@ class AsterionVideoActivity : AppCompatActivity() {
         return if (map.isEmpty()) VoiceConfig.DEFAULT else VoiceConfig(map)
     }
 
-    // 시트에서 고유 화자 감지
     private fun loadSpeakersFromSheet(sheet: String) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val data = reader?.readScript(sheet)?.getOrNull() ?: return@launch
+                val data     = reader?.readScript(sheet)?.getOrNull() ?: return@launch
                 val speakers = data.scriptRows.map { it.speaker }.distinct().sorted()
                 withContext(Dispatchers.Main) {
-                    detectedSpeakers = speakers
                     buildSpeakerUI(speakers)
-                    tvStatus.text = "시트: $sheet | 화자 ${speakers.size}명 감지: $speakers"
-                    btnStart.isEnabled = true
+                    tvStatus.text = "$sheet | 화자 ${speakers.size}명: $speakers"
+                    btnStart.isEnabled = speakers.isNotEmpty()
                 }
-            } catch(e: Exception) { /* 무시 */ }
+            } catch(e: Exception) { Log.e("Activity", "loadSpeakers: $e") }
         }
     }
 
     private suspend fun initCore() {
         withContext(Dispatchers.Main) { tvKeyStatus.text = auth.keyStatusMessage() }
-        val hasKey = auth.keyStatusMessage().startsWith("✅")
-        if (!hasKey) return
-
+        if (!auth.keyStatusMessage().startsWith("✅")) return
         try {
             val token = auth.getAccessToken()
-            reader = SheetsVideoReader(token, VIDEO_SS_ID)
-            engine = AsterionRenderEngine(this)
-            engine!!.init { msg -> appendLog(msg) }
+            reader    = SheetsVideoReader(token, VIDEO_SS_ID)
+            ttsEngine = SupertonicTtsEngine(this).also { it.init { msg -> appendLog(msg) } }
+            engine    = AsterionRenderEngine(this)
 
             val sheets = reader!!.listScriptSheets()
             withContext(Dispatchers.Main) {
@@ -211,7 +239,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                     spinnerSheet.adapter = ArrayAdapter(this@AsterionVideoActivity,
                         android.R.layout.simple_spinner_item, sheets)
                         .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-                    tvStatus.text = "시트 ${sheets.size}개 — 대본 선택 후 화자 설정"
+                    tvStatus.text = "시트 ${sheets.size}개 — 선택 후 화자 설정"
                 }
             }
         } catch(e: Exception) {
@@ -221,14 +249,23 @@ class AsterionVideoActivity : AppCompatActivity() {
 
     private fun startRendering() {
         if (isRendering) return
-        val sheet = spinnerSheet.selectedItem?.toString() ?: return
+        val sheet       = spinnerSheet.selectedItem?.toString() ?: return
         val voiceConfig = buildVoiceConfig()
         isRendering = true; btnStart.isEnabled = false; btnStop.isEnabled = true
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 updateStatus("[$sheet] 대본 읽는 중...")
-                val data = reader!!.readReadyRows(sheet).getOrThrow()
+                val result = reader!!.readReadyRows(sheet)
+                if (result.isFailure) {
+                    updateStatus("❌ 대본 로드 실패: ${result.exceptionOrNull()?.message}")
+                    return@launch
+                }
+                val data = result.getOrThrow()
+                if (data.scriptRows.isEmpty()) {
+                    updateStatus("⚠ READY 행 없음 — Status 확인")
+                    return@launch
+                }
                 withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
                 var done = 0
                 for (row in data.scriptRows) {
@@ -240,7 +277,9 @@ class AsterionVideoActivity : AppCompatActivity() {
                     if (f != null) done++
                     withContext(Dispatchers.Main) { progressBar.progress = ++done }
                 }
-            } catch(e: Exception) { updateStatus("❌ ${e.message}")
+                updateStatus("✅ TTS 완료 ${done}/${data.scriptRows.size}세션 | 렌더링 stub")
+            } catch(e: Exception) {
+                updateStatus("❌ ${e.message}")
             } finally {
                 isRendering = false
                 withContext(Dispatchers.Main) { btnStart.isEnabled = true; btnStop.isEnabled = false }
@@ -253,5 +292,10 @@ class AsterionVideoActivity : AppCompatActivity() {
     private fun appendLog(msg: String) = lifecycleScope.launch(Dispatchers.Main) {
         tvLog.text = (tvLog.text.toString().lines().takeLast(13) + msg).joinToString("\n")
     }
-    override fun onDestroy() { super.onDestroy(); engine?.release() }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mediaPlayer?.release()
+        engine?.release()
+    }
 }
