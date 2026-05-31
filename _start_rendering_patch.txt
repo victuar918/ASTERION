@@ -1,0 +1,44 @@
+    private fun startRendering() {
+        if (isRendering) return
+        val sheet = spinnerSheet.selectedItem?.toString() ?: return
+        val voiceConfig = buildVoiceConfig()
+        isRendering = true; btnStart.isEnabled = false; btnStop.isEnabled = true
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                // 토큰 갱신 후 새 reader 생성 (만료 방지)
+                updateStatus("[$sheet] 토큰 갱신...")
+                val token = auth.getAccessToken()
+                reader = SheetsVideoReader(token, VIDEO_SS_ID)
+
+                updateStatus("[$sheet] 대본 읽는 중...")
+                val result = reader!!.readReadyRows(sheet)
+                if (result.isFailure) {
+                    updateStatus("❌ 대본 로드 실패: ${result.exceptionOrNull()?.message}")
+                    return@launch
+                }
+                val data = result.getOrThrow()
+                if (data.scriptRows.isEmpty()) {
+                    updateStatus("⚠ READY 행 없음 — Status K열 확인")
+                    return@launch
+                }
+                withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
+                var done = 0
+                for (row in data.scriptRows) {
+                    if (!isRendering) break
+                    val f = engine!!.renderScene(row, data.videoMeta, voiceConfig) { msg ->
+                        appendLog(msg); updateStatus(msg)
+                    }
+                    reader!!.updateStatus(sheet, row.rowIndex, if (f != null) "DONE" else "ERROR")
+                    if (f != null) done++
+                    withContext(Dispatchers.Main) { progressBar.progress = ++done }
+                }
+                updateStatus("✅ TTS 완료 ${done}/${data.scriptRows.size}세션 | 렌더링 stub")
+            } catch(e: Exception) {
+                updateStatus("❌ ${e.message}")
+            } finally {
+                isRendering = false
+                withContext(Dispatchers.Main) { btnStart.isEnabled = true; btnStop.isEnabled = false }
+            }
+        }
+    }
