@@ -38,8 +38,24 @@ data class VoiceConfig(val speakers: Map<Int, SpeakerConfig>) {
 }
 data class VoiceStyle(val ttlFlat: FloatArray, val ttlShape: LongArray,
                       val dpFlat:  FloatArray, val dpShape:  LongArray)
-data class TtsConfig(val sampleRate: Int, val baseChunkSize: Int,
-                     val chunkCompressFactor: Int, val latentDim: Int)
+
+/**
+ * tts.json 구조:
+ *   ae.sample_rate, ae.base_chunk_size, ae.chunk_compress_factor (=1) → chunkSize 계산용
+ *   ttl.latent_dim, ttl.chunk_compress_factor (=6) → latentDim 계산용
+ */
+data class TtsConfig(
+    val sampleRate: Int,
+    val baseChunkSize: Int,
+    val aeChunkCompress: Int,   // ae.chunk_compress_factor (vocoder chunk size)
+    val ttlChunkCompress: Int,  // ttl.chunk_compress_factor (latent dim scale)
+    val latentDim: Int
+) {
+    // ae.base_chunk_size * ae.chunk_compress_factor
+    val chunkSize: Int get() = baseChunkSize * aeChunkCompress
+    // ttl.latent_dim * ttl.chunk_compress_factor
+    val fullLatentDim: Int get() = latentDim * ttlChunkCompress
+}
 
 class SupertonicTtsEngine(private val context: Context) {
     private var env: OrtEnvironment? = null
@@ -66,7 +82,8 @@ class SupertonicTtsEngine(private val context: Context) {
         vocSess = env!!.createSession("$p/onnx/vocoder.onnx",            opts)
         indexer = loadIndexer(File(dir, "onnx/unicode_indexer.json"))
         ttsConf = loadConfig(File(dir, "onnx/tts.json"))
-        onProgress("✅ Supertonic 2 준비 (steps=$totalSteps, sr=${ttsConf?.sampleRate}, idx=${indexer.size})")
+        val c = ttsConf!!
+        onProgress("✅ Supertonic 2 준비 (sr=${c.sampleRate} chunkSz=${c.chunkSize} latDim=${c.fullLatentDim})")
     }
 
     fun synthesize(text: String, voiceFile: String, speed: Float, outputFile: File): Boolean {
@@ -114,7 +131,7 @@ class SupertonicTtsEngine(private val context: Context) {
         val env  = env!!
         val conf = ttsConf!!
 
-        // ★ NFKD 정규화: 한국어 완성형 → 자모 분해 (공식 Java 코드와 동일)
+        // NFKD 정규화: 한국어 완성형 → 자모 분해
         val normalizedText = Normalizer.normalize(text, Normalizer.Form.NFKD)
         val taggedText = "<$lang>$normalizedText</$lang>"
 
@@ -131,46 +148,40 @@ class SupertonicTtsEngine(private val context: Context) {
         val textMaskTensor = createFloat3D(textMask, env)
 
         // duration predictor
-        val dpInputs = mapOf(
+        val dpResult = dpSess!!.run(mapOf(
             "text_ids"  to textIdsTensor,
-            "style_dp"  to OnnxTensor.createTensor(env, FloatBuffer.wrap(style.dpFlat),  style.dpShape),
-            "text_mask" to textMaskTensor
-        )
-        val dpResult = dpSess!!.run(dpInputs)
-        val dpVal = dpResult[0].value
-        var duration = when (dpVal) {
-            is Array<*>   -> (dpVal as Array<FloatArray>)[0]
-            is FloatArray -> dpVal
-            else          -> throw Exception("duration type: ${dpVal?.javaClass}")
+            "style_dp"  to OnnxTensor.createTensor(env, FloatBuffer.wrap(style.dpFlat), style.dpShape),
+            "text_mask" to textMaskTensor))
+        var duration = when (val v = dpResult[0].value) {
+            is Array<*>   -> @Suppress("UNCHECKED_CAST") (v as Array<FloatArray>)[0]
+            is FloatArray -> v
+            else          -> throw Exception("duration type: ${v?.javaClass}")
         }
         dpResult.close()
         for (i in duration.indices) duration[i] /= speed
         val totalDur = duration.sum()
 
         // text encoder
-        val teInputs = mapOf(
+        val teResult = teSess!!.run(mapOf(
             "text_ids"  to textIdsTensor,
             "style_ttl" to OnnxTensor.createTensor(env, FloatBuffer.wrap(style.ttlFlat), style.ttlShape),
-            "text_mask" to textMaskTensor
-        )
-        val teResult = teSess!!.run(teInputs)
-        val textEmb  = teResult[0] as OnnxTensor
+            "text_mask" to textMaskTensor))
+        val textEmb = teResult[0] as OnnxTensor
 
-        // noisy latent
-        val sr = conf.sampleRate
-        val chunkSize = conf.baseChunkSize * conf.chunkCompressFactor
-        val latentLen = (((totalDur * sr).toLong() + chunkSize - 1) / chunkSize).toInt()
-        val latentDim = conf.latentDim * conf.chunkCompressFactor
-        val wavLen    = (totalDur * sr).toLong()
-        val latentLength = ((wavLen + chunkSize - 1) / chunkSize).toInt()
+        // noisy latent — chunkSize = ae.base_chunk_size * ae.chunk_compress_factor
+        val sr         = conf.sampleRate
+        val chunkSize  = conf.chunkSize          // 512 * 1 = 512
+        val latentDim  = conf.fullLatentDim      // 24 * 6 = 144
+        val wavLenMax  = (totalDur * sr).toLong()
+        val latentLen  = ((wavLenMax + chunkSize - 1) / chunkSize).toInt()
+        val latentLength = latentLen  // same for single item
 
         val rng = java.util.Random()
         var xt = Array(1) { Array(latentDim) { FloatArray(latentLen) { 0f } } }
         val latentMask = Array(1) { Array(1) { FloatArray(latentLen) { t -> if (t < latentLength) 1f else 0f } } }
         for (d in 0 until latentDim)
             for (t in 0 until latentLen) {
-                val u1 = maxOf(1e-10, rng.nextDouble())
-                val u2 = rng.nextDouble()
+                val u1 = maxOf(1e-10, rng.nextDouble()); val u2 = rng.nextDouble()
                 xt[0][d][t] = (sqrt(-2.0 * ln(u1)) * cos(2.0 * PI * u2)).toFloat() * latentMask[0][0][t]
             }
 
@@ -182,13 +193,11 @@ class SupertonicTtsEngine(private val context: Context) {
             val noisyTensor = createFloat3D(xt, env)
             val lmTensor    = createFloat3D(latentMask, env)
             val tm2Tensor   = createFloat3D(textMask, env)
-            val veInputs = mapOf(
+            val veResult = veSess!!.run(mapOf(
                 "noisy_latent" to noisyTensor, "text_emb" to textEmb,
                 "style_ttl"    to OnnxTensor.createTensor(env, FloatBuffer.wrap(style.ttlFlat), style.ttlShape),
-                "latent_mask"  to lmTensor,    "text_mask" to tm2Tensor,
-                "current_step" to curTensor,   "total_step" to totTensor
-            )
-            val veResult = veSess!!.run(veInputs)
+                "latent_mask"  to lmTensor, "text_mask" to tm2Tensor,
+                "current_step" to curTensor, "total_step" to totTensor))
             @Suppress("UNCHECKED_CAST")
             xt = veResult[0].value as Array<Array<FloatArray>>
             veResult.close()
@@ -199,8 +208,8 @@ class SupertonicTtsEngine(private val context: Context) {
         val finalLatent = createFloat3D(xt, env)
         val vocResult   = vocSess!!.run(mapOf("latent" to finalLatent))
         @Suppress("UNCHECKED_CAST")
-        val wavBatch    = vocResult[0].value as Array<FloatArray>
-        val actualLen   = (totalDur * sr).toInt()
+        val wavBatch = vocResult[0].value as Array<FloatArray>
+        val actualLen = (totalDur * sr).toInt()
         val wav = wavBatch[0].copyOfRange(0, minOf(actualLen, wavBatch[0].size))
 
         textIdsTensor.close(); textMaskTensor.close(); textEmb.close()
@@ -211,8 +220,7 @@ class SupertonicTtsEngine(private val context: Context) {
     private fun chunkText(text: String, maxLen: Int): List<String> {
         val trimmed = text.trim().replace("\n", " ")
         if (trimmed.length <= maxLen) return listOf(trimmed)
-        val chunks = mutableListOf<String>()
-        val buf = StringBuilder()
+        val chunks = mutableListOf<String>(); val buf = StringBuilder()
         for (s in trimmed.split(Regex("(?<=[。.!?！？])"))) {
             if (buf.length + s.length > maxLen && buf.isNotEmpty()) { chunks.add(buf.toString().trim()); buf.clear() }
             buf.append(s)
@@ -222,16 +230,16 @@ class SupertonicTtsEngine(private val context: Context) {
     }
 
     private fun createLong2D(arr: Array<LongArray>, env: OrtEnvironment): OnnxTensor {
-        val d0 = arr.size; val d1 = arr[0].size
-        val flat = LongArray(d0*d1) { i -> arr[i/d1][i%d1] }
-        return OnnxTensor.createTensor(env, LongBuffer.wrap(flat), longArrayOf(d0.toLong(), d1.toLong()))
+        val d0=arr.size; val d1=arr[0].size
+        val flat=LongArray(d0*d1){i->arr[i/d1][i%d1]}
+        return OnnxTensor.createTensor(env,LongBuffer.wrap(flat),longArrayOf(d0.toLong(),d1.toLong()))
     }
 
     private fun createFloat3D(arr: Array<Array<FloatArray>>, env: OrtEnvironment): OnnxTensor {
-        val d0 = arr.size; val d1 = arr[0].size; val d2 = arr[0][0].size
-        val flat = FloatArray(d0*d1*d2); var idx = 0
-        for (a in arr) for (b in a) for (c in b) flat[idx++] = c
-        return OnnxTensor.createTensor(env, FloatBuffer.wrap(flat), longArrayOf(d0.toLong(), d1.toLong(), d2.toLong()))
+        val d0=arr.size;val d1=arr[0].size;val d2=arr[0][0].size
+        val flat=FloatArray(d0*d1*d2);var idx=0
+        for(a in arr) for(b in a) for(c in b) flat[idx++]=c
+        return OnnxTensor.createTensor(env,FloatBuffer.wrap(flat),longArrayOf(d0.toLong(),d1.toLong(),d2.toLong()))
     }
 
     private fun loadIndexer(f: File): LongArray {
@@ -240,25 +248,33 @@ class SupertonicTtsEngine(private val context: Context) {
     }
 
     private fun loadConfig(f: File): TtsConfig {
-        val j = JSONObject(f.readText())
-        val ae = j.getJSONObject("ae"); val ttl = j.getJSONObject("ttl")
-        return TtsConfig(ae.getInt("sample_rate"), ae.getInt("base_chunk_size"),
-                         ttl.getInt("chunk_compress_factor"), ttl.getInt("latent_dim"))
+        val j   = JSONObject(f.readText())
+        val ae  = j.getJSONObject("ae")
+        val ttl = j.getJSONObject("ttl")
+        val conf = TtsConfig(
+            sampleRate       = ae.getInt("sample_rate"),
+            baseChunkSize    = ae.getInt("base_chunk_size"),
+            aeChunkCompress  = ae.getInt("chunk_compress_factor"),  // ae: 1
+            ttlChunkCompress = ttl.getInt("chunk_compress_factor"), // ttl: 6
+            latentDim        = ttl.getInt("latent_dim")             // 24
+        )
+        Log.i(TAG, "TtsConfig: sr=${conf.sampleRate} chunkSize=${conf.chunkSize} latDim=${conf.fullLatentDim}")
+        return conf
     }
 
     private fun loadVoiceStyle(f: File): VoiceStyle {
         val j = JSONObject(f.readText())
         fun flattenAndShape(key: String): Pair<FloatArray, LongArray> {
-            val node  = j.getJSONObject(key)
-            val dims  = node.getJSONArray("dims")
+            val node = j.getJSONObject(key)
+            val dims = node.getJSONArray("dims")
             val shape = LongArray(dims.length()) { i -> dims.getLong(i) }
-            val list  = mutableListOf<Float>()
-            fun rec(a: JSONArray) { for (i in 0 until a.length()) when(val v = a.get(i)) { is JSONArray -> rec(v); is Number -> list.add(v.toFloat()) } }
+            val list = mutableListOf<Float>()
+            fun rec(a: JSONArray) { for (i in 0 until a.length()) when(val v=a.get(i)) { is JSONArray->rec(v); is Number->list.add(v.toFloat()) } }
             rec(node.getJSONArray("data"))
             return Pair(list.toFloatArray(), shape)
         }
-        val (ttlFlat, ttlShape) = flattenAndShape("style_ttl")
-        val (dpFlat,  dpShape)  = flattenAndShape("style_dp")
+        val (ttlFlat,ttlShape) = flattenAndShape("style_ttl")
+        val (dpFlat,dpShape)   = flattenAndShape("style_dp")
         return VoiceStyle(ttlFlat, ttlShape, dpFlat, dpShape)
     }
 
@@ -267,7 +283,7 @@ class SupertonicTtsEngine(private val context: Context) {
         val marker = File(dest, ".ready_v2")
         if (marker.exists()) { onProgress("Supertonic 2 캐시 재사용"); return@withContext dest }
         dest.deleteRecursively(); dest.mkdirs()
-        val client = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS).readTimeout(300, TimeUnit.SECONDS).build()
+        val client = OkHttpClient.Builder().connectTimeout(30,TimeUnit.SECONDS).readTimeout(300,TimeUnit.SECONDS).build()
         val base = "https://huggingface.co/Supertone/supertonic/resolve/main"
         listOf("onnx/duration_predictor.onnx","onnx/text_encoder.onnx","onnx/vector_estimator.onnx",
                "onnx/vocoder.onnx","onnx/unicode_indexer.json","onnx/tts.json",
@@ -277,26 +293,26 @@ class SupertonicTtsEngine(private val context: Context) {
                "voice_styles/F4.json","voice_styles/F5.json"
         ).forEach { path ->
             onProgress("⬇ $path")
-            val out = File(dest, path).also { it.parentFile?.mkdirs() }
+            val out = File(dest,path).also{it.parentFile?.mkdirs()}
             client.newCall(Request.Builder().url("$base/$path").build()).execute().use { resp ->
-                if (!resp.isSuccessful) throw Exception("${resp.code}: $path")
-                resp.body!!.byteStream().use { i -> out.outputStream().use { o -> i.copyTo(o) } }
+                if(!resp.isSuccessful) throw Exception("${resp.code}: $path")
+                resp.body!!.byteStream().use{i->out.outputStream().use{o->i.copyTo(o)}}
             }
         }
         marker.createNewFile(); dest
     }
 
     private fun float32ToWav(s: FloatArray, sr: Int): ByteArray {
-        val ds = s.size * 2
+        val ds=s.size*2
         return java.io.ByteArrayOutputStream(44+ds).apply {
-            fun wi(v: Int) = write(byteArrayOf(v.toByte(),(v shr 8).toByte(),(v shr 16).toByte(),(v shr 24).toByte()))
-            fun ws(v: Int) = write(byteArrayOf(v.toByte(),(v shr 8).toByte()))
-            write("RIFF".toByteArray()); wi(36+ds); write("WAVEfmt ".toByteArray()); wi(16); ws(1); ws(1)
-            wi(sr); wi(sr*2); ws(2); ws(16); write("data".toByteArray()); wi(ds)
-            for (x in s) { val v=(x.coerceIn(-1f,1f)*32767).toInt().toShort(); write(byteArrayOf(v.toByte(),(v.toInt() shr 8).toByte())) }
+            fun wi(v:Int)=write(byteArrayOf(v.toByte(),(v shr 8).toByte(),(v shr 16).toByte(),(v shr 24).toByte()))
+            fun ws(v:Int)=write(byteArrayOf(v.toByte(),(v shr 8).toByte()))
+            write("RIFF".toByteArray());wi(36+ds);write("WAVEfmt ".toByteArray());wi(16);ws(1);ws(1)
+            wi(sr);wi(sr*2);ws(2);ws(16);write("data".toByteArray());wi(ds)
+            for(x in s){val v=(x.coerceIn(-1f,1f)*32767).toInt().toShort();write(byteArrayOf(v.toByte(),(v.toInt() shr 8).toByte()))}
         }.toByteArray()
     }
 
-    private fun ri(b: ByteArray, o: Int) = (b[o].toInt() and 0xFF) or ((b[o+1].toInt() and 0xFF) shl 8) or ((b[o+2].toInt() and 0xFF) shl 16) or ((b[o+3].toInt() and 0xFF) shl 24)
-    private fun rs(b: ByteArray, o: Int): Short = ((b[o].toInt() and 0xFF) or ((b[o+1].toInt() and 0xFF) shl 8)).toShort()
+    private fun ri(b:ByteArray,o:Int)=(b[o].toInt() and 0xFF) or ((b[o+1].toInt() and 0xFF) shl 8) or ((b[o+2].toInt() and 0xFF) shl 16) or ((b[o+3].toInt() and 0xFF) shl 24)
+    private fun rs(b:ByteArray,o:Int):Short=((b[o].toInt() and 0xFF) or ((b[o+1].toInt() and 0xFF) shl 8)).toShort()
 }
