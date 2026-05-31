@@ -2,6 +2,7 @@ package com.asterion.video.ui
 
 import android.media.MediaPlayer
 import android.os.Bundle
+import android.util.Log
 import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
@@ -32,8 +33,8 @@ class AsterionVideoActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
 
-    private val speakerSpinners  = mutableMapOf<Int, Spinner>()
-    private val speakerSeekBars  = mutableMapOf<Int, SeekBar>()
+    private val speakerSpinners    = mutableMapOf<Int, Spinner>()
+    private val speakerSeekBars    = mutableMapOf<Int, SeekBar>()
     private val speakerSpeedLabels = mutableMapOf<Int, TextView>()
 
     private val auth by lazy { ServiceAccountAuth(this) }
@@ -67,8 +68,9 @@ class AsterionVideoActivity : AppCompatActivity() {
         btnStop      = Button(this).apply { text = "⏹ 중지"; isEnabled = false }
         progressBar  = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT).also { it.topMargin = 12 }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).also { it.topMargin = 12 }
         }
         tvStatus = TextView(this).apply { text = "시작 중..."; textSize = 14f; setPadding(0, 16, 0, 8) }
         tvLog    = TextView(this).apply { textSize = 11f; setTextColor(0xFF777777.toInt()); maxLines = 14 }
@@ -89,7 +91,6 @@ class AsterionVideoActivity : AppCompatActivity() {
         lifecycleScope.launch { initCore() }
     }
 
-    // 화자 UI 동적 생성
     private fun buildSpeakerUI(speakers: List<Int>) {
         llSpeakers.removeAllViews()
         speakerSpinners.clear(); speakerSeekBars.clear(); speakerSpeedLabels.clear()
@@ -101,23 +102,23 @@ class AsterionVideoActivity : AppCompatActivity() {
             setPadding(0, 16, 0, 4)
         })
 
-        val defaultVoice = mapOf(1 to 0, 2 to 5, 3 to 1)
+        val defaultVoice = mapOf(1 to 0, 2 to 5, 3 to 1)   // M1, F1, M2
         val defaultSpeed = mapOf(1 to 50, 2 to 42, 3 to 58)
 
         for (sid in speakers.sorted()) {
             val name = when(sid) { 1 -> "아스터"; 2 -> "리언"; 3 -> "나레이터"; else -> "Speaker $sid" }
 
-            // 화자 이름 라벨
             llSpeakers.addView(TextView(this).apply {
                 text = "[$sid] $name"
                 textSize = 12f; setTextColor(0xFFEEEEEE.toInt())
                 setPadding(0, 12, 0, 2)
             })
 
-            // 모델 Spinner + 테스트 버튼 가로 배치
+            // 모델 Spinner + 🔊 테스트 버튼 가로 배치
             val rowModel = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             }
             val spinner = Spinner(this).apply {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -131,10 +132,10 @@ class AsterionVideoActivity : AppCompatActivity() {
             val btnTest = Button(this).apply {
                 text = "🔊"
                 textSize = 14f
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 setOnClickListener { testSpeaker(sid) }
             }
-
             rowModel.addView(spinner); rowModel.addView(btnTest)
             llSpeakers.addView(rowModel)
 
@@ -147,7 +148,8 @@ class AsterionVideoActivity : AppCompatActivity() {
             val seekBar = SeekBar(this).apply {
                 max = 100
                 progress = defaultSpeed[sid] ?: 50
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(s: SeekBar?, v: Int, u: Boolean) {
                         speedLabel.text = "  속도: ${progressToSpeed(v)}x"
@@ -163,33 +165,32 @@ class AsterionVideoActivity : AppCompatActivity() {
         }
     }
 
-    // 테스트 재생
     private fun testSpeaker(sid: Int) {
         val voiceFile = VoiceConfig.VOICE_FILES[speakerSpinners[sid]?.selectedItemPosition ?: 0]
         val speed     = progressToSpeed(speakerSeekBars[sid]?.progress ?: 50)
         val testText  = when(sid) {
-            1 -> "안녕하세요. 에너지 분석을 시작합니다."
-            2 -> "안녕하세요. 그게 어떤 의미인가요?"
+            1    -> "안녕하세요. 에너지 분석을 시작합니다."
+            2    -> "안녕하세요. 그게 어떤 의미인가요?"
             else -> "운명은 해석하는 순간 바뀌지 않습니다."
         }
         updateStatus("🔊 [$sid] $voiceFile speed=$speed 테스트 중...")
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val te = ttsEngine ?: return@launch
-                val out = File(AppConfig.OUTPUT_DIR, "test_sid${sid}.wav").also { AppConfig.ensureDirs() }
+                val te  = ttsEngine ?: return@launch
+                AppConfig.ensureDirs()
+                val out = File(AppConfig.OUTPUT_DIR, "test_sid${sid}.wav")
                 val ok  = te.synthesize(testText, voiceFile, speed, out)
-                if (ok) {
-                    withContext(Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
+                    if (ok) {
                         mediaPlayer?.release()
                         mediaPlayer = MediaPlayer().apply {
                             setDataSource(out.absolutePath)
-                            prepare()
-                            start()
+                            prepare(); start()
                         }
                         updateStatus("🔊 [$sid] $voiceFile 재생 중")
+                    } else {
+                        updateStatus("❌ [$sid] TTS 실패")
                     }
-                } else {
-                    updateStatus("❌ [$sid] TTS 실패")
                 }
             } catch(e: Exception) { updateStatus("❌ 테스트 오류: ${e.message}") }
         }
