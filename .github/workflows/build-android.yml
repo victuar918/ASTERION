@@ -31,6 +31,18 @@ jobs:
         with:
           gradle-version: '8.6'
 
+      - name: 서비스 계정 키 APK에 주입
+        env:
+          SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+        run: |
+          mkdir -p android/app/src/main/assets
+          if [ -n "$SERVICE_ACCOUNT_JSON" ]; then
+            echo "$SERVICE_ACCOUNT_JSON" > android/app/src/main/assets/service_account.json
+            echo "✅ service_account.json 주입 완료"
+          else
+            echo "⚠ SERVICE_ACCOUNT_JSON secret 없음 — GitHub Settings → Secrets에 등록 필요"
+          fi
+
       - name: Gradle Wrapper 생성
         run: |
           cd android
