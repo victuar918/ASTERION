@@ -1,0 +1,26 @@
+    // ── 초기화 ──
+    suspend fun init(onProgress: (String)->Unit = {}) = withContext(Dispatchers.IO) {
+        val dir = prepareModelDir(onProgress)
+        onProgress("🔧 ONNX Runtime 초기화...")
+        env = OrtEnvironment.getEnvironment()
+        val opts = OrtSession.SessionOptions().apply {
+            setIntraOpNumThreads(4)
+            setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+        }
+        val p = dir.absolutePath
+        dpSess  = env!!.createSession("$p/onnx/duration_predictor.onnx", opts)
+        teSess  = env!!.createSession("$p/onnx/text_encoder.onnx",       opts)
+        veSess  = env!!.createSession("$p/onnx/vector_estimator.onnx",   opts)
+        vocSess = env!!.createSession("$p/onnx/vocoder.onnx",            opts)
+        indexer = loadIndexer(File(dir, "onnx/unicode_indexer.json"))
+        ttsConf = loadConfig(File(dir, "onnx/tts.json"))
+
+        // 진단: 한국어 지원 여부 확인
+        val koFirst = 44032  // '가'
+        val koToken = if (koFirst < indexer.size) indexer[koFirst] else -999L
+        val enA     = if (65 < indexer.size) indexer[65] else -999L   // 'A'
+        onProgress("✅ Supertonic 2 준비 (steps=$totalSteps, sr=${ttsConf?.sampleRate})")
+        onProgress("📊 indexer.size=${indexer.size}")
+        onProgress("📊 '가'(44032)→${koToken} | 'A'(65)→${enA}")
+        Log.i(TAG, "indexer.size=${indexer.size}, '가'=$koToken, 'A'=$enA")
+    }
