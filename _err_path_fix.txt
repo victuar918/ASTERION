@@ -1,0 +1,1 @@
+            try { File(context.filesDir, "tts_error.txt").writeText("${e.javaClass.simpleName}: ${e.message}") } catch(_: Exception){}

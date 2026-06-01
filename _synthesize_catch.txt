@@ -1,0 +1,5 @@
+        } catch(e: Exception) {
+            Log.e(TAG, "synthesize: $e")
+            try { File(context.filesDir, "tts_error.txt").writeText("${e.javaClass.simpleName}: ${e.message}\n${e.stackTraceToString().take(500)}") } catch(_: Exception){}
+            false
+        }
