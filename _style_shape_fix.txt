@@ -1,0 +1,2 @@
+        val styleSeqLen = style.size / STYLE_DIM  // 12928 / 128 = 101
+        val styleShape  = longArrayOf(1L, styleSeqLen.toLong(), STYLE_DIM.toLong())  // [1, 101, 128]
