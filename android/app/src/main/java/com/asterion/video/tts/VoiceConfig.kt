@@ -138,15 +138,15 @@ class SupertonicTtsEngine(private val context: Context) {
         val idsTensor   = env.i64(ids,      longArrayOf(1L, seqLen.toLong()))
         val attnTensor  = env.i64(attnMask, longArrayOf(1L, seqLen.toLong()))
 
+        // text_encoder
         val teOut        = textEnc!!.run(mapOf(
             "input_ids"      to idsTensor,
             "attention_mask" to attnTensor,
             "style"          to styleTensor))
         val teList       = teOut.ortList()
-        val hiddenState  = teList[0] as OnnxTensor
-        val rawDurTensor = teList[1] as OnnxTensor
+        val encoderOut   = teList[0] as OnnxTensor   // encoder_outputs (hidden state)
+        val rawDurTensor = teList[1] as OnnxTensor   // raw_durations
 
-        // raw_durations: 1D float[] 또는 2D float[][] 모두 처리
         val rawDur: FloatArray = when (val v = rawDurTensor.value) {
             is Array<*>   -> @Suppress("UNCHECKED_CAST") (v as Array<FloatArray>)[0]
             is FloatArray -> v
@@ -171,25 +171,31 @@ class SupertonicTtsEngine(private val context: Context) {
         val latentMaskF  = FloatArray(latentLen) { 1.0f }
         val latentMask3d = longArrayOf(1L, 1L, latentLen.toLong())
         val attnMaskF    = FloatArray(seqLen) { 1.0f }
+        val numStepsF    = floatArrayOf(NUM_STEPS.toFloat())
 
+        // denoising loop — 실제 입력 이름 사용:
+        // noisy_latents, encoder_outputs, latent_mask, attention_mask, timestep, num_inference_steps, style
         for (step in 0 until NUM_STEPS) {
-            val latTensor   = env.f32(latents,     latentShape)
-            val timeTensor  = env.f32(floatArrayOf(step.toFloat() / NUM_STEPS), longArrayOf(1L))
-            val lmTensor    = env.f32(latentMaskF, latentMask3d)
-            val attn2Tensor = env.f32(attnMaskF,   longArrayOf(1L, seqLen.toLong()))
-            val style2      = env.f32(style,       styleShape)
-            val denoised    = denoiser!!.run(mapOf(
-                "latents"           to latTensor,
-                "time_step"         to timeTensor,
-                "last_hidden_state" to hiddenState,
-                "attention_mask"    to attn2Tensor,
-                "latent_mask"       to lmTensor,
-                "style"             to style2))
+            val noisyTensor   = env.f32(latents,     latentShape)
+            val timestepTensor = env.f32(floatArrayOf(step.toFloat()), longArrayOf(1L))
+            val numStepsTensor = env.f32(numStepsF,  longArrayOf(1L))
+            val lmTensor      = env.f32(latentMaskF, latentMask3d)
+            val attn2Tensor   = env.f32(attnMaskF,   longArrayOf(1L, seqLen.toLong()))
+            val style2        = env.f32(style,        styleShape)
+            val denoised      = denoiser!!.run(mapOf(
+                "noisy_latents"      to noisyTensor,
+                "encoder_outputs"    to encoderOut,
+                "latent_mask"        to lmTensor,
+                "attention_mask"     to attn2Tensor,
+                "timestep"           to timestepTensor,
+                "num_inference_steps" to numStepsTensor,
+                "style"              to style2))
             val outTensor = denoised.ortList()[0] as OnnxTensor
             val buf = outTensor.floatBuffer
             latents = FloatArray(buf.remaining()).also { buf.get(it) }
-            latTensor.close(); timeTensor.close(); lmTensor.close()
-            attn2Tensor.close(); style2.close(); denoised.close(); outTensor.close()
+            noisyTensor.close(); timestepTensor.close(); numStepsTensor.close()
+            lmTensor.close(); attn2Tensor.close(); style2.close()
+            denoised.close(); outTensor.close()
         }
 
         val masked = FloatArray(latents.size)
@@ -205,7 +211,7 @@ class SupertonicTtsEngine(private val context: Context) {
         val wav         = wavAll.copyOfRange(0, minOf(totalSamples.toInt(), wavAll.size))
 
         idsTensor.close(); attnTensor.close(); styleTensor.close()
-        hiddenState.close(); rawDurTensor.close(); teOut.close()
+        encoderOut.close(); rawDurTensor.close(); teOut.close()
         finalLatent.close(); decOut.close()
         return wav
     }
