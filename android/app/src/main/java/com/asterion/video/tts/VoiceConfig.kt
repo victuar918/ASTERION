@@ -69,11 +69,11 @@ class SupertonicTtsEngine(private val context: Context) {
         denoiser = env!!.createSession("$p/onnx/latent_denoiser.onnx", opts)
         decoder  = env!!.createSession("$p/onnx/voice_decoder.onnx",   opts)
         vocab    = loadVocab(File(dir, "tokenizer.json"))
-        // 입출력 이름 + 타입 로그
+        // 타입 포함 상세 로그
         fun logIO(name: String, sess: OrtSession) {
-            val ins = sess.inputInfo.map { (k,v) -> "$k(${v.info})" }
+            val ins = sess.inputInfo.map { (k,v) -> "$k:${v.info}" }
             Log.i(TAG, "$name IN=$ins OUT=${sess.outputNames.toList()}")
-            onProgress("$name IN:$ins")
+            onProgress("$name\n${ins.joinToString("\n")}")
         }
         logIO("text_encoder",   textEnc!!)
         logIO("latent_denoiser", denoiser!!)
@@ -132,7 +132,7 @@ class SupertonicTtsEngine(private val context: Context) {
         val tagged     = "<$lang>$normalized</$lang>"
         val ids        = LongArray(tagged.length) { i -> vocab[tagged[i].toString()] ?: vocab[" "] ?: 0L }
         val seqLen     = ids.size
-        val attnMaskI  = LongArray(seqLen) { 1L }   // int64
+        val attnMaskI  = LongArray(seqLen) { 1L }   // int64 (text_encoder용)
 
         val styleSeqLen = style.size / STYLE_DIM
         val styleShape  = longArrayOf(1L, styleSeqLen.toLong(), STYLE_DIM.toLong())
@@ -140,6 +140,7 @@ class SupertonicTtsEngine(private val context: Context) {
         val idsTensor   = env.i64(ids,       longArrayOf(1L, seqLen.toLong()))
         val attnTensor  = env.i64(attnMaskI, longArrayOf(1L, seqLen.toLong()))
 
+        // text_encoder
         val teOut        = textEnc!!.run(mapOf(
             "input_ids"      to idsTensor,
             "attention_mask" to attnTensor,
@@ -169,20 +170,18 @@ class SupertonicTtsEngine(private val context: Context) {
             idx += 2
         }
         val latentShape  = longArrayOf(1L, FULL_LATENT_DIM.toLong(), latentLen.toLong())
-        val latentMaskF  = FloatArray(latentLen) { 1.0f }
+        val latentMaskF  = FloatArray(latentLen) { 1.0f }  // latent_mask: float32
         val latentMask3d = longArrayOf(1L, 1L, latentLen.toLong())
-        val attnMaskF    = FloatArray(seqLen) { 1.0f }
+        // denoiser attention_mask: int64 (text_encoder와 동일)
+        val attnDenoiserI = LongArray(seqLen) { 1L }
 
-        // denoiser 입력 이름 (오류 메시지에서 확인):
-        // noisy_latents, encoder_outputs, latent_mask, attention_mask, timestep, num_inference_steps, style
-        // timestep / num_inference_steps 타입을 int64로 시도
         for (step in 0 until NUM_STEPS) {
-            val noisyTensor    = env.f32(latents,     latentShape)
-            val timestepTensor = env.i64(longArrayOf(step.toLong()),     longArrayOf(1L))   // int64
-            val numStepsTensor = env.i64(longArrayOf(NUM_STEPS.toLong()), longArrayOf(1L))  // int64
-            val lmTensor       = env.f32(latentMaskF, latentMask3d)
-            val attn2Tensor    = env.f32(attnMaskF,   longArrayOf(1L, seqLen.toLong()))
-            val style2         = env.f32(style,        styleShape)
+            val noisyTensor    = env.f32(latents,         latentShape)
+            val timestepTensor = env.i64(longArrayOf(step.toLong()),      longArrayOf(1L))
+            val numStepsTensor = env.i64(longArrayOf(NUM_STEPS.toLong()), longArrayOf(1L))
+            val lmTensor       = env.f32(latentMaskF,     latentMask3d)
+            val attn2Tensor    = env.i64(attnDenoiserI,   longArrayOf(1L, seqLen.toLong()))
+            val style2         = env.f32(style,            styleShape)
             val denoised       = denoiser!!.run(mapOf(
                 "noisy_latents"       to noisyTensor,
                 "encoder_outputs"     to encoderOut,
