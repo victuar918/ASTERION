@@ -122,7 +122,6 @@ class SupertonicTtsEngine(private val context: Context) {
         textEnc = null; denoiser = null; decoder = null; env = null
     }
 
-    // OrtSession.Result → List<OnnxValue>
     private fun OrtSession.Result.ortList(): List<OnnxValue> = this.map { it.value }.toList()
 
     private fun inferChunk(text: String, lang: String, style: FloatArray, speed: Float): FloatArray {
@@ -139,16 +138,20 @@ class SupertonicTtsEngine(private val context: Context) {
         val idsTensor   = env.i64(ids,      longArrayOf(1L, seqLen.toLong()))
         val attnTensor  = env.i64(attnMask, longArrayOf(1L, seqLen.toLong()))
 
-        // text_encoder — 인덱스로 출력 접근 (이름 불일치 방지)
         val teOut        = textEnc!!.run(mapOf(
             "input_ids"      to idsTensor,
             "attention_mask" to attnTensor,
             "style"          to styleTensor))
         val teList       = teOut.ortList()
-        val hiddenState  = teList[0] as OnnxTensor   // last_hidden_state
-        val rawDurTensor = teList[1] as OnnxTensor   // raw_durations
-        @Suppress("UNCHECKED_CAST")
-        val rawDur = (rawDurTensor.value as Array<FloatArray>)[0]
+        val hiddenState  = teList[0] as OnnxTensor
+        val rawDurTensor = teList[1] as OnnxTensor
+
+        // raw_durations: 1D float[] 또는 2D float[][] 모두 처리
+        val rawDur: FloatArray = when (val v = rawDurTensor.value) {
+            is Array<*>   -> @Suppress("UNCHECKED_CAST") (v as Array<FloatArray>)[0]
+            is FloatArray -> v
+            else          -> throw Exception("rawDur type: ${v?.javaClass}")
+        }
 
         val durations    = LongArray(rawDur.size) { i -> maxOf(0L, (rawDur[i] / speed * SAMPLE_RATE).toLong()) }
         val totalSamples = durations.sum()
