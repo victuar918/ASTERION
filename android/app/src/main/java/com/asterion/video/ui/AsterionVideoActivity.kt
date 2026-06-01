@@ -40,7 +40,7 @@ class AsterionVideoActivity : AppCompatActivity() {
     private val auth by lazy { ServiceAccountAuth(this) }
     private var reader: SheetsVideoReader? = null
     private var engine: AsterionRenderEngine? = null
-    private var ttsEngine: SupertonicTtsEngine? = null  // testSpeaker + engine이 공유
+    private var ttsEngine: SupertonicTtsEngine? = null
     private var isRendering = false
     private var mediaPlayer: MediaPlayer? = null
 
@@ -105,7 +105,8 @@ class AsterionVideoActivity : AppCompatActivity() {
                 layoutParams=LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT)
                 setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
                     override fun onProgressChanged(s:SeekBar?,v:Int,u:Boolean){speedLabel.text="  속도: ${progressToSpeed(v)}x"}
-                    override fun onStartTrackingTouch(s:SeekBar?){} override fun onStopTrackingTouch(s:SeekBar?){}})}
+                    override fun onStartTrackingTouch(s:SeekBar?){} override fun onStopTrackingTouch(s:SeekBar?){}})
+            }
             speedLabel.text="  속도: ${progressToSpeed(seekBar.progress)}x"
             speakerSeekBars[sid]=seekBar; llSpeakers.addView(seekBar); llSpeakers.addView(speedLabel)
         }
@@ -116,7 +117,8 @@ class AsterionVideoActivity : AppCompatActivity() {
         val speed     = progressToSpeed(speakerSeekBars[sid]?.progress ?: 50)
         val testText  = when(sid){1->"안녕하세요. 에너지 분석을 시작합니다.";2->"극과의 에너지가 축적되는 구간입니다.";else->"운명은 해석하는 순간 바뀌지 않습니다."}
         AppConfig.ensureDirs()
-        val errFile = File(AppConfig.OUTPUT_DIR, "tts_error.txt")
+        // 내부 저장소에서 오류 파일 읽기
+        val errFile = File(applicationContext.filesDir, "tts_error.txt")
         errFile.delete()
         updateStatus("🔊 [$sid] $voiceFile speed=$speed 합성 중...")
         lifecycleScope.launch(Dispatchers.IO) {
@@ -130,7 +132,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                         mediaPlayer = MediaPlayer().apply { setDataSource(out.absolutePath); prepare(); start() }
                         updateStatus("🔊 [$sid] ${out.length()/1024}KB 재생 중")
                     } else {
-                        val errMsg = if (errFile.exists()) errFile.readText() else "synthesize() false (오류 파일 없음)"
+                        val errMsg = if (errFile.exists()) errFile.readText() else "synthesize() false"
                         updateStatus("❌ TTS 실패:\n$errMsg")
                         appendLog("❌ $errMsg")
                     }
@@ -174,15 +176,10 @@ class AsterionVideoActivity : AppCompatActivity() {
         try {
             val token = auth.getAccessToken()
             reader    = SheetsVideoReader(token, VIDEO_SS_ID)
-
-            // TTS 엔진 1회 init
-            val te = SupertonicTtsEngine(this)
+            val te    = SupertonicTtsEngine(this)
             te.init { msg -> appendLog(msg) }
             ttsEngine = te
-
-            // 렌더링 엔진: 동일한 ttsEngine 공유 (dpSess null 문제 해결)
-            engine = AsterionRenderEngine(this, te)
-
+            engine    = AsterionRenderEngine(this, te)
             val sheets = reader!!.listScriptSheets()
             withContext(Dispatchers.Main) {
                 if (sheets.isEmpty()) tvStatus.text = "대본 없음 — VS_로 시작하는 시트명 사용"
@@ -220,7 +217,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                     if (f!=null) done++
                     withContext(Dispatchers.Main) { progressBar.progress=++done }
                 }
-                updateStatus("✅ TTS 완료 ${done}/${data.scriptRows.size}세션 | 렌더링 stub")
+                updateStatus("✅ TTS 완료 ${done}/${data.scriptRows.size} | 렌더링 stub")
             } catch(e:Exception) { updateStatus("❌ ${e.message}") }
             finally { isRendering=false; withContext(Dispatchers.Main){btnStart.isEnabled=true;btnStop.isEnabled=false} }
         }
