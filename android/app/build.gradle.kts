@@ -9,7 +9,7 @@ android {
     defaultConfig {
         applicationId = "com.asterion.video"
         minSdk = 26; targetSdk = 35
-        versionCode = 13; versionName = "3.0.0"
+        versionCode = 14; versionName = "3.1.0"
         ndk { abiFilters += "arm64-v8a" }
     }
     buildTypes { debug { isDebuggable = true } }
@@ -32,4 +32,7 @@ dependencies {
 
     // ONNX Runtime Android — Supertonic 2 온디바이스 TTS
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
+
+    // FFmpegKit — 영상 렌더링
+    implementation("com.antonkarpenko:ffmpeg-kit-full-gpl:2.1.0")
 }
