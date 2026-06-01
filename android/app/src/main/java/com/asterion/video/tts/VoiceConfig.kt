@@ -69,9 +69,15 @@ class SupertonicTtsEngine(private val context: Context) {
         denoiser = env!!.createSession("$p/onnx/latent_denoiser.onnx", opts)
         decoder  = env!!.createSession("$p/onnx/voice_decoder.onnx",   opts)
         vocab    = loadVocab(File(dir, "tokenizer.json"))
-        Log.i(TAG, "text_encoder    IN=${textEnc!!.inputNames.toList()}")
-        Log.i(TAG, "latent_denoiser IN=${denoiser!!.inputNames.toList()}")
-        Log.i(TAG, "voice_decoder   IN=${decoder!!.inputNames.toList()}")
+        // 입력 이름 + 타입 로그
+        fun logInfo(name: String, sess: OrtSession) {
+            val ins = sess.inputInfo.map { (k,v) -> "$k:${v.info}" }
+            Log.i(TAG, "$name IN=$ins")
+            onProgress("$name\n${ins.joinToString()}")
+        }
+        logInfo("text_encoder",   textEnc!!)
+        logInfo("latent_denoiser", denoiser!!)
+        logInfo("voice_decoder",   decoder!!)
         onProgress("✅ Supertonic 2 준비 (ko vocab=${vocab.size} steps=$NUM_STEPS)")
     }
 
@@ -96,7 +102,6 @@ class SupertonicTtsEngine(private val context: Context) {
             true
         } catch(e: Exception) {
             Log.e(TAG, "synthesize: $e")
-            // 내부 저장소에 오류 기록 (외부 저장소 권한 불필요)
             try {
                 File(context.filesDir, "tts_error.txt")
                     .writeText("${e.javaClass.simpleName}: ${e.message}\n" +
@@ -125,13 +130,15 @@ class SupertonicTtsEngine(private val context: Context) {
         val tagged     = "<$lang>$normalized</$lang>"
         val ids        = LongArray(tagged.length) { i -> vocab[tagged[i].toString()] ?: vocab[" "] ?: 0L }
         val seqLen     = ids.size
-        val attnMask   = FloatArray(seqLen) { 1.0f }
+
+        // attention_mask: int64 [1, seqLen]  ← HuggingFace 표준
+        val attnMask   = LongArray(seqLen) { 1L }
 
         val styleSeqLen = style.size / STYLE_DIM
         val styleShape  = longArrayOf(1L, STYLE_DIM.toLong(), styleSeqLen.toLong())
         val styleTensor = env.f32(style, styleShape)
-        val idsTensor   = env.i64(ids,   longArrayOf(1L, seqLen.toLong()))
-        val attnTensor  = env.f32(attnMask, longArrayOf(1L, seqLen.toLong()))
+        val idsTensor   = env.i64(ids,      longArrayOf(1L, seqLen.toLong()))
+        val attnTensor  = env.i64(attnMask, longArrayOf(1L, seqLen.toLong()))  // int64
 
         val teOut        = textEnc!!.run(mapOf(
             "input_ids"      to idsTensor,
@@ -160,11 +167,15 @@ class SupertonicTtsEngine(private val context: Context) {
         val latentMaskF  = FloatArray(latentLen) { 1.0f }
         val latentMask3d = longArrayOf(1L, 1L, latentLen.toLong())
 
+        // denoiser attention_mask 도 int64
+        val attnMaskF = FloatArray(seqLen) { 1.0f }   // latent_denoiser는 float 요구할 수 있음
+
         for (step in 0 until NUM_STEPS) {
             val latTensor   = env.f32(latents,     latentShape)
             val timeTensor  = env.f32(floatArrayOf(step.toFloat() / NUM_STEPS), longArrayOf(1L))
             val lmTensor    = env.f32(latentMaskF, latentMask3d)
-            val attn2Tensor = env.f32(attnMask,    longArrayOf(1L, seqLen.toLong()))
+            // latent_denoiser attention_mask: 일단 float32로 시도 (모델마다 다름)
+            val attn2Tensor = env.f32(attnMaskF,   longArrayOf(1L, seqLen.toLong()))
             val style2      = env.f32(style,       styleShape)
             val denoised    = denoiser!!.run(mapOf(
                 "latents"           to latTensor,
