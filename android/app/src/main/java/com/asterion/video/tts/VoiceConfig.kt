@@ -69,9 +69,11 @@ class SupertonicTtsEngine(private val context: Context) {
         denoiser = env!!.createSession("$p/onnx/latent_denoiser.onnx", opts)
         decoder  = env!!.createSession("$p/onnx/voice_decoder.onnx",   opts)
         vocab    = loadVocab(File(dir, "tokenizer.json"))
+        // 입출력 이름 + 타입 로그
         fun logIO(name: String, sess: OrtSession) {
-            Log.i(TAG, "$name IN=${sess.inputNames.toList()} OUT=${sess.outputNames.toList()}")
-            onProgress("$name IN:${sess.inputNames.toList()} OUT:${sess.outputNames.toList()}")
+            val ins = sess.inputInfo.map { (k,v) -> "$k(${v.info})" }
+            Log.i(TAG, "$name IN=$ins OUT=${sess.outputNames.toList()}")
+            onProgress("$name IN:$ins")
         }
         logIO("text_encoder",   textEnc!!)
         logIO("latent_denoiser", denoiser!!)
@@ -130,22 +132,21 @@ class SupertonicTtsEngine(private val context: Context) {
         val tagged     = "<$lang>$normalized</$lang>"
         val ids        = LongArray(tagged.length) { i -> vocab[tagged[i].toString()] ?: vocab[" "] ?: 0L }
         val seqLen     = ids.size
-        val attnMask   = LongArray(seqLen) { 1L }
+        val attnMaskI  = LongArray(seqLen) { 1L }   // int64
 
         val styleSeqLen = style.size / STYLE_DIM
         val styleShape  = longArrayOf(1L, styleSeqLen.toLong(), STYLE_DIM.toLong())
-        val styleTensor = env.f32(style, styleShape)
-        val idsTensor   = env.i64(ids,      longArrayOf(1L, seqLen.toLong()))
-        val attnTensor  = env.i64(attnMask, longArrayOf(1L, seqLen.toLong()))
+        val styleTensor = env.f32(style,     styleShape)
+        val idsTensor   = env.i64(ids,       longArrayOf(1L, seqLen.toLong()))
+        val attnTensor  = env.i64(attnMaskI, longArrayOf(1L, seqLen.toLong()))
 
-        // text_encoder
         val teOut        = textEnc!!.run(mapOf(
             "input_ids"      to idsTensor,
             "attention_mask" to attnTensor,
             "style"          to styleTensor))
         val teList       = teOut.ortList()
-        val encoderOut   = teList[0] as OnnxTensor   // encoder_outputs (hidden state)
-        val rawDurTensor = teList[1] as OnnxTensor   // raw_durations
+        val encoderOut   = teList[0] as OnnxTensor
+        val rawDurTensor = teList[1] as OnnxTensor
 
         val rawDur: FloatArray = when (val v = rawDurTensor.value) {
             is Array<*>   -> @Suppress("UNCHECKED_CAST") (v as Array<FloatArray>)[0]
@@ -171,25 +172,25 @@ class SupertonicTtsEngine(private val context: Context) {
         val latentMaskF  = FloatArray(latentLen) { 1.0f }
         val latentMask3d = longArrayOf(1L, 1L, latentLen.toLong())
         val attnMaskF    = FloatArray(seqLen) { 1.0f }
-        val numStepsF    = floatArrayOf(NUM_STEPS.toFloat())
 
-        // denoising loop — 실제 입력 이름 사용:
+        // denoiser 입력 이름 (오류 메시지에서 확인):
         // noisy_latents, encoder_outputs, latent_mask, attention_mask, timestep, num_inference_steps, style
+        // timestep / num_inference_steps 타입을 int64로 시도
         for (step in 0 until NUM_STEPS) {
-            val noisyTensor   = env.f32(latents,     latentShape)
-            val timestepTensor = env.f32(floatArrayOf(step.toFloat()), longArrayOf(1L))
-            val numStepsTensor = env.f32(numStepsF,  longArrayOf(1L))
-            val lmTensor      = env.f32(latentMaskF, latentMask3d)
-            val attn2Tensor   = env.f32(attnMaskF,   longArrayOf(1L, seqLen.toLong()))
-            val style2        = env.f32(style,        styleShape)
-            val denoised      = denoiser!!.run(mapOf(
-                "noisy_latents"      to noisyTensor,
-                "encoder_outputs"    to encoderOut,
-                "latent_mask"        to lmTensor,
-                "attention_mask"     to attn2Tensor,
-                "timestep"           to timestepTensor,
+            val noisyTensor    = env.f32(latents,     latentShape)
+            val timestepTensor = env.i64(longArrayOf(step.toLong()),     longArrayOf(1L))   // int64
+            val numStepsTensor = env.i64(longArrayOf(NUM_STEPS.toLong()), longArrayOf(1L))  // int64
+            val lmTensor       = env.f32(latentMaskF, latentMask3d)
+            val attn2Tensor    = env.f32(attnMaskF,   longArrayOf(1L, seqLen.toLong()))
+            val style2         = env.f32(style,        styleShape)
+            val denoised       = denoiser!!.run(mapOf(
+                "noisy_latents"       to noisyTensor,
+                "encoder_outputs"     to encoderOut,
+                "latent_mask"         to lmTensor,
+                "attention_mask"      to attn2Tensor,
+                "timestep"            to timestepTensor,
                 "num_inference_steps" to numStepsTensor,
-                "style"              to style2))
+                "style"               to style2))
             val outTensor = denoised.ortList()[0] as OnnxTensor
             val buf = outTensor.floatBuffer
             latents = FloatArray(buf.remaining()).also { buf.get(it) }
