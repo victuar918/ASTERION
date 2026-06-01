@@ -38,10 +38,7 @@ data class VoiceConfig(val speakers: Map<Int, SpeakerConfig>) {
     }
 }
 
-/**
- * 각 입력의 타입 정보 (init 시 한 번 파싱, 이후 재사용)
- */
-private data class InputTypeSpec(val isInt64: Boolean, val rank: Int)
+private data class InputSpec(val isInt64: Boolean)
 
 class SupertonicTtsEngine(private val context: Context) {
     companion object {
@@ -61,8 +58,9 @@ class SupertonicTtsEngine(private val context: Context) {
     private var decoder:  OrtSession? = null
     private var vocab: Map<String, Long> = emptyMap()
 
-    // denoiser 각 입력의 타입 (int64 여부) — init 시 파싱
-    private var denoiserTypes: Map<String, InputTypeSpec> = emptyMap()
+    // init 시 파싱된 타입 정보
+    private var denoiserInputSpecs: Map<String, InputSpec> = emptyMap()
+    private var decoderInputName: String = "latents"   // fallback; init에서 덮어씀
 
     suspend fun init(onProgress: (String)->Unit = {}) = withContext(Dispatchers.IO) {
         val dir = prepareModelDir(onProgress)
@@ -78,35 +76,33 @@ class SupertonicTtsEngine(private val context: Context) {
         decoder  = env!!.createSession("$p/onnx/voice_decoder.onnx",   opts)
         vocab    = loadVocab(File(dir, "tokenizer.json"))
 
-        // denoiser inputInfo 파싱 → 동적 타입 결정을 위해 저장
-        denoiserTypes = denoiser!!.inputInfo.mapValues { (name, nodeInfo) ->
-            val infoStr = nodeInfo.info.toString()
-            val isInt64 = infoStr.contains("INT64")
-            // shape 파싱: "shape=[-1, 144, -1]" → 3
-            val rank = infoStr.substringAfter("shape=[").substringBefore("]")
-                .split(",").size
-            InputTypeSpec(isInt64, rank).also {
-                val typeStr = if (isInt64) "INT64" else "FLOAT32"
-                Log.i(TAG, "  denoiser.$name = $typeStr rank=$rank")
-                onProgress("  $name=$typeStr(rank=$rank)")
+        // denoiser inputInfo → 동적 타입 결정용
+        denoiserInputSpecs = denoiser!!.inputInfo.mapValues { (name, nodeInfo) ->
+            val isInt64 = nodeInfo.info.toString().contains("INT64")
+            InputSpec(isInt64).also {
+                val t = if (isInt64) "INT64" else "FLOAT32"
+                Log.i(TAG, "  denoiser.$name = $t")
+                onProgress("  denoiser.$name=$t")
             }
         }
 
-        // text_encoder / voice_decoder 입력 로그
+        // voice_decoder 실제 입력 이름 저장 (단수/복수 오타 방지)
+        decoderInputName = decoder!!.inputNames.first().also {
+            Log.i(TAG, "  voice_decoder input = '$it'")
+            onProgress("  voice_decoder.input='$it'")
+        }
+
+        // text_encoder 입력 타입 로그
         textEnc!!.inputInfo.forEach { (k, v) ->
             val t = if (v.info.toString().contains("INT64")) "INT64" else "FLOAT32"
             Log.i(TAG, "  text_encoder.$k = $t")
-        }
-        decoder!!.inputInfo.forEach { (k, v) ->
-            val t = if (v.info.toString().contains("INT64")) "INT64" else "FLOAT32"
-            Log.i(TAG, "  voice_decoder.$k = $t")
         }
 
         onProgress("✅ Supertonic 2 준비 (ko vocab=${vocab.size} steps=$NUM_STEPS)")
     }
 
     fun synthesize(text: String, voiceFile: String, speed: Float, outputFile: File): Boolean {
-        if (textEnc == null || denoiserTypes.isEmpty()) return false
+        if (textEnc == null || denoiserInputSpecs.isEmpty()) return false
         if (text.isBlank()) return false
         return try {
             val modelDir = File(context.filesDir, AppConfig.TTS_MODEL_SUBDIR)
@@ -150,14 +146,13 @@ class SupertonicTtsEngine(private val context: Context) {
 
     private fun OrtSession.Result.ortList(): List<OnnxValue> = this.map { it.value }.toList()
 
-    // inputInfo 기반으로 동적 타입 텐서 생성
-    // floatVal과 longVal 중 실제 타입에 맞는 것만 사용됨
-    private fun makeTensor(name: String, floatArr: FloatArray, longArr: LongArray, shape: LongArray): OnnxTensor {
-        val spec = denoiserTypes[name]
-        return if (spec?.isInt64 == true) {
-            OnnxTensor.createTensor(env!!, LongBuffer.wrap(longArr), shape)
+    // denoiser inputSpec 기반 동적 타입 텐서 생성
+    private fun makeTensor(name: String, f: FloatArray, i: LongArray, shape: LongArray): OnnxTensor {
+        val isInt64 = denoiserInputSpecs[name]?.isInt64 ?: false
+        return if (isInt64) {
+            OnnxTensor.createTensor(env!!, LongBuffer.wrap(i), shape)
         } else {
-            OnnxTensor.createTensor(env!!, FloatBuffer.wrap(floatArr), shape)
+            OnnxTensor.createTensor(env!!, FloatBuffer.wrap(f), shape)
         }
     }
 
@@ -175,7 +170,7 @@ class SupertonicTtsEngine(private val context: Context) {
         val idsTensor   = env.i64(ids,       longArrayOf(1L, seqLen.toLong()))
         val attnTensor  = env.i64(attnMaskI, longArrayOf(1L, seqLen.toLong()))
 
-        // text_encoder 실행
+        // text_encoder
         val teOut        = textEnc!!.run(mapOf(
             "input_ids"      to idsTensor,
             "attention_mask" to attnTensor,
@@ -194,7 +189,7 @@ class SupertonicTtsEngine(private val context: Context) {
         val totalSamples = durations.sum()
         val latentLen    = maxOf(1, ((totalSamples + LATENT_SIZE - 1) / LATENT_SIZE).toInt())
 
-        // Noisy latents 초기화 (Box-Muller)
+        // noisy latents (Box-Muller)
         val rng = java.util.Random()
         var latents = FloatArray(FULL_LATENT_DIM * latentLen)
         var idx = 0
@@ -207,29 +202,23 @@ class SupertonicTtsEngine(private val context: Context) {
         }
         val latentShape = longArrayOf(1L, FULL_LATENT_DIM.toLong(), latentLen.toLong())
 
-        // latent_mask: 모델이 요구하는 타입을 inputInfo에서 동적 결정
-        // shape는 2D [1, latentLen] (이전에 3D → Invalid rank 오류로 확인)
-        val latentMaskF = FloatArray(latentLen) { 1.0f }
-        val latentMaskI = LongArray(latentLen) { 1L }
+        // latent_mask: 2D [1, latentLen], 타입은 denoiserInputSpecs에서 자동 결정
+        val latentMaskF  = FloatArray(latentLen) { 1.0f }
+        val latentMaskI  = LongArray(latentLen) { 1L }
         val latentMask2d = longArrayOf(1L, latentLen.toLong())
 
-        // attention_mask (denoiser): inputInfo에서 타입 결정
+        // attention_mask (denoiser): 타입 자동 결정
         val attnDenoiserF = FloatArray(seqLen) { 1.0f }
         val attnDenoiserI = LongArray(seqLen) { 1L }
         val attnShape2d   = longArrayOf(1L, seqLen.toLong())
 
         for (step in 0 until NUM_STEPS) {
-            val noisyTensor = env.f32(latents, latentShape)
-
-            // timestep, num_inference_steps: inputInfo 기반 동적 타입
-            val timestepF = floatArrayOf(step.toFloat())
-            val timestepI = longArrayOf(step.toLong())
-            val numStepsF = floatArrayOf(NUM_STEPS.toFloat())
-            val numStepsI = longArrayOf(NUM_STEPS.toLong())
-
-            val timestepTensor = makeTensor("timestep", timestepF, timestepI, longArrayOf(1L))
-            val numStepsTensor = makeTensor("num_inference_steps", numStepsF, numStepsI, longArrayOf(1L))
-            val lmTensor       = makeTensor("latent_mask", latentMaskF, latentMaskI, latentMask2d)
+            val noisyTensor    = env.f32(latents, latentShape)
+            val timestepTensor = makeTensor("timestep",
+                floatArrayOf(step.toFloat()), longArrayOf(step.toLong()), longArrayOf(1L))
+            val numStepsTensor = makeTensor("num_inference_steps",
+                floatArrayOf(NUM_STEPS.toFloat()), longArrayOf(NUM_STEPS.toLong()), longArrayOf(1L))
+            val lmTensor       = makeTensor("latent_mask",    latentMaskF,   latentMaskI,   latentMask2d)
             val attn2Tensor    = makeTensor("attention_mask", attnDenoiserF, attnDenoiserI, attnShape2d)
             val style2         = env.f32(style, styleShape)
 
@@ -251,14 +240,15 @@ class SupertonicTtsEngine(private val context: Context) {
             denoised.close(); outTensor.close()
         }
 
-        // voice_decoder: latents * latent_mask (float)
+        // voice_decoder: latents * latent_mask (mask 적용)
         val masked = FloatArray(latents.size)
         for (d in 0 until FULL_LATENT_DIM)
             for (t in 0 until latentLen)
                 masked[d * latentLen + t] = latents[d * latentLen + t] * latentMaskF[t]
 
         val finalLatent = env.f32(masked, latentShape)
-        val decOut      = decoder!!.run(mapOf("latent" to finalLatent))
+        // decoderInputName은 init에서 실제 모델의 입력 이름을 읽어서 저장함
+        val decOut      = decoder!!.run(mapOf(decoderInputName to finalLatent))
         val wavTensor   = decOut.ortList()[0] as OnnxTensor
         val wavBuf      = wavTensor.floatBuffer
         val wavAll      = FloatArray(wavBuf.remaining()).also { wavBuf.get(it) }
