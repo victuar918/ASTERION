@@ -1,0 +1,14 @@
+        // text_encoder — 인덱스로 출력 접근
+        val teOut        = textEnc!!.run(mapOf(
+            "input_ids"      to idsTensor,
+            "attention_mask" to attnTensor,
+            "style"          to styleTensor))
+        val teList       = teOut.ortList()
+        val hiddenState  = teList[0] as OnnxTensor   // last_hidden_state
+        val rawDurTensor = teList[1] as OnnxTensor   // raw_durations
+        // raw_durations: 1D float[] 또는 2D float[][] 모두 처리
+        val rawDur: FloatArray = when (val v = rawDurTensor.value) {
+            is Array<*>   -> @Suppress("UNCHECKED_CAST") (v as Array<FloatArray>)[0]
+            is FloatArray -> v
+            else -> throw Exception("rawDur type: ${v?.javaClass}")
+        }
