@@ -49,12 +49,11 @@ class AsterionVideoActivity : AppCompatActivity() {
     private var isRendering = false
     private var mediaPlayer: MediaPlayer? = null
 
-    // 앱 전체에 필요한 임의 파일 접근 권한 (BGV/BGM/OUTPUT 모두 /sdcard/Documents/ 하위)
     private fun hasAllFilesPermission(): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
             Environment.isExternalStorageManager()
         else
-            true  // API 29 이하: requestLegacyExternalStorage + WRITE_EXTERNAL_STORAGE로 충분
+            true
 
     private fun requestAllFilesPermission() {
         try {
@@ -64,7 +63,6 @@ class AsterionVideoActivity : AppCompatActivity() {
             )
             startActivity(intent)
         } catch (e: Exception) {
-            // 일부 기기에서 ACTION_MANAGE_APP 미지원 시 전체 목록으로 폴백
             startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
         }
     }
@@ -100,7 +98,6 @@ class AsterionVideoActivity : AppCompatActivity() {
         lifecycleScope.launch { initCore() }
     }
 
-    // 설정 화면에서 돌아온 경우 권한 부여 여부 확인 후 재초기화
     override fun onResume() {
         super.onResume()
         if (hasAllFilesPermission() && engine == null) {
@@ -203,7 +200,6 @@ class AsterionVideoActivity : AppCompatActivity() {
     }
 
     private suspend fun initCore() {
-        // ─ 1. 모든 파일 접근 권한 확인 (Android 11+) ───────────────────────
         if (!hasAllFilesPermission()) {
             withContext(Dispatchers.Main) {
                 tvStatus.text = "⚠ '모든 파일 접근' 권한 필요\n" +
@@ -211,10 +207,8 @@ class AsterionVideoActivity : AppCompatActivity() {
                     "설정 화면으로 이동합니다..."
                 requestAllFilesPermission()
             }
-            return  // onResume()에서 권한 부여 후 재추기화
+            return
         }
-
-        // ─ 2. 기존 초기화 로직 (무변경) ───────────────────────────────
         withContext(Dispatchers.Main) { tvKeyStatus.text = auth.keyStatusMessage() }
         if (!auth.keyStatusMessage().startsWith("✅")) return
         try {
@@ -239,7 +233,6 @@ class AsterionVideoActivity : AppCompatActivity() {
 
     private fun startRendering() {
         if (isRendering) return
-        // 렌더링 시작 시에도 권한 재확인
         if (!hasAllFilesPermission()) {
             updateStatus("⚠ '모든 파일 접근' 권한이 없습니다. 설정에서 부여해 주세요.")
             requestAllFilesPermission()
@@ -247,7 +240,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         }
         val sheet       = spinnerSheet.selectedItem?.toString() ?: return
         val voiceConfig = buildVoiceConfig()
-        isRendering=true; btnStart.isEnabled=false; btnStop.isEnabled=true
+        isRendering = true; btnStart.isEnabled = false; btnStop.isEnabled = true
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 updateStatus("[$sheet] 토큰 갱신...")
@@ -255,28 +248,60 @@ class AsterionVideoActivity : AppCompatActivity() {
                 reader = SheetsVideoReader(token, VIDEO_SS_ID)
                 updateStatus("[$sheet] 대본 읽는 중...")
                 val result = reader!!.readReadyRows(sheet)
-                if (result.isFailure) { updateStatus("❌ 대본 로드 실패: ${result.exceptionOrNull()?.message}"); return@launch }
+                if (result.isFailure) {
+                    updateStatus("❌ 대본 로드 실패: ${result.exceptionOrNull()?.message}")
+                    return@launch
+                }
                 val data = result.getOrThrow()
                 if (data.scriptRows.isEmpty()) { updateStatus("⚠ READY 행 없음"); return@launch }
-                withContext(Dispatchers.Main) { progressBar.max=data.scriptRows.size }
-                var done=0
+                withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
+
+                var done      = 0  // 씬 렌더링 성공 수
+                var processed = 0  // 전체 처리 수 (progress bar 전용 — done과 분리)
                 for (row in data.scriptRows) {
                     if (!isRendering) break
-                    val f = engine!!.renderScene(row,data.videoMeta,voiceConfig) { msg->appendLog(msg);updateStatus(msg) }
-                    reader!!.updateStatus(sheet, row.rowIndex, if(f!=null) "DONE" else "ERROR")
-                    if (f!=null) done++
-                    withContext(Dispatchers.Main) { progressBar.progress=++done }
+                    val f = engine!!.renderScene(row, data.videoMeta, voiceConfig) { msg ->
+                        appendLog(msg); updateStatus(msg)
+                    }
+                    reader!!.updateStatus(sheet, row.rowIndex, if (f != null) "DONE" else "ERROR")
+                    if (f != null) done++
+                    processed++
+                    withContext(Dispatchers.Main) { progressBar.progress = processed }
                 }
-                updateStatus("✅ TTS 완료 ${done}/${data.scriptRows.size} | 렌더링 stub")
-            } catch(e:Exception) { updateStatus("❌ ${e.message}") }
-            finally { isRendering=false; withContext(Dispatchers.Main){btnStart.isEnabled=true;btnStop.isEnabled=false} }
+
+                // ─ concat + BGM ─────────────────────────────────────────────
+                if (isRendering && done > 0) {
+                    // 파일명 안전 처리: 한글 유지, 공백·특수문자 → _
+                    val safeSheet  = sheet.replace(Regex("[^\\w가-힣]"), "_")
+                    updateStatus("🔗 씬 ${done}개 concat 중...")
+                    val finalFile = engine!!.concatSubclips(
+                        outputName   = safeSheet,
+                        bgmFileName  = data.videoMeta.mainBgm
+                    ) { msg -> appendLog(msg); updateStatus(msg) }
+                    if (finalFile != null && finalFile.exists()) {
+                        updateStatus("🎬 완료: ${finalFile.name} (${finalFile.length()/1024/1024}MB)")
+                    } else {
+                        updateStatus("❌ concat 실패 — output 폴더의 씬별 MP4 확인")
+                    }
+                } else if (!isRendering) {
+                    updateStatus("⏹ 중지 — 씬 ${done}개 완료")
+                } else {
+                    updateStatus("⚠ 성공한 씬 없음 — 오류 로그 확인")
+                }
+            } catch(e: Exception) {
+                updateStatus("❌ ${e.message}")
+            } finally {
+                isRendering = false
+                withContext(Dispatchers.Main) { btnStart.isEnabled = true; btnStop.isEnabled = false }
+            }
         }
     }
 
-    private fun stopRendering() { isRendering=false; updateStatus("⏹ 중지") }
-    private fun updateStatus(msg: String) = lifecycleScope.launch(Dispatchers.Main) { tvStatus.text=msg }
+    private fun stopRendering() { isRendering = false; updateStatus("⏹ 중지") }
+
+    private fun updateStatus(msg: String) = lifecycleScope.launch(Dispatchers.Main) { tvStatus.text = msg }
     private fun appendLog(msg: String) = lifecycleScope.launch(Dispatchers.Main) {
-        tvLog.text = (tvLog.text.toString().lines().takeLast(15)+msg).joinToString("\n")
+        tvLog.text = (tvLog.text.toString().lines().takeLast(15) + msg).joinToString("\n")
     }
     override fun onDestroy() { super.onDestroy(); mediaPlayer?.release(); ttsEngine?.release() }
 }

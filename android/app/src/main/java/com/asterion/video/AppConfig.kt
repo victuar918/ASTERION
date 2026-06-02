@@ -8,7 +8,7 @@ object AppConfig {
     private val sdcard = Environment.getExternalStorageDirectory()
 
     val BGV_DIR: File = File(sdcard, "Documents/work/ASTERION/YouTube/BGV")
-    val BGM_DIR: File = File(sdcard, "Documents/work/ASTERION/YouTube/bmg")
+    val BGM_DIR: File = File(sdcard, "Documents/work/ASTERION/YouTube/bgm")  // fix: bmg → bgm
     val OUTPUT_DIR: File = File(sdcard, "Documents/work/ASTERION/YouTube/output")
 
     const val TTS_MODEL_SUBDIR = "tts_model"
