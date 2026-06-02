@@ -1,7 +1,12 @@
 package com.asterion.video.ui
 
+import android.content.Intent
 import android.media.MediaPlayer
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.Settings
 import android.util.Log
 import android.view.ViewGroup
 import android.widget.*
@@ -44,6 +49,26 @@ class AsterionVideoActivity : AppCompatActivity() {
     private var isRendering = false
     private var mediaPlayer: MediaPlayer? = null
 
+    // 앱 전체에 필요한 임의 파일 접근 권한 (BGV/BGM/OUTPUT 모두 /sdcard/Documents/ 하위)
+    private fun hasAllFilesPermission(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+            Environment.isExternalStorageManager()
+        else
+            true  // API 29 이하: requestLegacyExternalStorage + WRITE_EXTERNAL_STORAGE로 충분
+
+    private fun requestAllFilesPermission() {
+        try {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:${packageName}")
+            )
+            startActivity(intent)
+        } catch (e: Exception) {
+            // 일부 기기에서 ACTION_MANAGE_APP 미지원 시 전체 목록으로 폴백
+            startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val scroll = ScrollView(this)
@@ -73,6 +98,14 @@ class AsterionVideoActivity : AppCompatActivity() {
             override fun onNothingSelected(p:AdapterView<*>?){}
         }
         lifecycleScope.launch { initCore() }
+    }
+
+    // 설정 화면에서 돌아온 경우 권한 부여 여부 확인 후 재초기화
+    override fun onResume() {
+        super.onResume()
+        if (hasAllFilesPermission() && engine == null) {
+            lifecycleScope.launch { initCore() }
+        }
     }
 
     private fun buildSpeakerUI(speakers: List<Int>) {
@@ -117,7 +150,6 @@ class AsterionVideoActivity : AppCompatActivity() {
         val speed     = progressToSpeed(speakerSeekBars[sid]?.progress ?: 50)
         val testText  = when(sid){1->"안녕하세요. 에너지 분석을 시작합니다.";2->"극과의 에너지가 축적되는 구간입니다.";else->"운명은 해석하는 순간 바뀌지 않습니다."}
         AppConfig.ensureDirs()
-        // 내부 저장소에서 오류 파일 읽기
         val errFile = File(applicationContext.filesDir, "tts_error.txt")
         errFile.delete()
         updateStatus("🔊 [$sid] $voiceFile speed=$speed 합성 중...")
@@ -171,6 +203,18 @@ class AsterionVideoActivity : AppCompatActivity() {
     }
 
     private suspend fun initCore() {
+        // ─ 1. 모든 파일 접근 권한 확인 (Android 11+) ───────────────────────
+        if (!hasAllFilesPermission()) {
+            withContext(Dispatchers.Main) {
+                tvStatus.text = "⚠ '모든 파일 접근' 권한 필요\n" +
+                    "BGV/BGM/출력 폴더에 접근하려면 해당 권한이 필요합니다.\n" +
+                    "설정 화면으로 이동합니다..."
+                requestAllFilesPermission()
+            }
+            return  // onResume()에서 권한 부여 후 재추기화
+        }
+
+        // ─ 2. 기존 초기화 로직 (무변경) ───────────────────────────────
         withContext(Dispatchers.Main) { tvKeyStatus.text = auth.keyStatusMessage() }
         if (!auth.keyStatusMessage().startsWith("✅")) return
         try {
@@ -195,6 +239,12 @@ class AsterionVideoActivity : AppCompatActivity() {
 
     private fun startRendering() {
         if (isRendering) return
+        // 렌더링 시작 시에도 권한 재확인
+        if (!hasAllFilesPermission()) {
+            updateStatus("⚠ '모든 파일 접근' 권한이 없습니다. 설정에서 부여해 주세요.")
+            requestAllFilesPermission()
+            return
+        }
         val sheet       = spinnerSheet.selectedItem?.toString() ?: return
         val voiceConfig = buildVoiceConfig()
         isRendering=true; btnStart.isEnabled=false; btnStop.isEnabled=true
