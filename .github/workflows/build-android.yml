@@ -48,6 +48,39 @@ jobs:
           cd android
           gradle wrapper --gradle-version 8.6
 
+      # ── sherpa-onnx AAR 준비 ────────────────────────────────────────────────
+      # JitPack 미사용 이유: jitpack.yml에 LIBSHERPA_VERSION=v1.12.40 하드코딩되어
+      # v1.13.2 요청 시 잘못된 버전 AAR이 설치됨.
+      # GitHub Releases에서 직접 다운로드하는 방식이 안전하고 확실함.
+      - name: sherpa-onnx AAR 캐시 확인
+        id: cache-sherpa-aar
+        uses: actions/cache@v4
+        with:
+          path: android/app/libs/sherpa-onnx-v1.13.2.aar
+          key: sherpa-onnx-aar-v1.13.2
+
+      - name: sherpa-onnx Android AAR 다운로드 (v1.13.2)
+        if: steps.cache-sherpa-aar.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p android/app/libs
+          echo "⬇ sherpa-onnx v1.13.2 AAR 다운로드 중..."
+          wget -q \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.2/sherpa-onnx-v1.13.2.aar" \
+            -O android/app/libs/sherpa-onnx-v1.13.2.aar
+
+          FILE_SIZE=$(stat -c%s "android/app/libs/sherpa-onnx-v1.13.2.aar" 2>/dev/null || echo 0)
+          echo "AAR 크기: ${FILE_SIZE} bytes"
+
+          # 최소 50MB 검증 (다운로드 실패 시 HTML 오류 페이지가 저장되는 경우 방어)
+          if [ "$FILE_SIZE" -lt 50000000 ]; then
+            echo "❌ AAR 크기 이상 (${FILE_SIZE}B < 50MB) — 다운로드 실패"
+            echo "파일 앞부분:"
+            head -c 200 android/app/libs/sherpa-onnx-v1.13.2.aar || true
+            exit 1
+          fi
+          echo "✅ sherpa-onnx v1.13.2 AAR 준비 완료 (${FILE_SIZE} bytes)"
+
+      # ── APK 빌드 ────────────────────────────────────────────────────────────
       - name: APK 빌드
         run: |
           cd android

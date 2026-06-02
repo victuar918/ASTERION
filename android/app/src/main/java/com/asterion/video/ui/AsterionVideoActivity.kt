@@ -109,7 +109,9 @@ class AsterionVideoActivity : AppCompatActivity() {
         llSpeakers.removeAllViews()
         speakerSpinners.clear(); speakerSeekBars.clear(); speakerSpeedLabels.clear()
         if (speakers.isEmpty()) return
-        llSpeakers.addView(TextView(this).apply { text="🎤 화자 음성 설정"; textSize=12f; setTextColor(0xFFCCCCCC.toInt()); setPadding(0,16,0,4) })
+        llSpeakers.addView(TextView(this).apply { text="🎤 화자 음성 설정 (Supertonic 3)"; textSize=12f; setTextColor(0xFFCCCCCC.toInt()); setPadding(0,16,0,4) })
+        // defVoice: ASTERION 화자번호 → Supertonic 3 sid 초기 선택 인덱스
+        // VoiceConfig.SID_LIST = [0,1,...,9] 이므로 인덱스 = sid 값과 일치
         val defVoice = mapOf(1 to 0, 2 to 5, 3 to 1)
         val defSpeed = mapOf(1 to 50, 2 to 42, 3 to 58)
         for (sid in speakers.sorted()) {
@@ -143,23 +145,24 @@ class AsterionVideoActivity : AppCompatActivity() {
     }
 
     private fun testSpeaker(sid: Int) {
-        val voiceFile = VoiceConfig.VOICE_FILES[speakerSpinners[sid]?.selectedItemPosition ?: 0]
+        // VoiceConfig.SID_LIST = [0,1,...,9] — 스피너 선택 위치 = sherpa-onnx speaker ID
+        val sherpaSid = VoiceConfig.SID_LIST[speakerSpinners[sid]?.selectedItemPosition ?: 0]
         val speed     = progressToSpeed(speakerSeekBars[sid]?.progress ?: 50)
         val testText  = when(sid){1->"안녕하세요. 에너지 분석을 시작합니다.";2->"극과의 에너지가 축적되는 구간입니다.";else->"운명은 해석하는 순간 바뀌지 않습니다."}
         AppConfig.ensureDirs()
         val errFile = File(applicationContext.filesDir, "tts_error.txt")
         errFile.delete()
-        updateStatus("🔊 [$sid] $voiceFile speed=$speed 합성 중...")
+        updateStatus("🔊 [$sid] sid=$sherpaSid speed=$speed 합성 중...")
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val te  = ttsEngine ?: run { withContext(Dispatchers.Main) { updateStatus("❌ TTS 엔진 미초기화") }; return@launch }
                 val out = File(AppConfig.OUTPUT_DIR, "test_sid${sid}.wav")
-                val ok  = te.synthesize(testText, voiceFile, speed, out)
+                val ok  = te.synthesize(testText, sherpaSid, speed, out)
                 withContext(Dispatchers.Main) {
                     if (ok) {
                         mediaPlayer?.release()
                         mediaPlayer = MediaPlayer().apply { setDataSource(out.absolutePath); prepare(); start() }
-                        updateStatus("🔊 [$sid] ${out.length()/1024}KB 재생 중")
+                        updateStatus("🔊 [$sid] sid=$sherpaSid ${out.length()/1024}KB 재생 중")
                     } else {
                         val errMsg = if (errFile.exists()) errFile.readText() else "synthesize() false"
                         updateStatus("❌ TTS 실패:\n$errMsg")
@@ -176,11 +179,13 @@ class AsterionVideoActivity : AppCompatActivity() {
         String.format("%.2f", 0.7f + p.toFloat()/100f*0.6f).toFloat()
 
     private fun buildVoiceConfig(): VoiceConfig {
-        val map = speakerSpinners.keys.associateWith { sid ->
-            val voiceFile = VoiceConfig.VOICE_FILES[speakerSpinners[sid]?.selectedItemPosition ?: 0]
-            val speed     = progressToSpeed(speakerSeekBars[sid]?.progress ?: 50)
-            val name      = when(sid){1->"아스터";2->"리언";3->"나레이터";else->"Speaker$sid"}
-            SpeakerConfig(sid, speed, name, voiceFile)
+        // speakerNum = ASTERION 화자 번호 (speakerSpinners 의 key: 1, 2, 3...)
+        // sherpaSid  = Supertonic 3 speaker ID (0~9) — 스피너 선택 위치와 일치
+        val map = speakerSpinners.keys.associateWith { speakerNum ->
+            val sherpaSid = VoiceConfig.SID_LIST[speakerSpinners[speakerNum]?.selectedItemPosition ?: 0]
+            val speed     = progressToSpeed(speakerSeekBars[speakerNum]?.progress ?: 50)
+            val name      = when(speakerNum){1->"아스터";2->"리언";3->"나레이터";else->"Speaker$speakerNum"}
+            SpeakerConfig(sherpaSid, speed, name)
         }
         return if (map.isEmpty()) VoiceConfig.DEFAULT else VoiceConfig(map)
     }
@@ -256,8 +261,8 @@ class AsterionVideoActivity : AppCompatActivity() {
                 if (data.scriptRows.isEmpty()) { updateStatus("⚠ READY 행 없음"); return@launch }
                 withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
 
-                var done      = 0  // 씬 렌더링 성공 수
-                var processed = 0  // 전체 처리 수 (progress bar 전용 — done과 분리)
+                var done      = 0
+                var processed = 0
                 for (row in data.scriptRows) {
                     if (!isRendering) break
                     val f = engine!!.renderScene(row, data.videoMeta, voiceConfig) { msg ->
@@ -269,9 +274,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                     withContext(Dispatchers.Main) { progressBar.progress = processed }
                 }
 
-                // ─ concat + BGM ─────────────────────────────────────────────
                 if (isRendering && done > 0) {
-                    // 파일명 안전 처리: 한글 유지, 공백·특수문자 → _
                     val safeSheet  = sheet.replace(Regex("[^\\w가-힣]"), "_")
                     updateStatus("🔗 씬 ${done}개 concat 중...")
                     val finalFile = engine!!.concatSubclips(

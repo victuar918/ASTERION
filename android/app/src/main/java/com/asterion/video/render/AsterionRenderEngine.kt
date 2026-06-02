@@ -18,11 +18,12 @@ import kotlin.coroutines.resume
 private const val TAG = "AsterionRenderEngine"
 
 /**
- * v3.3
+ * v3.3 (Supertonic 3 대응)
  * - WAV를 context.cacheDir에 저장 (외부저장소 권한 불필요)
  * - 씬 MP4 성공 시 WAV 즉시 삭제 → 동시 WAV 최대 1개
- * - getDurationSec: FFmpegKit → MediaMetadataRetriever (ffprobe 플래그 오작동 수정)
- * - concatSubclips BGM afade: $(함수호출) 리터럴 버그 → ${변수} 올바른 보간으로 수정
+ * - getDurationSec: MediaMetadataRetriever 사용 (ffprobe 플래그 오작동 수정)
+ * - concatSubclips BGM afade: 변수 보간 버그 수정
+ * - synthesize 호출: cfg.voiceFile(String) → cfg.sid(Int) 로 교체
  */
 class AsterionRenderEngine(
     private val context: Context,
@@ -55,13 +56,16 @@ class AsterionRenderEngine(
             onProgress("[$id] 스크립트 없음 — 건너뜀")
             return@withContext null
         }
-        val ttsOk = tts.synthesize(row.script, cfg.voiceFile, cfg.speed, wav)
+
+        // cfg.sid = sherpa-onnx speaker ID (0~9)
+        // Supertonic 3 교체 후 voiceFile(String) → sid(Int) 로 변경됨
+        val ttsOk = tts.synthesize(row.script, cfg.sid, cfg.speed, wav)
         if (!ttsOk) {
             onProgress("[$id] ❌ TTS 실패")
             return@withContext null
         }
         val durSec = tts.estimateDurationFromFile(wav)
-        onProgress("[$id] 🎤 ${wav.length()/1024}KB [${cfg.label}] ${durSec}s")
+        onProgress("[$id] 🎤 ${wav.length()/1024}KB [${cfg.label} sid=${cfg.sid}] ${durSec}s")
 
         val bgvName = row.bgFile.substringBefore("|").trim().ifBlank { "VedicEnergyByPlanet_XRP_MovingChart.mp4" }
         val bgvFile = AppConfig.resolveBgv(bgvName)
@@ -91,7 +95,6 @@ class AsterionRenderEngine(
             onProgress("[$id] ✅ ${mp4.length()/1024}KB")
             mp4
         } else {
-            // WAV는 실패 시 보존 (디버그용, 다음 실행 시 덮어씀)
             val errLine = ffLog.lines()
                 .filter { it.isNotBlank() }
                 .lastOrNull { it.contains("Error", ignoreCase=true)
@@ -147,12 +150,9 @@ class AsterionRenderEngine(
         if (bgmFile != null && bgmFile.exists()) {
             onProgress("🎵 BGM 오버레이 (${bgmFile.name})...")
 
-            // getDurationSec으로 페이드아웃 시작점 계산
-            // 영상이 8초 이하면 페이드아웃 생략 (st=0 이 되면 처음부터 페이드 → 어색)
-            val rawDurSec   = getDurationSec(rawOut)
+            val rawDurSec    = getDurationSec(rawOut)
             val fadeOutStart = if (rawDurSec > 8L) rawDurSec - 5L else maxOf(0L, rawDurSec - 1L)
 
-            // filter_complex: FFmpegKit은 쉘 없이 직접 실행 → "" 토큰 처리 지원
             val bgmCmd = "-i ${rawOut.absolutePath} " +
                 "-stream_loop -1 -i ${bgmFile.absolutePath} " +
                 "-filter_complex " +
@@ -184,9 +184,7 @@ class AsterionRenderEngine(
         }
     }
 
-    // ── 영상 길이 조회 — MediaMetadataRetriever 사용 ──────────────────────────
-    // FFmpegKit.execute()는 ffmpeg 실행 → ffprobe 플래그(-show_entries 등) 미지원
-    // MediaMetadataRetriever는 Android 네이티브, 추가 의존성 없음
+    // ── 영상 길이 조회 — MediaMetadataRetriever ───────────────────────────────
     private fun getDurationSec(f: File): Long {
         if (!f.exists()) return 0L
         return try {
@@ -194,7 +192,7 @@ class AsterionRenderEngine(
             mmr.setDataSource(f.absolutePath)
             val ms = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
             mmr.release()
-            ms / 1000L  // ms → 초
+            ms / 1000L
         } catch (e: Exception) {
             Log.w(TAG, "getDurationSec 실패: ${e.message}")
             0L
