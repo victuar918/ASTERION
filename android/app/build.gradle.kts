@@ -34,8 +34,9 @@ dependencies {
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
 
     // FFmpegKit — 영상 렌더링
-    // antonkarpenko 2.1.0은 native .so만 제공, Java API 미포함 → com.arthenica 사용
-    // com.arthenica:ffmpeg-kit-full-gpl:6.0-2.LTS: Maven Central 영구 아다트, Java API + native 세트 일치
-    // full-gpl 포함: libass(ASS 자막), libx264, fontconfig, freetype, fribidi
+    // Appodeal Artifactory에서 Maven 해석 (settings.gradle.kts에 저장소 등록됨)
     implementation("com.arthenica:ffmpeg-kit-full-gpl:6.0-2.LTS")
+    // FFmpegKit 런타임 필수 의존성 — 누락 시 FFmpeg 실행 실패
+    // Appodeal POM이 transitive dep 선언 안 함 → 명시 추가 필수
+    implementation("com.arthenica:smart-exception-java:0.2.1")
 }
