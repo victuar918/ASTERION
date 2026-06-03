@@ -18,12 +18,10 @@ import kotlin.coroutines.resume
 private const val TAG = "AsterionRenderEngine"
 
 /**
- * v3.3 (Supertonic 3 대응)
- * - WAV를 context.cacheDir에 저장 (외부저장소 권한 불필요)
- * - 씬 MP4 성공 시 WAV 즉시 삭제 → 동시 WAV 최대 1개
- * - getDurationSec: MediaMetadataRetriever 사용 (ffprobe 플래그 오작동 수정)
- * - concatSubclips BGM afade: 변수 보간 버그 수정
- * - synthesize 호출: cfg.voiceFile(String) → cfg.sid(Int) 로 교체
+ * v3.4
+ * - BgTransition fade: bgFile 파이프 구분 두 번째 값으로 씬별 fade in/out 적용
+ *   FFmpeg fade 필터: st=start_time(초), d=duration(초) — 프레임 단위 아님
+ * - 기타 로직 완전 무변경 (Supertonic 3 cfg.sid 유지)
  */
 class AsterionRenderEngine(
     private val context: Context,
@@ -47,7 +45,6 @@ class AsterionRenderEngine(
         onProgress: (String)->Unit = {}
     ): File? = withContext(Dispatchers.IO) {
         val id  = "scene_${row.rowIndex.toString().padStart(4,'0')}"
-        // WAV: 앱 내부 cacheDir — 외부저장소 권한 불필요, 성공 시 즉시 삭제
         val wav = File(context.cacheDir, "${id}.wav")
         val mp4 = File(AppConfig.OUTPUT_DIR, "${id}.mp4")
         val cfg = voiceConfig.forSpeaker(row.speaker)
@@ -57,8 +54,6 @@ class AsterionRenderEngine(
             return@withContext null
         }
 
-        // cfg.sid = sherpa-onnx speaker ID (0~9)
-        // Supertonic 3 교체 후 voiceFile(String) → sid(Int) 로 변경됨
         val ttsOk = tts.synthesize(row.script, cfg.sid, cfg.speed, wav)
         if (!ttsOk) {
             onProgress("[$id] ❌ TTS 실패")
@@ -67,14 +62,41 @@ class AsterionRenderEngine(
         val durSec = tts.estimateDurationFromFile(wav)
         onProgress("[$id] 🎤 ${wav.length()/1024}KB [${cfg.label} sid=${cfg.sid}] ${durSec}s")
 
-        val bgvName = row.bgFile.substringBefore("|").trim().ifBlank { "VedicEnergyByPlanet_XRP_MovingChart.mp4" }
+        // ── BgTransition 파싱 ─────────────────────────────────────────────────
+        // bgFile 형식: "파일명|TRANSITION|초|효과코드"
+        // 예) "intro01.mp4|FADE|0.5|...", "video.mp4|NONE|...", "video.mp4"
+        val bgParts        = row.bgFile.split("|")
+        val transitionType = bgParts.getOrNull(1)?.trim()?.uppercase() ?: "FADE"
+        val fadeDurRaw     = bgParts.getOrNull(2)?.trim()?.toFloatOrNull() ?: 0.5f
+        val fadeDurSec     = fadeDurRaw.coerceIn(0.3f, 2.0f)
+
+        // 씬 길이 계산 (fade in/out 겹침 방지)
+        val sceneDurSec    = durSec.toString().toDoubleOrNull() ?: 5.0
+        // fade in + fade out이 씬 길이를 초과하지 않도록 클램프
+        val effectiveFade  = if (sceneDurSec < fadeDurSec * 2)
+            (sceneDurSec / 2).toFloat() else fadeDurSec
+        val fadeOutStart   = maxOf(0.0, sceneDurSec - effectiveFade)
+
+        // vf 필터 문자열 — NONE이면 빈 문자열, 공백 없음(FFmpegKit 쿼팅 불필요)
+        val vfFilter = when (transitionType) {
+            "NONE" -> ""
+            else   -> "fade=t=in:st=0:d=${String.format("%.3f", effectiveFade)}" +
+                      ",fade=t=out:st=${String.format("%.3f", fadeOutStart)}" +
+                      ":d=${String.format("%.3f", effectiveFade)}"
+        }
+        val vfOption = if (vfFilter.isNotBlank()) "-vf $vfFilter " else ""
+
+        // ── BGV 파일 경로 결정 ────────────────────────────────────────────────
+        val bgvName = bgParts[0].trim().ifBlank { "VedicEnergyByPlanet_XRP_MovingChart.mp4" }
         val bgvFile = AppConfig.resolveBgv(bgvName)
 
+        // ── FFmpeg 명령 구성 ──────────────────────────────────────────────────
         val cmd = if (bgvFile.exists()) {
             "-stream_loop -1 -i ${bgvFile.absolutePath} " +
             "-i ${wav.absolutePath} " +
             "-map 0:v:0 -map 1:a:0 " +
             "-c:v libx264 -preset veryfast -crf 23 " +
+            vfOption +
             "-c:a aac -b:a 128k " +
             "-shortest -movflags +faststart " +
             "-y ${mp4.absolutePath}"
@@ -83,15 +105,16 @@ class AsterionRenderEngine(
             "-i ${wav.absolutePath} " +
             "-map 0:v:0 -map 1:a:0 " +
             "-c:v libx264 -preset veryfast -crf 23 " +
+            vfOption +
             "-c:a aac -b:a 128k " +
             "-shortest -movflags +faststart " +
             "-y ${mp4.absolutePath}"
         }
-        onProgress("[$id] FFmpeg 시작 (BGV=${bgvFile.exists()})...")
+        onProgress("[$id] FFmpeg 시작 (BGV=${bgvFile.exists()}, fade=$transitionType ${String.format("%.1f",effectiveFade)}s)...")
 
         val (ok, ffLog) = ffmpegRun(cmd)
         return@withContext if (ok && mp4.exists() && mp4.length() > 0) {
-            wav.delete()  // 성공 즉시 삭제 — cacheDir 공간 확보
+            wav.delete()
             onProgress("[$id] ✅ ${mp4.length()/1024}KB")
             mp4
         } else {
@@ -110,7 +133,7 @@ class AsterionRenderEngine(
         }
     }
 
-    // ── 전체 concat + BGM ─────────────────────────────────────────────────────
+    // ── 전체 concat + BGM (변경 없음) ────────────────────────────────────────
     suspend fun concatSubclips(
         outputName: String,
         bgmFileName: String,
@@ -132,7 +155,6 @@ class AsterionRenderEngine(
         val rawOut   = File(AppConfig.OUTPUT_DIR, "${outputName}_raw.mp4")
         val finalOut = File(AppConfig.OUTPUT_DIR, "${outputName}.mp4")
 
-        // 1단계: concat (스트림 복사 — 재인코딩 없음)
         val concatCmd = "-f concat -safe 0 " +
             "-i ${listFile.absolutePath} " +
             "-c:v copy -c:a copy " +
@@ -145,14 +167,11 @@ class AsterionRenderEngine(
         }
         onProgress("✅ concat 완료 (${rawOut.length()/1024/1024}MB)")
 
-        // 2단계: BGM 오버레이
         val bgmFile = AppConfig.resolveBgm(bgmFileName)
         if (bgmFile != null && bgmFile.exists()) {
             onProgress("🎵 BGM 오버레이 (${bgmFile.name})...")
-
             val rawDurSec    = getDurationSec(rawOut)
             val fadeOutStart = if (rawDurSec > 8L) rawDurSec - 5L else maxOf(0L, rawDurSec - 1L)
-
             val bgmCmd = "-i ${rawOut.absolutePath} " +
                 "-stream_loop -1 -i ${bgmFile.absolutePath} " +
                 "-filter_complex " +
@@ -162,7 +181,6 @@ class AsterionRenderEngine(
                 "-c:v copy -c:a aac -b:a 192k " +
                 "-movflags +faststart " +
                 "-y ${finalOut.absolutePath}"
-
             val (bgmOk, bgmLog) = ffmpegRun(bgmCmd)
             return@withContext if (bgmOk && finalOut.exists() && finalOut.length() > 0) {
                 rawOut.delete()
@@ -184,7 +202,6 @@ class AsterionRenderEngine(
         }
     }
 
-    // ── 영상 길이 조회 — MediaMetadataRetriever ───────────────────────────────
     private fun getDurationSec(f: File): Long {
         if (!f.exists()) return 0L
         return try {
@@ -199,7 +216,6 @@ class AsterionRenderEngine(
         }
     }
 
-    // ── FFmpegKit 코루틴 래퍼 ─────────────────────────────────────────────────
     private suspend fun ffmpegRun(cmd: String): Pair<Boolean, String> =
         suspendCancellableCoroutine { cont ->
             Log.d(TAG, "FFmpeg cmd: $cmd")

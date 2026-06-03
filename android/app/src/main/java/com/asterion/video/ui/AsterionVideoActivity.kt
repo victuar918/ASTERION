@@ -1,6 +1,7 @@
 package com.asterion.video.ui
 
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
@@ -17,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import com.asterion.video.AppConfig
 import com.asterion.video.auth.ServiceAccountAuth
 import com.asterion.video.render.AsterionRenderEngine
+import com.asterion.video.service.RenderForegroundService
 import com.asterion.video.sheets.SheetsVideoReader
 import com.asterion.video.sheets.VIDEO_SS_ID
 import com.asterion.video.tts.SpeakerConfig
@@ -105,13 +107,12 @@ class AsterionVideoActivity : AppCompatActivity() {
         }
     }
 
+    // ── 화자 UI (Supertonic 3 — 변경 없음) ───────────────────────────────────
     private fun buildSpeakerUI(speakers: List<Int>) {
         llSpeakers.removeAllViews()
         speakerSpinners.clear(); speakerSeekBars.clear(); speakerSpeedLabels.clear()
         if (speakers.isEmpty()) return
         llSpeakers.addView(TextView(this).apply { text="🎤 화자 음성 설정 (Supertonic 3)"; textSize=12f; setTextColor(0xFFCCCCCC.toInt()); setPadding(0,16,0,4) })
-        // defVoice: ASTERION 화자번호 → Supertonic 3 sid 초기 선택 인덱스
-        // VoiceConfig.SID_LIST = [0,1,...,9] 이므로 인덱스 = sid 값과 일치
         val defVoice = mapOf(1 to 0, 2 to 5, 3 to 1)
         val defSpeed = mapOf(1 to 50, 2 to 42, 3 to 58)
         for (sid in speakers.sorted()) {
@@ -145,7 +146,6 @@ class AsterionVideoActivity : AppCompatActivity() {
     }
 
     private fun testSpeaker(sid: Int) {
-        // VoiceConfig.SID_LIST = [0,1,...,9] — 스피너 선택 위치 = sherpa-onnx speaker ID
         val sherpaSid = VoiceConfig.SID_LIST[speakerSpinners[sid]?.selectedItemPosition ?: 0]
         val speed     = progressToSpeed(speakerSeekBars[sid]?.progress ?: 50)
         val testText  = when(sid){1->"안녕하세요. 에너지 분석을 시작합니다.";2->"극과의 에너지가 축적되는 구간입니다.";else->"운명은 해석하는 순간 바뀌지 않습니다."}
@@ -179,8 +179,6 @@ class AsterionVideoActivity : AppCompatActivity() {
         String.format("%.2f", 0.7f + p.toFloat()/100f*0.6f).toFloat()
 
     private fun buildVoiceConfig(): VoiceConfig {
-        // speakerNum = ASTERION 화자 번호 (speakerSpinners 의 key: 1, 2, 3...)
-        // sherpaSid  = Supertonic 3 speaker ID (0~9) — 스피너 선택 위치와 일치
         val map = speakerSpinners.keys.associateWith { speakerNum ->
             val sherpaSid = VoiceConfig.SID_LIST[speakerSpinners[speakerNum]?.selectedItemPosition ?: 0]
             val speed     = progressToSpeed(speakerSeekBars[speakerNum]?.progress ?: 50)
@@ -245,6 +243,11 @@ class AsterionVideoActivity : AppCompatActivity() {
         }
         val sheet       = spinnerSheet.selectedItem?.toString() ?: return
         val voiceConfig = buildVoiceConfig()
+
+        // Foreground Service 시작 — 버튼 클릭(메인 스레드) 에서 5초 이내 호출 필수
+        // minSdk=26(API 26=Oreo) 이므로 startForegroundService() 직접 사용
+        startForegroundService(Intent(this, RenderForegroundService::class.java))
+
         isRendering = true; btnStart.isEnabled = false; btnStop.isEnabled = true
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -275,11 +278,11 @@ class AsterionVideoActivity : AppCompatActivity() {
                 }
 
                 if (isRendering && done > 0) {
-                    val safeSheet  = sheet.replace(Regex("[^\\w가-힣]"), "_")
+                    val safeSheet = sheet.replace(Regex("[^\\w가-힣]"), "_")
                     updateStatus("🔗 씬 ${done}개 concat 중...")
                     val finalFile = engine!!.concatSubclips(
-                        outputName   = safeSheet,
-                        bgmFileName  = data.videoMeta.mainBgm
+                        outputName  = safeSheet,
+                        bgmFileName = data.videoMeta.mainBgm
                     ) { msg -> appendLog(msg); updateStatus(msg) }
                     if (finalFile != null && finalFile.exists()) {
                         updateStatus("🎬 완료: ${finalFile.name} (${finalFile.length()/1024/1024}MB)")
@@ -295,16 +298,29 @@ class AsterionVideoActivity : AppCompatActivity() {
                 updateStatus("❌ ${e.message}")
             } finally {
                 isRendering = false
+                // Foreground Service 종료 — 렌더링 완료/실패/중지 모든 경우
+                stopService(Intent(this@AsterionVideoActivity, RenderForegroundService::class.java))
                 withContext(Dispatchers.Main) { btnStart.isEnabled = true; btnStop.isEnabled = false }
             }
         }
     }
 
-    private fun stopRendering() { isRendering = false; updateStatus("⏹ 중지") }
+    private fun stopRendering() {
+        isRendering = false
+        stopService(Intent(this, RenderForegroundService::class.java))
+        updateStatus("⏹ 중지")
+    }
 
     private fun updateStatus(msg: String) = lifecycleScope.launch(Dispatchers.Main) { tvStatus.text = msg }
     private fun appendLog(msg: String) = lifecycleScope.launch(Dispatchers.Main) {
         tvLog.text = (tvLog.text.toString().lines().takeLast(15) + msg).joinToString("\n")
     }
-    override fun onDestroy() { super.onDestroy(); mediaPlayer?.release(); ttsEngine?.release() }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mediaPlayer?.release()
+        ttsEngine?.release()
+        // 앱 종료 시 서비스 안전 정리 (렌더링 중 강제 종료 케이스)
+        stopService(Intent(this, RenderForegroundService::class.java))
+    }
 }
