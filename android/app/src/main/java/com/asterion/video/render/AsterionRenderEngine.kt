@@ -54,13 +54,13 @@ class AsterionRenderEngine(
             return@withContext null
         }
 
-        val ttsOk = tts.synthesize(row.script, cfg.sid, cfg.speed, wav)
+        val ttsOk = tts.synthesize(row.script, cfg.sid, cfg.speed, wav, cfg.numSteps)
         if (!ttsOk) {
             onProgress("[$id] ❌ TTS 실패")
             return@withContext null
         }
         val durSec = tts.estimateDurationFromFile(wav)
-        onProgress("[$id] 🎤 ${wav.length()/1024}KB [${cfg.label} sid=${cfg.sid}] ${durSec}s")
+        onProgress("[$id] 🎤 ${wav.length()/1024}KB [${cfg.label} sid=${cfg.sid} steps=${cfg.numSteps}] ${durSec}s")
 
         // ── BgTransition 파싱 ─────────────────────────────────────────────────
         // bgFile 형식: "파일명|TRANSITION|초|효과코드"
