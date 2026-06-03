@@ -18,10 +18,13 @@ import kotlin.coroutines.resume
 private const val TAG = "AsterionRenderEngine"
 
 /**
- * v3.4
- * - BgTransition fade: bgFile 파이프 구분 두 번째 값으로 씬별 fade in/out 적용
- *   FFmpeg fade 필터: st=start_time(초), d=duration(초) — 프레임 단위 아님
- * - 기타 로직 완전 무변경 (Supertonic 3 cfg.sid 유지)
+ * v3.5
+ * - Phase C: CardRenderer 연동 — cardMain/cardSub/highlightWord PNG 오버레이
+ *   커맨드 4-케이스 분기:
+ *     [card+fade]  filter_complex overlay+fade + pix_fmt yuv420p
+ *     [card+NONE]  filter_complex overlay only + pix_fmt yuv420p
+ *     [no card+fade]  -vf fade (Phase B 유지)
+ *     [no card+NONE]  폸 커맨드 (Phase B 유지)
  */
 class AsterionRenderEngine(
     private val context: Context,
@@ -54,70 +57,100 @@ class AsterionRenderEngine(
             return@withContext null
         }
 
-        val ttsOk = tts.synthesize(row.script, cfg.sid, cfg.speed, wav, cfg.numSteps)
+        // ── TTS WAV 생성 ────────────────────────────────────────────────
+        val ttsOk = tts.synthesize(row.script, cfg.sid, cfg.speed, wav)
         if (!ttsOk) {
             onProgress("[$id] ❌ TTS 실패")
             return@withContext null
         }
         val durSec = tts.estimateDurationFromFile(wav)
-        onProgress("[$id] 🎤 ${wav.length()/1024}KB [${cfg.label} sid=${cfg.sid} steps=${cfg.numSteps}] ${durSec}s")
+        onProgress("[$id] 🎤 ${wav.length()/1024}KB [${cfg.label} sid=${cfg.sid}] ${durSec}s")
 
-        // ── BgTransition 파싱 ─────────────────────────────────────────────────
-        // bgFile 형식: "파일명|TRANSITION|초|효과코드"
-        // 예) "intro01.mp4|FADE|0.5|...", "video.mp4|NONE|...", "video.mp4"
+        // ── BgTransition 파싱 ────────────────────────────────────────────────
         val bgParts        = row.bgFile.split("|")
         val transitionType = bgParts.getOrNull(1)?.trim()?.uppercase() ?: "FADE"
         val fadeDurRaw     = bgParts.getOrNull(2)?.trim()?.toFloatOrNull() ?: 0.5f
         val fadeDurSec     = fadeDurRaw.coerceIn(0.3f, 2.0f)
-
-        // 씬 길이 계산 (fade in/out 겹침 방지)
         val sceneDurSec    = durSec.toString().toDoubleOrNull() ?: 5.0
-        // fade in + fade out이 씬 길이를 초과하지 않도록 클램프
-        val effectiveFade  = if (sceneDurSec < fadeDurSec * 2)
-            (sceneDurSec / 2).toFloat() else fadeDurSec
+        val effectiveFade  = if (sceneDurSec < fadeDurSec * 2) (sceneDurSec / 2).toFloat() else fadeDurSec
         val fadeOutStart   = maxOf(0.0, sceneDurSec - effectiveFade)
-
-        // vf 필터 문자열 — NONE이면 빈 문자열, 공백 없음(FFmpegKit 쿼팅 불필요)
         val vfFilter = when (transitionType) {
             "NONE" -> ""
             else   -> "fade=t=in:st=0:d=${String.format("%.3f", effectiveFade)}" +
                       ",fade=t=out:st=${String.format("%.3f", fadeOutStart)}" +
                       ":d=${String.format("%.3f", effectiveFade)}"
         }
-        val vfOption = if (vfFilter.isNotBlank()) "-vf $vfFilter " else ""
 
-        // ── BGV 파일 경로 결정 ────────────────────────────────────────────────
+        // ── BGV 파일 결정 ────────────────────────────────────────────────
         val bgvName = bgParts[0].trim().ifBlank { "VedicEnergyByPlanet_XRP_MovingChart.mp4" }
         val bgvFile = AppConfig.resolveBgv(bgvName)
+        val bgvExists = bgvFile.exists()
 
-        // ── FFmpeg 명령 구성 ──────────────────────────────────────────────────
-        val cmd = if (bgvFile.exists()) {
-            "-stream_loop -1 -i ${bgvFile.absolutePath} " +
-            "-i ${wav.absolutePath} " +
-            "-map 0:v:0 -map 1:a:0 " +
-            "-c:v libx264 -preset veryfast -crf 23 " +
-            vfOption +
-            "-c:a aac -b:a 128k " +
-            "-shortest -movflags +faststart " +
-            "-y ${mp4.absolutePath}"
-        } else {
-            "-f lavfi -i color=c=black:size=1920x1080:rate=30 " +
-            "-i ${wav.absolutePath} " +
-            "-map 0:v:0 -map 1:a:0 " +
-            "-c:v libx264 -preset veryfast -crf 23 " +
-            vfOption +
-            "-c:a aac -b:a 128k " +
-            "-shortest -movflags +faststart " +
-            "-y ${mp4.absolutePath}"
+        // ── 카드 PNG 렌더링 ─────────────────────────────────────────────
+        // 캐시 Dir 사용 — 외부저장소 권한 불필요, 성공 후 즉시 삭제
+        val cardPng = File(context.cacheDir, "${id}_card.png")
+        val hasCard = CardRenderer.render(row, cardPng)
+
+        // ── FFmpeg 명령 4-케이스 분기 ─────────────────────────────────────
+        // 비디오 입력 (BGV 또는 lavfi 검은 배경)
+        val baseVideoIn = if (bgvExists)
+            "-stream_loop -1 -i ${bgvFile.absolutePath}"
+        else
+            "-f lavfi -i color=c=black:size=1920x1080:rate=30"
+
+        val cmd = when {
+            // 케이스 1: 카드 + fade — filter_complex에 overlay 후 fade 체인
+            hasCard && vfFilter.isNotBlank() ->
+                "$baseVideoIn -i ${wav.absolutePath} -i ${cardPng.absolutePath} " +
+                "-filter_complex " +
+                "\"[0:v][2:v]overlay=0:0[ov];[ov]${vfFilter}[vout]\" " +
+                "-map \"[vout]\" -map 1:a " +
+                "-c:v libx264 -preset veryfast -crf 23 " +
+                "-c:a aac -b:a 128k " +
+                "-pix_fmt yuv420p -shortest -movflags +faststart " +
+                "-y ${mp4.absolutePath}"
+
+            // 케이스 2: 카드 + 전환 없음 — overlay만
+            hasCard ->
+                "$baseVideoIn -i ${wav.absolutePath} -i ${cardPng.absolutePath} " +
+                "-filter_complex " +
+                "\"[0:v][2:v]overlay=0:0[vout]\" " +
+                "-map \"[vout]\" -map 1:a " +
+                "-c:v libx264 -preset veryfast -crf 23 " +
+                "-c:a aac -b:a 128k " +
+                "-pix_fmt yuv420p -shortest -movflags +faststart " +
+                "-y ${mp4.absolutePath}"
+
+            // 케이스 3: 카드 없음 + fade — -vf (Phase B 동일)
+            vfFilter.isNotBlank() ->
+                "$baseVideoIn -i ${wav.absolutePath} " +
+                "-map 0:v:0 -map 1:a:0 " +
+                "-c:v libx264 -preset veryfast -crf 23 " +
+                "-vf $vfFilter " +
+                "-c:a aac -b:a 128k " +
+                "-shortest -movflags +faststart " +
+                "-y ${mp4.absolutePath}"
+
+            // 케이스 4: 카드 없음 + 전환 없음 — plain (Phase B 동일)
+            else ->
+                "$baseVideoIn -i ${wav.absolutePath} " +
+                "-map 0:v:0 -map 1:a:0 " +
+                "-c:v libx264 -preset veryfast -crf 23 " +
+                "-c:a aac -b:a 128k " +
+                "-shortest -movflags +faststart " +
+                "-y ${mp4.absolutePath}"
         }
-        onProgress("[$id] FFmpeg 시작 (BGV=${bgvFile.exists()}, fade=$transitionType ${String.format("%.1f",effectiveFade)}s)...")
+
+        onProgress("[$id] FFmpeg 시작 (BGV=$bgvExists, card=$hasCard, fade=$transitionType)...")
 
         val (ok, ffLog) = ffmpegRun(cmd)
         return@withContext if (ok && mp4.exists() && mp4.length() > 0) {
             wav.delete()
+            if (hasCard) cardPng.delete()  // PNG도 성공 후 즉시 삭제
             onProgress("[$id] ✅ ${mp4.length()/1024}KB")
             mp4
         } else {
+            // WAV/PNG 실패 시 보존 (다음 실행 시 덮어씀)
             val errLine = ffLog.lines()
                 .filter { it.isNotBlank() }
                 .lastOrNull { it.contains("Error", ignoreCase=true)
