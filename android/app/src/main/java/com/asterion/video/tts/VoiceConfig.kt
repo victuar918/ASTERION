@@ -50,9 +50,9 @@ data class VoiceConfig(val speakers: Map<Int, SpeakerConfig>) {
          * sid 0-4: 남성 계열 / sid 5-9: 여성 계열 (Supertonic 3 기준)
          */
         val DEFAULT = VoiceConfig(mapOf(
-            1 to SpeakerConfig(sid = 0,  speed = 1.0f,  label = "아스터"),
-            2 to SpeakerConfig(sid = 5,  speed = 0.95f, label = "리언"),
-            3 to SpeakerConfig(sid = 1,  speed = 1.05f, label = "나레이터")
+            1 to SpeakerConfig(sid = 5,  speed = 1.0f,  label = "아스터"),   // 남성 전문가 → sid 5~9
+            2 to SpeakerConfig(sid = 0,  speed = 0.95f, label = "리언"),     // 여성 전문가 → sid 0~4
+            3 to SpeakerConfig(sid = 6,  speed = 1.05f, label = "나레이터")  // 남성 나레이터 → sid 5~9
         ))
 
         /** Supertonic 3 화자 ID 목록 (0~9, 총 10명) */
@@ -63,10 +63,10 @@ data class VoiceConfig(val speakers: Map<Int, SpeakerConfig>) {
          * 이름을 VOICE_LABELS로 유지 — AsterionVideoActivity 코드 변경 최소화
          */
         val VOICE_LABELS: List<String> = listOf(
-            "sid-0 (남성①)", "sid-1 (남성②)", "sid-2 (남성③)",
-            "sid-3 (남성④)", "sid-4 (남성⑤)",
-            "sid-5 (여성①)", "sid-6 (여성②)", "sid-7 (여성③)",
-            "sid-8 (여성④)", "sid-9 (여성⑤)"
+            "sid-0 (여성①)", "sid-1 (여성②)", "sid-2 (여성③)",
+            "sid-3 (여성④)", "sid-4 (여성⑤)",
+            "sid-5 (남성①)", "sid-6 (남성②)", "sid-7 (남성③)",
+            "sid-8 (남성④)", "sid-9 (남성⑤)"
         )
 
         /**
