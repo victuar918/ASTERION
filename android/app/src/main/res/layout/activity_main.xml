@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#1A1A2E">
+
+    <!-- 시트 로드 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="8dp">
+
+        <EditText
+            android:id="@+id/etSheetName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="시트명 (예: VS_XRP_20260603_daily_1423)"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#888888"
+            android:background="#2D2D44"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:textSize="13sp"
+            android:singleLine="true"
+            android:imeOptions="actionDone" />
+
+        <Button
+            android:id="@+id/btnLoadSheet"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="로드"
+            android:backgroundTint="#4A90E2"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- 로드된 시트명 표시 -->
+    <TextView
+        android:id="@+id/tvSheetName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="시트를 로드하세요"
+        android:textColor="#AAAAAA"
+        android:textSize="12sp"
+        android:layout_marginBottom="8dp"
+        android:ellipsize="end"
+        android:singleLine="true" />
+
+    <!-- 화자 선택 + 테스트 플레이 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="6dp">
+
+        <Spinner
+            android:id="@+id/spinnerSpeaker"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="#2D2D44" />
+
+        <Button
+            android:id="@+id/btnTestPlay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="테스트"
+            android:backgroundTint="#7C4DFF"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- 테스트 대본 입력 -->
+    <EditText
+        android:id="@+id/etTestText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="테스트 대본 (비워두면 기본 문장 사용)"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#888888"
+        android:background="#2D2D44"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:textSize="12sp"
+        android:layout_marginBottom="10dp"
+        android:minLines="2"
+        android:maxLines="3"
+        android:gravity="top|start" />
+
+    <!-- 영상 제작 버튼 -->
+    <Button
+        android:id="@+id/btnRender"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="영상 제작 시작"
+        android:backgroundTint="#00C853"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        android:layout_marginBottom="8dp" />
+
+    <!-- 진행률 바 (초기: 숨김) -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="8dp"
+        android:visibility="gone"
+        android:progressTint="#00C853"
+        android:layout_marginBottom="8dp" />
+
+    <!-- 상태 로그 -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#0D0D1A"
+        android:padding="8dp">
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="초기화 중..."
+            android:textColor="#CCCCCC"
+            android:textSize="11sp"
+            android:fontFamily="monospace"
+            android:lineSpacingExtra="3dp" />
+    </ScrollView>
+
+</LinearLayout>
