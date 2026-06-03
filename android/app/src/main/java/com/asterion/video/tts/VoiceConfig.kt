@@ -66,7 +66,7 @@ data class VoiceConfig(
 class SupertonicTtsEngine(private val context: Context) {
 
     private var tts: OfflineTts? = null
-    val sampleRate: Int get() = tts?.sampleRate ?: 22050
+    val sampleRate: Int get() = tts?.sampleRate() ?: 22050
 
     companion object {
         const val MODEL_ARCHIVE_URL =
@@ -91,7 +91,7 @@ class SupertonicTtsEngine(private val context: Context) {
                 )
             )
             tts = OfflineTts(config = config)
-            onProgress("TTS 엔진 준비 완료 (Supertonic-3, sampleRate=${tts?.sampleRate})")
+            onProgress("TTS 엔진 준비 완료 (Supertonic-3, sampleRate=${tts?.sampleRate()})")
         } catch (e: Exception) {
             Log.e(TAG, "TTS 초기화 실패: $e")
             onProgress("❌ TTS 초기화 실패: ${e.message}")
