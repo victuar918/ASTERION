@@ -1,4 +1,4 @@
-package com.asterion.video
+package com.asterion.video.ui
 
 import android.os.Bundle
 import android.util.Log
@@ -6,6 +6,7 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.asterion.video.R
 import com.asterion.video.auth.ServiceAccountAuth
 import com.asterion.video.model.*
 import com.asterion.video.render.AsterionRenderEngine
@@ -145,7 +146,7 @@ class AsterionVideoActivity : AppCompatActivity() {
             result.scriptRows.forEachIndexed { idx, row ->
                 if (!isActive) { updateStatus("⏹ 취소됨"); return@launch }
                 val scene = eng.renderScene(row, result.videoMeta) { msg ->
-                    updateStatus("[${idx + 1}/${result.rows.size}] $msg")
+                    updateStatus("[${idx + 1}/${result.scriptRows.size}] $msg")
                 }
                 if (scene != null) ok++ else fail++
                 progressBar.progress = idx + 1
