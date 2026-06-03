@@ -29,7 +29,7 @@ private const val TAG = "SupertonicTtsEngine"
  * @param speed 발화 속도 배율 (1.0 = 보통, 범위: 0.5~2.0)
  * @param label UI 표시명
  */
-data class SpeakerConfig(val sid: Int, val speed: Float, val label: String)
+data class SpeakerConfig(val sid: Int, val speed: Float, val label: String, val numSteps: Int = 8)
 
 /**
  * 전체 화자 구성
@@ -50,9 +50,9 @@ data class VoiceConfig(val speakers: Map<Int, SpeakerConfig>) {
          * sid 0-4: 남성 계열 / sid 5-9: 여성 계열 (Supertonic 3 기준)
          */
         val DEFAULT = VoiceConfig(mapOf(
-            1 to SpeakerConfig(sid = 5,  speed = 1.0f,  label = "아스터"),   // 남성 전문가 → sid 5~9
-            2 to SpeakerConfig(sid = 0,  speed = 0.95f, label = "리언"),     // 여성 전문가 → sid 0~4
-            3 to SpeakerConfig(sid = 6,  speed = 1.05f, label = "나레이터")  // 남성 나레이터 → sid 5~9
+            1 to SpeakerConfig(sid = 5, speed = 1.0f,  label = "아스터",   numSteps = 8),
+            2 to SpeakerConfig(sid = 0, speed = 0.95f, label = "리언",     numSteps = 8),
+            3 to SpeakerConfig(sid = 6, speed = 1.05f, label = "나레이터", numSteps = 8)
         ))
 
         /** Supertonic 3 화자 ID 목록 (0~9, 총 10명) */
@@ -154,7 +154,7 @@ class SupertonicTtsEngine(private val context: Context) {
      * @param outputFile 저장할 WAV 파일 경로 (cacheDir 권장)
      * @return 성공 여부
      */
-    fun synthesize(text: String, sid: Int, speed: Float, outputFile: File): Boolean {
+    fun synthesize(text: String, sid: Int, speed: Float, outputFile: File, numSteps: Int = NUM_STEPS): Boolean {
         val engine = tts ?: run {
             Log.e(TAG, "synthesize: TTS 엔진이 초기화되지 않음")
             return false
@@ -166,7 +166,7 @@ class SupertonicTtsEngine(private val context: Context) {
         return try {
             val genConfig = GenerationConfig(
                 sid      = sid.coerceIn(0, 9),
-                numSteps = NUM_STEPS,
+                numSteps = numSteps,
                 speed    = speed.coerceIn(0.5f, 2.0f),
                 // ★ 한국어 발음을 위해 필수 — 없으면 영어식 발음으로 합성됨
                 extra    = mapOf("lang" to "ko"),
