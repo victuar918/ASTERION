@@ -113,7 +113,9 @@ class AsterionVideoActivity : AppCompatActivity() {
         speakerSpinners.clear(); speakerSeekBars.clear(); speakerSpeedLabels.clear()
         if (speakers.isEmpty()) return
         llSpeakers.addView(TextView(this).apply { text="🎤 화자 음성 설정 (Supertonic 3)"; textSize=12f; setTextColor(0xFFCCCCCC.toInt()); setPadding(0,16,0,4) })
-        val defVoice = mapOf(1 to 0, 2 to 5, 3 to 1)
+        // defVoice: ASTERION 화자번호 → 스피너 초기 인덱스 (= sherpa-onnx sid)
+        // sid 0-4 = 여성, sid 5-9 = 남성
+        val defVoice = mapOf(1 to 5, 2 to 0, 3 to 6)
         val defSpeed = mapOf(1 to 50, 2 to 42, 3 to 58)
         for (sid in speakers.sorted()) {
             val name = when(sid){1->"아스터";2->"리언";3->"나레이터";else->"Speaker$sid"}
