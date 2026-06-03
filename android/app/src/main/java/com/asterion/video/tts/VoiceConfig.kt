@@ -6,9 +6,13 @@ import com.k2fsa.sherpa.onnx.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.BufferedInputStream
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 
 // ============================================================
 // ASTERION TTS — VoiceConfig v3.1
@@ -132,10 +136,9 @@ class SupertonicTtsEngine(private val context: Context) {
                 onProgress("TTS 모델 다운로드 중...")
                 downloadFile(MODEL_ARCHIVE_URL, archiveFile, onProgress)
                 onProgress("압축 해제 중...")
-                val result = ProcessBuilder("tar", "-xjf", archiveFile.absolutePath, "-C", ttsDir.absolutePath)
-                    .redirectErrorStream(true).start().waitFor()
+                extractTarBz2(archiveFile, ttsDir)
                 archiveFile.delete()
-                if (result != 0 || !REQUIRED_FILES.all { File(modelDir, it).exists() }) {
+                if (!REQUIRED_FILES.all { File(modelDir, it).exists() }) {
                     onProgress("❌ 압축 해제 실패 — 수동으로 $modelDir 에 모델 파일 복사 필요")
                     return@withContext null
                 }
@@ -143,7 +146,7 @@ class SupertonicTtsEngine(private val context: Context) {
                 modelDir
             } catch (e: Exception) {
                 archiveFile.delete()
-                onProgress("❌ 다운로드 실패: ${e.message}")
+                onProgress("❌ 압축 해제 또는 다운로드 실패: ${e.message}")
                 null
             }
         }
@@ -165,6 +168,38 @@ class SupertonicTtsEngine(private val context: Context) {
             }
         }
         conn.disconnect()
+    }
+
+    // Apache Commons Compress 기반 tar.bz2 압축 해제
+    // ProcessBuilder("tar", ...) 대신 사용: Android 기본 tar 는 bzip2(-j) 미지원
+    private fun extractTarBz2(archiveFile: File, destDir: File) {
+        FileInputStream(archiveFile).use { fis ->
+            BufferedInputStream(fis).use { bis ->
+                BZip2CompressorInputStream(bis).use { bzip2 ->
+                    TarArchiveInputStream(bzip2).use { tar ->
+                        val destCanon = destDir.canonicalPath
+                        var entry = tar.nextTarEntry
+                        while (entry != null) {
+                            if (!tar.canReadEntryData(entry)) { entry = tar.nextTarEntry; continue }
+                            val outFile = File(destDir, entry.name)
+                            val outCanon = outFile.canonicalPath
+                            // 경로 탈출 공격 방지
+                            if (!outCanon.startsWith("$destCanon${File.separator}")
+                                && outCanon != destCanon) {
+                                entry = tar.nextTarEntry; continue
+                            }
+                            if (entry.isDirectory) {
+                                outFile.mkdirs()
+                            } else {
+                                outFile.parentFile?.mkdirs()
+                                FileOutputStream(outFile).use { fos -> tar.copyTo(fos) }
+                            }
+                            entry = tar.nextTarEntry
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fun release() { tts = null }
