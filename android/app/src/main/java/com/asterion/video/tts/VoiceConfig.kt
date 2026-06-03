@@ -138,8 +138,8 @@ class SupertonicTtsEngine(private val context: Context) {
         tts = OfflineTts(assetManager = null, config = config)
 
         // numSpeakers / sampleRate 는 버전에 따라 없을 수 있어 방어적으로 호출
-        val numSpk = runCatching { tts!!.numSpeakers }.getOrDefault(-1)
-        val sr     = runCatching { tts!!.sampleRate  }.getOrDefault(SAMPLE_RATE)
+        val numSpk = runCatching { tts!!.numSpeakers() }.getOrDefault(-1)
+        val sr     = runCatching { tts!!.sampleRate()  }.getOrDefault(SAMPLE_RATE)
         onProgress("✅ Supertonic 3 준비 완료 (speakers=$numSpk sampleRate=$sr steps=$NUM_STEPS)")
     }
 
