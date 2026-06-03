@@ -1,269 +1,324 @@
 package com.asterion.video.render
 
 import android.content.Context
-import android.media.MediaMetadataRetriever
 import android.util.Log
-import com.arthenica.ffmpegkit.FFmpegKit
-import com.arthenica.ffmpegkit.ReturnCode
 import com.asterion.video.AppConfig
 import com.asterion.video.model.*
 import com.asterion.video.tts.SupertonicTtsEngine
 import com.asterion.video.tts.VoiceConfig
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
-import kotlin.coroutines.resume
 
-private const val TAG = "AsterionRenderEngine"
+// ============================================================
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.1
+// [버그①] ASS 헤더 \\n 리터럴 → 실제 줄바꿈 수정 (카드 불출력 원인)
+// [버그②] concat 리스트 "\\n" → "\n" 수정
+// [버그③] 카드 텍스트 위치 → 박스 내부 중앙 정렬
+// [버그④] Pattern C → 화면 정중앙 배치
+// [버그⑤] 워터마크 → concatSubclips 단계로 이전 (15초 등장)
+// [버그⑥] BGM 덕킹 구현 (13→15초 0.35→0.10)
+// [버그⑦] 임시파일 OUTPUT/.temp_scenes/ 격리 + concat 후 삭제
+// [버그⑧] 9화자 VoiceConfig 반영
+// [버그⑨] concatSubclips 시그니처 수정
+// [버그⑩] BG 트림 입력측 -t 옵션으로 변경
+// [신규] EDGE_GLOW 효과 / playPreviewDirect (AudioTrack 스트리밍)
+// ============================================================
 
-/**
- * v3.5
- * - Phase C: CardRenderer 연동 — cardMain/cardSub/highlightWord PNG 오버레이
- *   커맨드 4-케이스 분기:
- *     [card+fade]  filter_complex overlay+fade + pix_fmt yuv420p
- *     [card+NONE]  filter_complex overlay only + pix_fmt yuv420p
- *     [no card+fade]  -vf fade (Phase B 유지)
- *     [no card+NONE]  폸 커맨드 (Phase B 유지)
- */
+private const val TAG         = "AsterionRenderEngine"
+private const val VIDEO_W     = 1920
+private const val VIDEO_H     = 1080
+private const val TEMP_SUBDIR = ".temp_scenes"
+
 class AsterionRenderEngine(
     private val context: Context,
-    private val tts: SupertonicTtsEngine
+    private val voiceConfig: VoiceConfig = VoiceConfig.DEFAULT
 ) {
-    suspend fun init(onProgress: (String)->Unit = {}) {
-        val outputExists = AppConfig.OUTPUT_DIR.exists() && AppConfig.OUTPUT_DIR.canWrite()
-        if (!outputExists) {
-            onProgress("⚠ OUTPUT_DIR 접근 불가: ${AppConfig.OUTPUT_DIR.absolutePath}")
-            Log.w(TAG, "OUTPUT_DIR not writable: ${AppConfig.OUTPUT_DIR.absolutePath}")
-        } else {
-            onProgress("✅ 렌더링 엔진 준비 — ${AppConfig.OUTPUT_DIR.absolutePath}")
-        }
+    private val ttsEngine      = SupertonicTtsEngine(context)
+    private val subclipFiles   = mutableListOf<File>()
+    private var totalDurationSecs: Float = 0f
+
+    private val sceneTempDir: File by lazy {
+        File(AppConfig.OUTPUT_DIR, TEMP_SUBDIR).also { it.mkdirs() }
     }
 
-    // ── 씬 렌더링 ──────────────────────────────────────────────────────────────
+    suspend fun init(onProgress: (String) -> Unit = {}) {
+        AppConfig.ensureDirs()
+        sceneTempDir.mkdirs()
+        onProgress("TTS 엔진 초기화 중...")
+        ttsEngine.init(onProgress)
+        onProgress("렌더 엔진 준비 완료")
+        Log.i(TAG, "초기화 완료. BGV=${AppConfig.BGV_DIR}")
+    }
+
     suspend fun renderScene(
         row: ScriptDataRow,
-        meta: VideoMeta,
-        voiceConfig: VoiceConfig = VoiceConfig.DEFAULT,
-        onProgress: (String)->Unit = {}
+        videoMeta: VideoMeta,
+        onProgress: (String) -> Unit = {}
     ): File? = withContext(Dispatchers.IO) {
-        val id  = "scene_${row.rowIndex.toString().padStart(4,'0')}"
-        val wav = File(context.cacheDir, "${id}.wav")
-        val mp4 = File(AppConfig.OUTPUT_DIR, "${id}.mp4")
-        val cfg = voiceConfig.forSpeaker(row.speaker)
-
-        if (row.script.isBlank()) {
-            onProgress("[$id] 스크립트 없음 — 건너뜀")
-            return@withContext null
-        }
-
-        // ── TTS WAV 생성 ────────────────────────────────────────────────
-        val ttsOk = tts.synthesize(row.script, cfg.sid, cfg.speed, wav)
-        if (!ttsOk) {
-            onProgress("[$id] ❌ TTS 실패")
-            return@withContext null
-        }
-        val durSec = tts.estimateDurationFromFile(wav)
-        onProgress("[$id] 🎤 ${wav.length()/1024}KB [${cfg.label} sid=${cfg.sid}] ${durSec}s")
-
-        // ── BgTransition 파싱 ────────────────────────────────────────────────
-        val bgParts        = row.bgFile.split("|")
-        val transitionType = bgParts.getOrNull(1)?.trim()?.uppercase() ?: "FADE"
-        val fadeDurRaw     = bgParts.getOrNull(2)?.trim()?.toFloatOrNull() ?: 0.5f
-        val fadeDurSec     = fadeDurRaw.coerceIn(0.3f, 2.0f)
-        val sceneDurSec    = durSec.toString().toDoubleOrNull() ?: 5.0
-        val effectiveFade  = if (sceneDurSec < fadeDurSec * 2) (sceneDurSec / 2).toFloat() else fadeDurSec
-        val fadeOutStart   = maxOf(0.0, sceneDurSec - effectiveFade)
-        val vfFilter = when (transitionType) {
-            "NONE" -> ""
-            else   -> "fade=t=in:st=0:d=${String.format("%.3f", effectiveFade)}" +
-                      ",fade=t=out:st=${String.format("%.3f", fadeOutStart)}" +
-                      ":d=${String.format("%.3f", effectiveFade)}"
-        }
-
-        // ── BGV 파일 결정 ────────────────────────────────────────────────
-        val bgvName = bgParts[0].trim().ifBlank { "VedicEnergyByPlanet_XRP_MovingChart.mp4" }
-        val bgvFile = AppConfig.resolveBgv(bgvName)
-        val bgvExists = bgvFile.exists()
-
-        // ── 카드 PNG 렌더링 ─────────────────────────────────────────────
-        // 캐시 Dir 사용 — 외부저장소 권한 불필요, 성공 후 즉시 삭제
-        val cardPng = File(context.cacheDir, "${id}_card.png")
-        val hasCard = CardRenderer.render(row, cardPng)
-
-        // ── FFmpeg 명령 4-케이스 분기 ─────────────────────────────────────
-        // 비디오 입력 (BGV 또는 lavfi 검은 배경)
-        val baseVideoIn = if (bgvExists)
-            "-stream_loop -1 -i ${bgvFile.absolutePath}"
-        else
-            "-f lavfi -i color=c=black:size=1920x1080:rate=30"
-
-        val cmd = when {
-            // 케이스 1: 카드 + fade — filter_complex에 overlay 후 fade 체인
-            hasCard && vfFilter.isNotBlank() ->
-                "$baseVideoIn -i ${wav.absolutePath} -i ${cardPng.absolutePath} " +
-                "-filter_complex " +
-                "\"[0:v][2:v]overlay=0:0[ov];[ov]${vfFilter}[vout]\" " +
-                "-map \"[vout]\" -map 1:a " +
-                "-c:v libx264 -preset veryfast -crf 23 " +
-                "-c:a aac -b:a 128k " +
-                "-pix_fmt yuv420p -shortest -movflags +faststart " +
-                "-y ${mp4.absolutePath}"
-
-            // 케이스 2: 카드 + 전환 없음 — overlay만
-            hasCard ->
-                "$baseVideoIn -i ${wav.absolutePath} -i ${cardPng.absolutePath} " +
-                "-filter_complex " +
-                "\"[0:v][2:v]overlay=0:0[vout]\" " +
-                "-map \"[vout]\" -map 1:a " +
-                "-c:v libx264 -preset veryfast -crf 23 " +
-                "-c:a aac -b:a 128k " +
-                "-pix_fmt yuv420p -shortest -movflags +faststart " +
-                "-y ${mp4.absolutePath}"
-
-            // 케이스 3: 카드 없음 + fade — -vf (Phase B 동일)
-            vfFilter.isNotBlank() ->
-                "$baseVideoIn -i ${wav.absolutePath} " +
-                "-map 0:v:0 -map 1:a:0 " +
-                "-c:v libx264 -preset veryfast -crf 23 " +
-                "-vf $vfFilter " +
-                "-c:a aac -b:a 128k " +
-                "-shortest -movflags +faststart " +
-                "-y ${mp4.absolutePath}"
-
-            // 케이스 4: 카드 없음 + 전환 없음 — plain (Phase B 동일)
-            else ->
-                "$baseVideoIn -i ${wav.absolutePath} " +
-                "-map 0:v:0 -map 1:a:0 " +
-                "-c:v libx264 -preset veryfast -crf 23 " +
-                "-c:a aac -b:a 128k " +
-                "-shortest -movflags +faststart " +
-                "-y ${mp4.absolutePath}"
-        }
-
-        onProgress("[$id] FFmpeg 시작 (BGV=$bgvExists, card=$hasCard, fade=$transitionType)...")
-
-        val (ok, ffLog) = ffmpegRun(cmd)
-        return@withContext if (ok && mp4.exists() && mp4.length() > 0) {
-            wav.delete()
-            if (hasCard) cardPng.delete()  // PNG도 성공 후 즉시 삭제
-            onProgress("[$id] ✅ ${mp4.length()/1024}KB")
-            mp4
-        } else {
-            // WAV/PNG 실패 시 보존 (다음 실행 시 덮어씀)
-            val errLine = ffLog.lines()
-                .filter { it.isNotBlank() }
-                .lastOrNull { it.contains("Error", ignoreCase=true)
-                    || it.contains("Invalid", ignoreCase=true)
-                    || it.contains("No such", ignoreCase=true)
-                    || it.contains("Permission", ignoreCase=true)
-                    || it.contains("failed", ignoreCase=true)
-                    || it.contains("Unknown", ignoreCase=true) }
-                ?: ffLog.lines().filter { it.isNotBlank() }.lastOrNull()
-                ?: "FFmpeg 로그 없음"
-            onProgress("[$id] ❌ FFmpeg 실패:\n${errLine.trim().takeLast(150)}")
-            null
+        val sceneId = "scene_${row.rowIndex.toString().padStart(4, '0')}"
+        onProgress("[$sceneId] ${row.section} / Speaker ${row.speaker}")
+        try {
+            val bgFile     = AppConfig.resolveBgv(row.bgFileName)
+            val ttsWavFile = File(sceneTempDir, "${sceneId}_tts.wav")
+            val hasTts     = row.script.isNotBlank() && row.sectionType != SectionType.BUFFER
+            if (hasTts) {
+                val cfg = voiceConfig.forSpeaker(row.speaker)
+                onProgress("[$sceneId] TTS: ${cfg.label}(sid=${cfg.sid},spd=${cfg.speed})")
+                ttsEngine.synthesize(row.script, cfg.sid, cfg.speed, ttsWavFile)
+            }
+            val tTotal = if (ttsWavFile.exists()) ttsEngine.estimateDurationFromWav(ttsWavFile) else 3.0f
+            totalDurationSecs += tTotal
+            val keyframes  = calcCardKeyframes(AnimationPattern.from(row.animation), tTotal)
+            val assFile    = File(sceneTempDir, "${sceneId}.ass")
+            buildAssSubtitle(row, assFile, keyframes, tTotal)
+            val outputFile = File(sceneTempDir, "${sceneId}.mp4")
+            val cmd = buildFfmpegCmd(
+                bgFile, ttsWavFile.takeIf { it.exists() }, tTotal, assFile,
+                CardStyle.from(row.cardStyle), GradientPreset.from(row.gradientPreset),
+                keyframes, CardExtraEffect.from(row.cardExtraEffect),
+                row.bgEffectCode, BgTransition.from(row.bgTransition),
+                row.bgTransitionDuration, outputFile
+            )
+            onProgress("[$sceneId] FFmpeg 인코딩...")
+            val rc = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
+            if (!rc.returnCode.isValueSuccess) {
+                Log.e(TAG, "FFmpeg 실패: ${rc.logsAsString.takeLast(500)}")
+                onProgress("[$sceneId] ❌ 인코딩 실패")
+                return@withContext null
+            }
+            ttsWavFile.delete(); assFile.delete()
+            subclipFiles.add(outputFile)
+            onProgress("[$sceneId] ✅ ${outputFile.length() / 1024}KB")
+            outputFile
+        } catch (e: Exception) {
+            Log.e(TAG, "renderScene 예외: $e"); null
         }
     }
 
-    // ── 전체 concat + BGM (변경 없음) ────────────────────────────────────────
     suspend fun concatSubclips(
         outputName: String,
-        bgmFileName: String,
-        onProgress: (String)->Unit = {}
+        bgmFilename: String,
+        watermarkText: String = "",
+        onProgress: (String) -> Unit = {}
     ): File? = withContext(Dispatchers.IO) {
-        val scenes = AppConfig.OUTPUT_DIR.listFiles()
-            ?.filter { it.name.startsWith("scene_") && it.extension == "mp4" }
-            ?.sortedBy { it.name } ?: emptyList()
+        if (subclipFiles.isEmpty()) { onProgress("⚠️ 클립 없음"); return@withContext null }
 
-        if (scenes.isEmpty()) {
-            onProgress("⚠ 씬 MP4 없음")
-            return@withContext null
+        // [버그②] "\n" 사용 — "\\n"이면 FFmpeg concat 파서가 줄바꿈 인식 못 함
+        val listFile = File(sceneTempDir, "concat_list.txt")
+        listFile.writeText(subclipFiles.joinToString("\n") { "file '${it.absolutePath}'" })
+
+        val outputFile = File(AppConfig.OUTPUT_DIR, "$outputName.mp4")
+        val bgmFile    = AppConfig.resolveBgm(bgmFilename)
+        val duration   = totalDurationSecs
+        val wmEnd      = (duration - 5f).coerceAtLeast(16f)
+
+        onProgress("합치기: ${subclipFiles.size}개 / 총 ${duration.toInt()}초")
+
+        val filterParts   = mutableListOf<String>()
+        var videoMapLabel = "0:v"
+        var audioMapLabel = "0:a"
+
+        // [버그⑤] 워터마크 오버레이: 15초 등장, wmEnd초 소멸
+        if (watermarkText.isNotBlank()) {
+            val esc = watermarkText.replace("\\","\\\\").replace("'","\\'")
+                .replace(":","\\:").replace(",","\\,")
+            filterParts += "[0:v]drawtext=text='$esc'" +
+                ":fontfile=/system/fonts/NotoSansCJK-Regular.ttc" +
+                ":fontsize=34:fontcolor=white@0.65:shadowcolor=black@0.75:shadowx=2:shadowy=2" +
+                ":x=30:y=40:enable='between(t\\,15\\,$wmEnd)'[vout]"
+            videoMapLabel = "[vout]"
         }
-        onProgress("🔗 씬 ${scenes.size}개 concat 시작...")
 
-        val listFile = File(AppConfig.OUTPUT_DIR, "concat_list.txt")
-        listFile.writeText(scenes.joinToString("\n") { "file '${it.absolutePath}'" })
-
-        val rawOut   = File(AppConfig.OUTPUT_DIR, "${outputName}_raw.mp4")
-        val finalOut = File(AppConfig.OUTPUT_DIR, "${outputName}.mp4")
-
-        val concatCmd = "-f concat -safe 0 " +
-            "-i ${listFile.absolutePath} " +
-            "-c:v copy -c:a copy " +
-            "-y ${rawOut.absolutePath}"
-        val (concatOk, concatLog) = ffmpegRun(concatCmd)
-        if (!concatOk) {
-            val errLine = concatLog.lines().filter { it.isNotBlank() }.lastOrNull() ?: "로그 없음"
-            onProgress("❌ concat 실패: ${errLine.trim().takeLast(120)}")
-            return@withContext null
+        // [버그⑥] BGM 덕킹: 0~13초 0.35 / 13~15초 선형 감소 / 15초~ 0.10
+        if (bgmFile != null) {
+            filterParts += "[0:a]volume=1.0[tts]"
+            filterParts += "[1:a]aformat=sample_rates=44100:channel_layouts=stereo," +
+                "volume=volume='if(lt(t\\,13)\\,0.35\\,if(lt(t\\,15)\\,0.35+(t-13)*(-0.125)\\,0.10))'" +
+                ":eval=frame[bgm]"
+            filterParts += "[tts][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            audioMapLabel = "[aout]"
         }
-        onProgress("✅ concat 완료 (${rawOut.length()/1024/1024}MB)")
 
-        val bgmFile = AppConfig.resolveBgm(bgmFileName)
-        if (bgmFile != null && bgmFile.exists()) {
-            onProgress("🎵 BGM 오버레이 (${bgmFile.name})...")
-            val rawDurSec    = getDurationSec(rawOut)
-            val fadeOutStart = if (rawDurSec > 8L) rawDurSec - 5L else maxOf(0L, rawDurSec - 1L)
-            val bgmCmd = "-i ${rawOut.absolutePath} " +
-                "-stream_loop -1 -i ${bgmFile.absolutePath} " +
-                "-filter_complex " +
-                "\"[1:a]volume=0.25,afade=t=in:d=3,afade=t=out:st=${fadeOutStart}:d=5[bgm];" +
-                "[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=3[outa]\" " +
-                "-map 0:v -map \"[outa]\" " +
-                "-c:v copy -c:a aac -b:a 192k " +
-                "-movflags +faststart " +
-                "-y ${finalOut.absolutePath}"
-            val (bgmOk, bgmLog) = ffmpegRun(bgmCmd)
-            return@withContext if (bgmOk && finalOut.exists() && finalOut.length() > 0) {
-                rawOut.delete()
-                listFile.delete()
-                onProgress("✅ 최종 완료: ${finalOut.name} (${finalOut.length()/1024/1024}MB)")
-                finalOut
-            } else {
-                val errLine = bgmLog.lines().filter { it.isNotBlank() }.lastOrNull() ?: ""
-                onProgress("⚠ BGM 오버레이 실패 — raw 반환\n${errLine.takeLast(100)}")
-                listFile.delete()
-                rawOut.renameTo(finalOut)
-                finalOut
-            }
+        val cmd = buildString {
+            append("-y -f concat -safe 0 -i ${listFile.absolutePath} ")
+            if (bgmFile != null) append("-i ${bgmFile.absolutePath} ")
+            if (filterParts.isNotEmpty()) append("-filter_complex \"${filterParts.joinToString(";")}\" ")
+            append("-map \"$videoMapLabel\" -map \"$audioMapLabel\" ")
+            if (videoMapLabel.startsWith("[")) append("-c:v h264_mediacodec -b:v 8M -maxrate 8M -bufsize 16M ")
+            else append("-c:v copy ")
+            if (audioMapLabel.startsWith("[")) append("-c:a aac -b:a 192k ")
+            else append("-c:a copy ")
+            append("-movflags +faststart ${outputFile.absolutePath}")
+        }
+
+        val rc = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
+        listFile.delete()
+        subclipFiles.forEach { it.delete() }
+        sceneTempDir.listFiles()?.forEach { it.delete() }
+
+        return@withContext if (rc.returnCode.isValueSuccess) {
+            onProgress("✅ 완성: ${outputFile.name} (${outputFile.length()/1024/1024}MB)")
+            outputFile
         } else {
-            listFile.delete()
-            rawOut.renameTo(finalOut)
-            onProgress("✅ 완료 (BGM 없음): ${finalOut.name} (${finalOut.length()/1024/1024}MB)")
-            finalOut
+            Log.e(TAG, "concat 실패: ${rc.logsAsString.takeLast(400)}")
+            onProgress("❌ concat 실패"); null
         }
     }
 
-    private fun getDurationSec(f: File): Long {
-        if (!f.exists()) return 0L
-        return try {
-            val mmr = MediaMetadataRetriever()
-            mmr.setDataSource(f.absolutePath)
-            val ms = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-            mmr.release()
-            ms / 1000L
-        } catch (e: Exception) {
-            Log.w(TAG, "getDurationSec 실패: ${e.message}")
-            0L
+    // AudioTrack 직접 스트리밍 (테스트 플레이 — WAV 파일 미기록)
+    suspend fun playPreviewDirect(
+        text: String, sid: Int, speed: Float,
+        onProgress: (String) -> Unit = {}
+    ) = withContext(Dispatchers.IO) {
+        try {
+            val audio = ttsEngine.generateRaw(text, sid, speed)
+                ?: run { onProgress("⚠️ TTS 생성 실패"); return@withContext }
+            val sr = ttsEngine.sampleRate
+            val track = android.media.AudioTrack.Builder()
+                .setAudioAttributes(android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                .setAudioFormat(android.media.AudioFormat.Builder()
+                    .setSampleRate(sr)
+                    .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO)
+                    .setEncoding(android.media.AudioFormat.ENCODING_PCM_FLOAT).build())
+                .setBufferSizeInBytes(audio.size * 4)
+                .setTransferMode(android.media.AudioTrack.MODE_STATIC).build()
+            track.write(audio, 0, audio.size, android.media.AudioTrack.WRITE_BLOCKING)
+            track.play()
+            onProgress("🎙 재생 중...")
+            Thread.sleep((audio.size.toLong() * 1000 / sr).coerceAtLeast(500))
+            track.stop(); track.release()
+            onProgress("재생 완료")
+        } catch (e: Exception) { onProgress("❌ 재생 실패: ${e.message}") }
+    }
+
+    fun release() {
+        ttsEngine.release(); subclipFiles.clear(); totalDurationSecs = 0f
+        sceneTempDir.listFiles()?.forEach { it.delete() }
+    }
+
+    // [버그①③⑤] ASS 자막 생성
+    private fun buildAssSubtitle(row: ScriptDataRow, out: File, kf: CardKeyframes, tTotal: Float) {
+        val cx  = (kf.holdX + 430).toInt()
+        val y1  = (kf.holdY + 80).toInt()
+        val y2  = (kf.holdY + 185).toInt()
+        val y3  = (kf.holdY + 268).toInt()
+        val end = assTime(tTotal)
+        val hlWord  = row.highlightWord.trim()
+        val hlColor = detectHighlightColor(row.script, hlWord)
+        val mainTxt = if (hlWord.isNotBlank() && row.cardMain.contains(hlWord))
+            row.cardMain.replace(hlWord, "{\\c&H${hlColor}&}$hlWord{\\c&HFFFFFF&}")
+        else row.cardMain
+        fun prep(t: String) = t.replace("\\n","\\N").replace("\n","\\N")
+        val fade = "{\\an5\\fad(800,600)}"
+
+        out.writeText(buildString {
+            // [버그①] appendLine 사용 — \\n 리터럴 절대 금지
+            appendLine("[Script Info]"); appendLine("ScriptType: v4.00+")
+            appendLine("PlayResX: $VIDEO_W"); appendLine("PlayResY: $VIDEO_H"); appendLine("")
+            appendLine("[V4+ Styles]")
+            appendLine("Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding")
+            appendLine("Style: Main,NotoSansKR-Bold,52,&H00FFFFFF,&H004DDBFF,&H80000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,5,30,30,80,1")
+            appendLine("Style: Sub,NotoSansKR-Regular,38,&H00CCCCCC,&H00000000,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,1,0,5,30,30,80,1")
+            appendLine("Style: Desc,NotoSansKR-Regular,32,&H00AAAAAA,&H00000000,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,1,0,5,30,30,80,1")
+            appendLine(""); appendLine("[Events]")
+            appendLine("Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text")
+            val pm = prep(mainTxt); val ps = prep(row.cardSub); val pd = prep(row.cardDesc)
+            if (pm.isNotBlank()) appendLine("Dialogue: 0,0:00:00.00,$end,Main,,0,0,0,,${fade}{\\pos($cx,$y1)}${wrapAss(pm,12)}")
+            if (ps.isNotBlank()) appendLine("Dialogue: 0,0:00:00.00,$end,Sub,,0,0,0,,${fade}{\\pos($cx,$y2)}${wrapAss(ps,18)}")
+            if (pd.isNotBlank()) appendLine("Dialogue: 0,0:00:00.00,$end,Desc,,0,0,0,,${fade}{\\pos($cx,$y3)}${wrapAss(pd,24)}")
+        }, Charsets.UTF_8)
+    }
+
+    // [버그⑩] 입력측 -t + EDGE_GLOW 추가
+    private fun buildFfmpegCmd(
+        bgFile: File, ttsWav: File?, tTotal: Float, assFile: File,
+        cardStyle: CardStyle, gradient: GradientPreset, kf: CardKeyframes,
+        extraEffect: CardExtraEffect, bgEffect: String, bgTransition: BgTransition,
+        transitionDur: Float, outputFile: File
+    ): String {
+        val fp = mutableListOf<String>()
+        fp += "[0:v]setpts=PTS-STARTPTS[bg0]"
+        val bgFx = when (bgEffect.split(":")[0]) {
+            "VIGNETTE"    -> { fp += "[bg0]vignette=PI/4[bgfx]"; "[bgfx]" }
+            "MOTION_BLUR" -> { fp += "[bg0]tmix=frames=3[bgfx]"; "[bgfx]" }
+            "EDGE_GLOW"   -> {
+                val s = bgEffect.split(":").getOrElse(1){"0.4"}.toFloatOrNull() ?: 0.4f
+                fp += "[bg0]split[bgo][bgs]"
+                fp += "[bgs]unsharp=5:5:${String.format("%.2f",s*3f)}:0:0:0[bgsh]"
+                fp += "[bgo][bgsh]blend=all_mode=screen:all_opacity=0.3[bgfx]"
+                "[bgfx]"
+            }
+            else -> "[bg0]"
+        }
+        val card = if (cardStyle != CardStyle.NONE && cardStyle != CardStyle.MINIMAL) {
+            val r = (gradient.topColor shr 16) and 0xFF
+            val g = (gradient.topColor shr 8)  and 0xFF
+            val b = gradient.topColor and 0xFF
+            fp += "${bgFx}drawbox=x=${kf.holdX.toInt()}:y=${kf.holdY.toInt()}:w=860:h=340" +
+                ":color=0x${String.format("%02X%02X%02X",r,g,b)}@${String.format("%.2f",cardStyle.alpha)}:t=fill[card]"
+            "[card]"
+        } else bgFx
+        fp += "${card}subtitles='${assFile.absolutePath.replace("'","\\'")}' [final]"
+        return buildString {
+            append("ffmpeg -y -t $tTotal -stream_loop -1 -i ${bgFile.absolutePath} ")
+            if (ttsWav != null) append("-i ${ttsWav.absolutePath} ")
+            append("-filter_complex \"${fp.joinToString(";")}\" ")
+            append("-map \"[final]\" ")
+            if (ttsWav != null) append("-map 1:a -c:a aac -b:a 192k ") else append("-an ")
+            append("-c:v h264_mediacodec -b:v 8M -maxrate 8M -bufsize 16M -movflags +faststart ")
+            append(outputFile.absolutePath)
         }
     }
 
-    private suspend fun ffmpegRun(cmd: String): Pair<Boolean, String> =
-        suspendCancellableCoroutine { cont ->
-            Log.d(TAG, "FFmpeg cmd: $cmd")
-            val session = FFmpegKit.executeAsync(cmd,
-                { session ->
-                    val ok   = ReturnCode.isSuccess(session.returnCode)
-                    val logs = session.logsAsString ?: ""
-                    if (!ok) Log.e(TAG, "FFmpeg fail rc=${session.returnCode}\n$logs")
-                    if (cont.isActive) cont.resume(Pair(ok, logs))
-                },
-                { log -> Log.v(TAG, log.message ?: "") },
-                null
-            )
-            cont.invokeOnCancellation { session.cancel() }
+    // [버그④] Pattern C → 정중앙
+    private fun calcCardKeyframes(pattern: AnimationPattern, tTotal: Float): CardKeyframes {
+        val tOut = (tTotal - 1f).coerceAtLeast(1.1f)
+        val cx = VIDEO_W / 2f - 430f; val cy = VIDEO_H / 2f - 170f
+        return when (pattern) {
+            AnimationPattern.A -> CardKeyframes(-860f, VIDEO_H*.18f, VIDEO_W*.05f, VIDEO_H*.18f, CardOutType.TOP, 1f, tOut, tTotal)
+            AnimationPattern.B -> CardKeyframes(VIDEO_W.toFloat(), VIDEO_H*.18f, VIDEO_W/2f-430f, VIDEO_H*.18f, CardOutType.BOTTOM, 1f, tOut, tTotal)
+            AnimationPattern.C -> CardKeyframes(cx, -340f, cx, cy, CardOutType.BOTTOM, 1f, tOut, tTotal)
+            AnimationPattern.D -> CardKeyframes(cx, cy, cx, cy, CardOutType.FADE, 1f, tOut, tTotal)
+            AnimationPattern.E -> CardKeyframes(VIDEO_W*.05f, VIDEO_H*.68f, cx, cy, CardOutType.FADE, 1f, tOut, tTotal)
+            AnimationPattern.F -> CardKeyframes(cx, cy, cx, cy, CardOutType.SCALE, 0.5f, tOut, tTotal)
+            AnimationPattern.G -> CardKeyframes(-860f, VIDEO_H*.18f, VIDEO_W*.05f, VIDEO_H*.18f, CardOutType.ROTATE_SCALE, 1f, tOut, tTotal)
+            else               -> CardKeyframes(cx, cy, cx, cy, CardOutType.FADE, 1f, tOut, tTotal)
         }
+    }
 
-    fun release() { /* tts는 Activity가 관리 */ }
+    private fun assTime(s: Float): String {
+        val tc = (s * 100).toInt().coerceAtLeast(0)
+        val cs = tc % 100; val ts = tc / 100; val ss = ts % 60
+        val tm = ts / 60; val mm = tm % 60; val hh = tm / 60
+        return "%d:%02d:%02d.%02d".format(hh, mm, ss, cs)
+    }
+
+    private fun wrapAss(text: String, max: Int): String {
+        if (text.length <= max) return text
+        return text.chunked(max).joinToString("\\N")
+    }
+
+    private fun detectHighlightColor(script: String, word: String): String {
+        val rise   = listOf("상승","강화","기회","확장","대운","목성","금성")
+        val fall   = listOf("주의","조심","손실","토성","라후","케투","역행")
+        val planet = mapOf("태양" to "00B7FF","달" to "FFC8C8","화성" to "4444FF",
+            "수성" to "CCFF44","목성" to "00D7FF","금성" to "CC88FF",
+            "토성" to "AAAAAA","라후" to "CC0066","케투" to "006688")
+        return planet.entries.firstOrNull { script.contains(it.key) }?.value
+            ?: if (rise.any { script.contains(it) }) "4DDBFF"
+            else if (fall.any { script.contains(it) }) "6666FF"
+            else "4DDBFF"
+    }
 }
+
+data class CardKeyframes(
+    val inStartX: Float, val inStartY: Float,
+    val holdX: Float, val holdY: Float,
+    val outType: CardOutType,
+    val tIn: Float, val tHold: Float, val tOut: Float
+)
+
+enum class CardOutType { TOP, BOTTOM, LEFT, RIGHT, FADE, SCALE, ROTATE_SCALE }
