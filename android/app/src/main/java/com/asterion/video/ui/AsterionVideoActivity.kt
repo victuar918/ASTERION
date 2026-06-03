@@ -6,9 +6,11 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.asterion.video.auth.ServiceAccountAuth
 import com.asterion.video.model.*
 import com.asterion.video.render.AsterionRenderEngine
 import com.asterion.video.sheets.SheetsVideoReader
+import com.asterion.video.sheets.VideoScriptData
 import com.asterion.video.tts.VoiceConfig
 import kotlinx.coroutines.*
 
@@ -36,7 +38,7 @@ class AsterionVideoActivity : AppCompatActivity() {
 
     private var engine: AsterionRenderEngine? = null
     private var currentJob: Job? = null
-    private var loadedResult: SheetsReadResult? = null
+    private var loadedResult: VideoScriptData? = null
 
     private val speakerLabels = listOf(
         "1 — 아스터 (분석가)", "2 — 리언 (코호스트)", "3 — 나레이터 (철학)",
@@ -102,14 +104,12 @@ class AsterionVideoActivity : AppCompatActivity() {
             updateStatus("시트 로딩 중: $sheetName")
             setUiEnabled(false)
             try {
+                val token = ServiceAccountAuth(this@AsterionVideoActivity).getAccessToken()
                 val result = withContext(Dispatchers.IO) {
-                    SheetsVideoReader(this@AsterionVideoActivity).readSheet(
-                        spreadsheetId = AppConfig.SPREADSHEET_ID,
-                        sheetName     = sheetName
-                    )
+                    SheetsVideoReader(token).readScript(sheetName).getOrThrow()
                 }
                 loadedResult = result
-                tvSheetName.text = "✅ ${result.sheetName} — ${result.rows.size}행 / ${result.videoMeta.youtubeTitle}"
+                tvSheetName.text = "✅ ${result.sheetName} — ${result.scriptRows.size}행 / ${result.videoMeta.youtubeTitle}"
                 updateStatus("시트 로드 완료. 영상 제작 시작 버튼을 누르세요.")
             } catch (e: Exception) {
                 Log.e(TAG, "시트 로드 실패: $e")
@@ -131,18 +131,18 @@ class AsterionVideoActivity : AppCompatActivity() {
         }
     }
 
-    private fun startRender(result: SheetsReadResult) {
+    private fun startRender(result: VideoScriptData) {
         val eng = engine ?: return
         currentJob = lifecycleScope.launch {
             btnRender.text = "⏹ 취소"
             setUiEnabled(false, keepRender = true)
             progressBar.visibility = View.VISIBLE
-            progressBar.max = result.rows.size; progressBar.progress = 0
-            updateStatus("▶ 영상 제작 시작: ${result.sheetName} (${result.rows.size}개 씬)")
+            progressBar.max = result.scriptRows.size; progressBar.progress = 0
+            updateStatus("▶ 영상 제작 시작: ${result.sheetName} (${result.scriptRows.size}개 씬)")
             eng.release()
             var ok = 0; var fail = 0
 
-            result.rows.forEachIndexed { idx, row ->
+            result.scriptRows.forEachIndexed { idx, row ->
                 if (!isActive) { updateStatus("⏹ 취소됨"); return@launch }
                 val scene = eng.renderScene(row, result.videoMeta) { msg ->
                     updateStatus("[${idx + 1}/${result.rows.size}] $msg")
