@@ -398,8 +398,10 @@ class AsterionRenderEngine(
             "[card]"
         } else bgFx
 
-        fp += "${card}subtitles='${assFile.absolutePath.replace("'", "\\'")}' [sub_out]"
-        fp += "[sub_out]scale=${VIDEO_W}:${VIDEO_H},format=yuv420p[final]"
+        // [진단] subtitles 필터 임시 제거
+        // libass가 외부저장소 .ass 파일 접근 시 SELinux EINVAL 가능성 검증
+        // 이 버전 성공 → subtitles 원인 확정 → drawtext로 교체 예정
+        fp += "${card}scale=${VIDEO_W}:${VIDEO_H},format=yuv420p[final]"
 
         return buildString {
             append("ffmpeg -y -stream_loop -1 -i ${bgFile.absolutePath} ")
