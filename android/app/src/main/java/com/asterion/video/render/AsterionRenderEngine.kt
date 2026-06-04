@@ -118,7 +118,7 @@ class AsterionRenderEngine(
             append("-map \"[final]\" -map ${silentIdx}:a ")
             // -t OUTPUT 옵션으로 인트로 길이 제한 (trim 사용 안 함)
             append("-t ${String.format("%.3f", dur)} ")
-            append("-c:v h264_mediacodec -b:v 8M -maxrate 8M -bufsize 16M ")
+            append("-c:v h264_mediacodec -b:v 4M ")
             append("-c:a aac -b:a 128k ")
             append("-movflags +faststart ${outFile.absolutePath}")
         }
@@ -260,7 +260,7 @@ class AsterionRenderEngine(
             if (bgmFile != null) append("-i ${bgmFile.absolutePath} ")
             if (filterParts.isNotEmpty()) append("-filter_complex \"${filterParts.joinToString(";")}\" ")
             append("-map \"$videoMapLabel\" -map \"$audioMapLabel\" ")
-            if (videoMapLabel.startsWith("[")) append("-c:v h264_mediacodec -b:v 8M -maxrate 8M -bufsize 16M ")
+            if (videoMapLabel.startsWith("[")) append("-c:v h264_mediacodec -b:v 4M ")
             else append("-c:v copy ")
             if (audioMapLabel.startsWith("[")) append("-c:a aac -b:a 192k ")
             else append("-c:a copy ")
@@ -450,7 +450,7 @@ class AsterionRenderEngine(
             // -t OUTPUT 옵션: 입력 측에 두지 않고 출력 인코딩 시간을 제한
             // (trim 필터 대체 — stream_loop + trim 조합이 Android FFmpegKit에서 불안정)
             append("-t ${String.format("%.3f", tTotal)} ")
-            append("-c:v h264_mediacodec -b:v 8M -maxrate 8M -bufsize 16M -movflags +faststart ")
+            append("-c:v h264_mediacodec -b:v 4M -movflags +faststart ")
             append(outputFile.absolutePath)
         }
     }
