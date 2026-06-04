@@ -4,7 +4,12 @@ data class VideoMeta(
     val youtubeTitle: String = "",
     val topWatermark: String = "ASTERION",
     val thumbnailText: String = "",
-    val mainBgm: String = "default_bgm.mp3"
+    val mainBgm: String = "default_bgm.mp3",
+    // ── 인트로 (15초 특수 처리) ──────────────────────────────────
+    val introBgv1: String = "",                             // 첫 번째 BGV (비어있으면 인트로 생략)
+    val introBgv2: String = "",                             // 두 번째 BGV (비어있으면 introBgv1 반복)
+    val introText: String = "빛은 선택된 이에게만 닳는다",  // 중앙 표시 텍스트
+    val introDurationSecs: Float = 15f                      // 인트로 총 길이(초)
 )
 
 data class ScriptDataRow(
