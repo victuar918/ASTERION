@@ -184,10 +184,18 @@ class AsterionRenderEngine(
             )
 
             onProgress("[$sceneId] FFmpeg 인코딩...")
+            Log.i(TAG, "[$sceneId] cmd: $cmd")
             val rc = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
             if (!rc.returnCode.isValueSuccess) {
-                Log.e(TAG, "FFmpeg 실패 [$sceneId]: ${rc.logsAsString.takeLast(500)}")
-                onProgress("[$sceneId] ❌ 인코딩 실패")
+                val errLog = rc.logsAsString
+                val errLine = errLog.lines()
+                    .lastOrNull { it.contains("Error", ignoreCase = true) ||
+                                  it.contains("Invalid", ignoreCase = true) ||
+                                  it.contains("No such", ignoreCase = true) ||
+                                  it.contains("failed", ignoreCase = true) }
+                    ?: errLog.takeLast(200)
+                Log.e(TAG, "FFmpeg 실패 [$sceneId]:\n${errLog.takeLast(800)}")
+                onProgress("[$sceneId] ❌ FFmpeg 오류: ${errLine.takeLast(120)}")
                 return@withContext null
             }
             ttsWavFile.delete()
