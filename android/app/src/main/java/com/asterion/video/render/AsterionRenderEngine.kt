@@ -396,7 +396,7 @@ class AsterionRenderEngine(
             if (ttsWav != null) append("-map 1:a -c:a aac -b:a 192k ")
             else                append("-an ")
             append("-t ${tTotal.fmtUS()} ")
-            append("-c:v libx264 -preset ultrafast -crf 23 -movflags +faststart ")
+            append("-c:v h264_mediacodec -b:v 4M -movflags +faststart ")
             append(outputFile.absolutePath)
         }
     }
