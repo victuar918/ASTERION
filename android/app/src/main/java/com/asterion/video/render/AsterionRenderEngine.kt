@@ -260,7 +260,12 @@ class AsterionRenderEngine(
         transitionDur: Float, outputFile: File
     ): String {
         val fp = mutableListOf<String>()
-        fp += "[0:v]setpts=PTS-STARTPTS[bg0]"
+        // BGV 루프 시 PTS 불연속 방지:
+        // 1) setpts=PTS-STARTPTS  → 첫 프레임 PTS=0 기준화
+        // 2) trim=duration=X      → 정확히 X초에서 스트림 절단
+        // 3) setpts=PTS-STARTPTS  → trim 후 PTS를 다시 0-base로 재설정
+        //    → h264_mediacodec 에 전달되는 스트림은 완전한 단조증가 PTS 보장
+        fp += "[0:v]setpts=PTS-STARTPTS,trim=duration=${String.format("%.3f", tTotal)},setpts=PTS-STARTPTS[bg0]"
 
         val bgFx = when (bgEffect.split(":")[0]) {
             "VIGNETTE"    -> { fp += "[bg0]vignette=PI/4[bgfx]"; "[bgfx]" }
@@ -286,7 +291,9 @@ class AsterionRenderEngine(
             "[card]"
         } else bgFx
 
-        fp += "${card}subtitles='${assFile.absolutePath.replace("'", "\\'")}' [final]"
+        // fontsdir: libass가 Android 시스템 폴트를 인식하도록 명시
+        // 공백 제거: '[final]' 앞의 공백은 필터 패드명 파싱 오류 가능성 충제
+        fp += "${card}subtitles='${assFile.absolutePath.replace("'", "\\'")}':fontsdir=/system/fonts[final]"
 
         return buildString {
             append("ffmpeg -y -t $tTotal -stream_loop -1 -i ${bgFile.absolutePath} ")
