@@ -111,7 +111,7 @@ class AsterionRenderEngine(
 
         val outFile = File(sceneTempDir, "scene_intro.mp4")
         val cmd = buildString {
-            append("ffmpeg -y -stream_loop -1 -i ${bgv1.absolutePath} ")
+            append("-y -stream_loop -1 -i ${bgv1.absolutePath} ")
             if (hasBgv2) append("-stream_loop -1 -i ${bgv2.absolutePath} ")
             append("-f lavfi -i anullsrc=r=44100:cl=stereo ")
             append("-filter_complex \"${fp.joinToString(";")}\" ")
@@ -428,7 +428,7 @@ class AsterionRenderEngine(
         fp += "${card}scale=${VIDEO_W}:${VIDEO_H},format=yuv420p[final]"
 
         return buildString {
-            append("ffmpeg -y -stream_loop -1 -i ${bgFile.absolutePath} ")
+            append("-y -stream_loop -1 -i ${bgFile.absolutePath} ")
             if (needsBlackBg) append("-f lavfi -i color=c=black:size=${VIDEO_W}x${VIDEO_H}:rate=30 ")
             if (ttsWav != null) append("-i ${ttsWav.absolutePath} ")
             append("-filter_complex \"${fp.joinToString(";")}\" ")
