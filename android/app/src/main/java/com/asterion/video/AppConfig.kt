@@ -28,6 +28,14 @@ object AppConfig {
     const val SPREADSHEET_ID = "1ugWJmyLItD95Vz7Jq8Wjxn0_Ml5REjrhUxNZVFoIFmc"
     const val DEFAULT_BGV    = "VedicEnergyByPlanet_XRP_MovingChart.mp4"
 
+    // ── VoiceConfig.kt 에서 이 이름으로 참조하는 상수 (Build #91 호환) ────────────
+    const val TTS_MODEL_SUBDIR   = "tts_model"               // filesDir 하위 모델 저장 폴더명
+    const val TTS_READY_MARKER   = ".ready_supertonic3_int8" // 압축 해제 완료 마커 파일명
+    const val TTS_TAR_URL        =
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/" +
+        "tts-models/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2"
+
+    // ── 내부 참조용 (TTS_TAR_URL 과 동일 URL) ────────────────────────────────────
     const val TTS_MODEL_DIR_NAME    = "sherpa-onnx-supertonic-3-tts-int8-2026-05-11"
     const val TTS_MODEL_ARCHIVE_URL =
         "https://github.com/k2-fsa/sherpa-onnx/releases/download/" +
