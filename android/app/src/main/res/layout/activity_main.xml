@@ -6,52 +6,23 @@
     android:padding="16dp"
     android:background="#1A1A2E">
 
-    <!-- 시트 로드 -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="8dp">
-
-        <EditText
-            android:id="@+id/etSheetName"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="시트명 (예: VS_XRP_20260603_daily_1423)"
-            android:textColor="#FFFFFF"
-            android:textColorHint="#888888"
-            android:background="#2D2D44"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:textSize="13sp"
-            android:singleLine="true"
-            android:imeOptions="actionDone" />
-
-        <Button
-            android:id="@+id/btnLoadSheet"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="로드"
-            android:backgroundTint="#4A90E2"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp" />
-    </LinearLayout>
-
-    <!-- 로드된 시트명 표시 -->
+    <!-- 대본 시트 선택 (시작 시 VS_ 시트 자동 로드) -->
     <TextView
-        android:id="@+id/tvSheetName"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="시트를 로드하세요"
+        android:text="대본 시트"
         android:textColor="#AAAAAA"
-        android:textSize="12sp"
-        android:layout_marginBottom="8dp"
-        android:ellipsize="end"
-        android:singleLine="true" />
+        android:textSize="11sp"
+        android:layout_marginBottom="4dp" />
+
+    <Spinner
+        android:id="@+id/spinnerSheet"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginBottom="10dp"
+        android:background="#2D2D44"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp" />
 
     <!-- 화자 선택 + 테스트 플레이 -->
     <LinearLayout
