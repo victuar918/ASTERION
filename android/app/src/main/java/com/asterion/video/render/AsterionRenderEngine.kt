@@ -381,6 +381,24 @@ class AsterionRenderEngine(
         val effDur = transitionDur.coerceIn(0.3f, (tTotal * 0.45f).coerceAtLeast(0.3f))
 
         val fp = mutableListOf<String>()
+        // ───────────────────────────────────────────────────────
+        // [진단 모드] filter_complex 전체 제거 → 최소 명령어 테스트
+        // 이 버전이 성공하면 → filter_complex 내 특정 필터가 원인
+        // 이 버전도 실패하면 → stream_loop/libx264 자체 문제
+        // ───────────────────────────────────────────────────────
+        val diagCmd = buildString {
+            append("ffmpeg -y -stream_loop -1 -i ${bgFile.absolutePath} ")
+            if (ttsWav != null) append("-i ${ttsWav.absolutePath} ")
+            append("-map 0:v ")
+            if (ttsWav != null) append("-map 1:a -c:a aac -b:a 192k ")
+            else                append("-an ")
+            append("-vf format=yuv420p ")
+            append("-t ${tTotal.fmtUS()} ")
+            append("-c:v libx264 -preset ultrafast -crf 23 -movflags +faststart ")
+            append(outputFile.absolutePath)
+        }
+        return diagCmd
+        @Suppress("UNREACHABLE_CODE")
         fp += "[0:v]setpts=PTS-STARTPTS[bg0]"
 
         val bgAfterTrans: String = when (bgTransition) {
