@@ -246,12 +246,18 @@ class AsterionVideoActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val te  = ttsEngine ?: run { withContext(Dispatchers.Main) { updateStatus("❌ TTS 엔진 미초기화") }; return@launch }
-                val out = File(AppConfig.OUTPUT_DIR, "test_sid${sid}.wav")
+                // cacheDir: 앱 전용 내부 캐시 (외부 노웈 없음, 권한 불필요)
+                val out = File(applicationContext.cacheDir, "test_sid${sid}.wav")
                 val ok  = te.synthesize(testText, sherpaSid, speed, out, numSteps)
                 withContext(Dispatchers.Main) {
                     if (ok) {
                         mediaPlayer?.release()
-                        mediaPlayer = MediaPlayer().apply { setDataSource(out.absolutePath); prepare(); start() }
+                        mediaPlayer = MediaPlayer().apply {
+                            setDataSource(out.absolutePath)
+                            prepare()
+                            start()
+                            setOnCompletionListener { out.delete() }  // 재생 완료 후 캐시 파일 자동 삭제
+                        }
                         updateStatus("🔊 [$sid] sid=$sherpaSid steps=$numSteps ${out.length()/1024}KB 재생 중")
                     } else {
                         val errMsg = if (errFile.exists()) errFile.readText() else "synthesize() false"
