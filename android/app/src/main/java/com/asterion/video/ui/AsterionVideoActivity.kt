@@ -365,6 +365,9 @@ class AsterionVideoActivity : AppCompatActivity() {
                 if (data.scriptRows.isEmpty()) { updateStatus("⚠ READY 행 없음"); return@launch }
                 withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
 
+                // 인트로 렌더링 (Video_Meta의 Intro_BGV1이 설정된 경우만 동작)
+                engine!!.renderIntro(data.videoMeta) { msg -> appendLog(msg); updateStatus(msg) }
+
                 var done      = 0
                 var processed = 0
                 for (row in data.scriptRows) {
