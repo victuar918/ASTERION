@@ -295,8 +295,9 @@ class AsterionRenderEngine(
         // 공백 제거: '[final]' 앞의 공백은 필터 패드명 파싱 오류 가능성 충제
         fp += "${card}subtitles='${assFile.absolutePath.replace("'", "\\'")}':fontsdir=/system/fonts[final]"
 
+        // -t는 INPUT 측에서 제거 — trim 필터(setpts,trim,setpts)가 씬 길이를 정밀 제어
         return buildString {
-            append("ffmpeg -y -t $tTotal -stream_loop -1 -i ${bgFile.absolutePath} ")
+            append("ffmpeg -y -stream_loop -1 -i ${bgFile.absolutePath} ")
             if (ttsWav != null) append("-i ${ttsWav.absolutePath} ")
             append("-filter_complex \"${fp.joinToString(";")}\" ")
             append("-map \"[final]\" ")
