@@ -12,17 +12,15 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.5
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.6
 //
-// [변경로그 v3.5 — Invalid argument 근본 해결]
-//   1) format=yuv420p 강제
-//      drawbox @0.75 알파 처리 시 yuva420p로 포맷 업그레이드 → h264_mediacodec 거부 → Invalid argument
-//      이제 filter_complex 엔드마다 format=yuv420p 강제
-//   2) drawtext fontfile 조건부 적용
-//      SELinux에서 /system/fonts 접근 첨단 시 Invalid argument
-//      canRead() 확인 후 접근 가능한 폰트만 포함
-//   3) Locale.US 고정
-//      기기 locale에 따라 소수점 구분자가 쉼표(,)로 출력될 경우 FFmpeg 필터 파싱 결려
+// [변경로그 v3.6]
+//   1) return code 오판단 수정
+//      FFmpeg이 non-zero를 반환하더라도 출력 파일이 존재하면 성공 처리
+//      (Android FFmpegKit에서 경고를 non-zero로 반환하는 알려진 이슈)
+//   2) filter_complex 복구 + libx264 유지
+//      진단 모드 해제, 정상 필터 체인 복원
+//      format=yuv420p 유지 (drawbox 알파 체인 yuva420p 방지)
 // =================================================================
 
 private const val TAG         = "AsterionRenderEngine"
@@ -30,19 +28,17 @@ private const val VIDEO_W     = 1920
 private const val VIDEO_H     = 1080
 private const val TEMP_SUBDIR = ".temp_scenes"
 
-// 모션 패턴: 카드가 이동하는 패턴 (tIn 후 텍스트 등장)
 private val MOTION_PATTERNS = setOf(
     AnimationPattern.A, AnimationPattern.B, AnimationPattern.C,
     AnimationPattern.E, AnimationPattern.G
 )
 
-/** Locale.US 고정 Float 포맷 헬퍼 — FFmpeg 명령어 내 소수점을 항상 마침표(
-.)로 보장 */
+/** Locale.US 고정 Float 포맷 헬퍼 */
 private fun Float.fmtUS(d: Int = 3): String = String.format(Locale.US, "%.${d}f", this)
 
 class AsterionRenderEngine(
     private val context: Context,
-    private val ttsEngine: SupertonicTtsEngine  // Activity에서 init() 완료 후 주입
+    private val ttsEngine: SupertonicTtsEngine
 ) {
     private val subclipFiles      = mutableListOf<File>()
     private var totalDurationSecs = 0f
@@ -51,11 +47,7 @@ class AsterionRenderEngine(
         File(AppConfig.OUTPUT_DIR, TEMP_SUBDIR).also { it.mkdirs() }
     }
 
-    /**
-     * drawtext 폰트 인수 문자열
-     * SELinux에서 /system/fonts 접근이 가능한 것을 lazy로 충돌(null 제외)
-     * 접근 불가 시 빈 문자열 반환 → fontfile 옵션 생략 → 렌더링 실패 없음
-     */
+    /** drawtext 폰트 인수 문자열 — SELinux 접근 가능한 폰트만 포함 */
     private val fontArg: String by lazy {
         listOf(
             "/system/fonts/NotoSansCJK-Regular.ttc",
@@ -67,7 +59,7 @@ class AsterionRenderEngine(
         }?.let { ":fontfile='${it}'" } ?: ""
     }
 
-    // ── 인트로 렌더링 ──────────────────────────────────────────────────────
+    // ── 인트로 렌더링 ───────────────────────────────────────────────────
 
     suspend fun renderIntro(
         videoMeta: VideoMeta,
@@ -98,7 +90,6 @@ class AsterionRenderEngine(
             .replace(",", "\\,")
 
         val fp = mutableListOf<String>()
-
         if (hasBgv2) {
             val halfDur  = (dur + 1.0f) / 2.0f
             val xfadeOff = (halfDur - 1.0f).coerceAtLeast(0.5f)
@@ -108,22 +99,15 @@ class AsterionRenderEngine(
         } else {
             fp += "[0:v]setpts=PTS-STARTPTS[bgv]"
         }
-
         val fadeOutSt = (dur - 1.0f).coerceAtLeast(0f)
         fp += "[bgv]fade=t=in:st=0:d=1.0,fade=t=out:st=${fadeOutSt.fmtUS()}:d=1.0[bgv_f]"
-
-        // drawtext: fontArg는 SELinux 접근 가능한 폰트일 경우만 포함
-        // format=yuv420p: drawtext 알파 처리 후 yuva420p 유발 시 h264_mediacodec 거부 방지
-        fp += "[bgv_f]drawtext=" +
-              "text='${safeText}'${fontArg}:" +
-              "fontsize=64:fontcolor=white:" +
-              "borderw=3:bordercolor=black@0.8:" +
+        fp += "[bgv_f]drawtext=text='${safeText}'${fontArg}:" +
+              "fontsize=64:fontcolor=white:borderw=3:bordercolor=black@0.8:" +
               "x=(W-tw)/2:y=(H-th)/2:" +
               "enable='between(t,${textStart.fmtUS(1)},${textEnd.fmtUS(1)})':" +
-              "alpha='if(lt(t,${textFadeIn.fmtUS(1)})," +
-              "(t-${textStart.fmtUS(1)})/1.0," +
-              "if(gt(t,${textFadeOut.fmtUS(1)})," +
-              "(${textEnd.fmtUS(1)}-t)/1.0,1))',format=yuv420p[final]"
+              "alpha='if(lt(t,${textFadeIn.fmtUS(1)}),(t-${textStart.fmtUS(1)})/1.0," +
+              "if(gt(t,${textFadeOut.fmtUS(1)}),(${textEnd.fmtUS(1)}-t)/1.0,1))' [final_pre]"
+        fp += "[final_pre]format=yuv420p[final]"
 
         val outFile = File(sceneTempDir, "scene_intro.mp4")
         val cmd = buildString {
@@ -134,26 +118,27 @@ class AsterionRenderEngine(
             append("-map \"[final]\" -map ${silentIdx}:a ")
             append("-t ${dur.fmtUS()} ")
             append("-c:v libx264 -preset ultrafast -crf 23 ")
-            append("-c:a aac -b:a 128k ")
-            append("-movflags +faststart ${outFile.absolutePath}")
+            append("-c:a aac -b:a 128k -movflags +faststart ${outFile.absolutePath}")
         }
-
-        onProgress("🎬 인트로 렌더링 중 (${dur.toInt()}초)...")
-        Log.i(TAG, "renderIntro cmd: $cmd")
+        onProgress("🎬 인트로 렌더링 중...")
+        Log.i(TAG, "renderIntro: $cmd")
         val rc = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
-        if (!rc.returnCode.isValueSuccess) {
-            Log.e(TAG, "인트로 렌더링 실패: ${rc.logsAsString.takeLast(400)}")
-            onProgress("⚠ 인트로 렌더링 실패 — 본 영상으로 진행")
+        // 파일 존재 여부로 성공 판단 (return code non-zero라도 파일이 있으면 성공)
+        val ok = outFile.exists() && outFile.length() > 0
+        if (!ok) {
+            Log.e(TAG, "인트로 실패 rc=${rc.returnCode.value}: ${rc.logsAsString.takeLast(300)}")
+            onProgress("⚠ 인트로 실패 — 본 영상으로 진행")
             return@withContext null
         }
-
+        if (!rc.returnCode.isValueSuccess)
+            Log.w(TAG, "인트로 rc=${rc.returnCode.value}(경고) 하지만 파일 정상 (${outFile.length()/1024}KB)")
         subclipFiles.add(0, outFile)
         totalDurationSecs += dur
-        onProgress("✅ 인트로 완료 (${dur.toInt()}초)")
+        onProgress("✅ 인트로 완료 (${dur.toInt()}초, ${outFile.length()/1024}KB)")
         outFile
     }
 
-    // ── 씬 렌더링 ──────────────────────────────────────────────────────
+    // ── 씬 렌더링 ───────────────────────────────────────────────────
 
     suspend fun renderScene(
         row: ScriptDataRow,
@@ -180,11 +165,10 @@ class AsterionRenderEngine(
             val tTotal    = if (ttsWavFile.exists()) ttsEngine.estimateDurationFromFile(ttsWavFile) else 3.0f
             totalDurationSecs += tTotal
 
-            val pattern   = AnimationPattern.from(row.animation)
-            val keyframes = calcCardKeyframes(pattern, tTotal)
+            val pattern       = AnimationPattern.from(row.animation)
+            val keyframes     = calcCardKeyframes(pattern, tTotal)
             val textStartSecs = if (pattern in MOTION_PATTERNS) keyframes.tIn else 0f
-
-            val assFile    = File(sceneTempDir, "${sceneId}.ass")
+            val assFile       = File(sceneTempDir, "${sceneId}.ass")
             buildAssSubtitle(row, assFile, keyframes, tTotal, textStartSecs)
 
             val outputFile = File(sceneTempDir, "${sceneId}.mp4")
@@ -198,9 +182,13 @@ class AsterionRenderEngine(
             )
 
             onProgress("[$sceneId] FFmpeg 인코딩...")
-            Log.i(TAG, "[$sceneId] cmd: $cmd")
+            Log.i(TAG, "[$sceneId] $cmd")
             val rc = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
-            if (!rc.returnCode.isValueSuccess) {
+
+            // 파일 존재 여부로 성공 판단
+            // Android FFmpegKit에서 경고를 non-zero return code로 반환하는 알려진 이슈 존재
+            val fileOk = outputFile.exists() && outputFile.length() > 0
+            if (!fileOk) {
                 val errLog  = rc.logsAsString
                 val errLine = errLog.lines().lastOrNull {
                     it.contains("Error", ignoreCase = true) ||
@@ -208,10 +196,13 @@ class AsterionRenderEngine(
                     it.contains("No such", ignoreCase = true) ||
                     it.contains("failed",  ignoreCase = true)
                 } ?: errLog.takeLast(200)
-                Log.e(TAG, "FFmpeg 실패 [$sceneId]:\n${errLog.takeLast(800)}")
+                Log.e(TAG, "FFmpeg 실패 [$sceneId] rc=${rc.returnCode.value}:\n${errLog.takeLast(800)}")
                 onProgress("[$sceneId] ❌ FFmpeg 오류: ${errLine.takeLast(120)}")
                 return@withContext null
             }
+            if (!rc.returnCode.isValueSuccess)
+                Log.w(TAG, "[$sceneId] rc=${rc.returnCode.value}(경고) 하지만 파일 OK (${outputFile.length()/1024}KB)")
+
             ttsWavFile.delete()
             assFile.delete()
             subclipFiles.add(outputFile)
@@ -224,7 +215,7 @@ class AsterionRenderEngine(
         }
     }
 
-    // ── 씬 합치기 ────────────────────────────────────────────────────
+    // ── 씬 합치기 ───────────────────────────────────────────────────
 
     suspend fun concatSubclips(
         outputName: String,
@@ -254,11 +245,10 @@ class AsterionRenderEngine(
                 .replace("'", "\\'")
                 .replace(":", "\\:")
                 .replace(",", "\\,")
-            // fontArg: SELinux 접근 가능한 폰트일 경우만 포함, 접근 불가 시 빈 문자열
-            // format=yuv420p: drawtext 알파 연산 후 yuva420p 유발 시 h264_mediacodec 거부 방지
             filterParts += "[0:v]drawtext=text='$esc'${fontArg}" +
                 ":fontsize=34:fontcolor=white@0.65:shadowcolor=black@0.75:shadowx=2:shadowy=2" +
-                ":x=30:y=40:enable='between(t\\,${wmEnd.let{15}},${wmEnd.fmtUS(1)})',format=yuv420p[vout]"
+                ":x=30:y=40:enable='between(t\\,15\\,${wmEnd.fmtUS(1)})' [wm_pre]"
+            filterParts += "[wm_pre]format=yuv420p[vout]"
             videoMapLabel = "[vout]"
         }
 
@@ -275,7 +265,7 @@ class AsterionRenderEngine(
             if (bgmFile != null) append("-i ${bgmFile.absolutePath} ")
             if (filterParts.isNotEmpty()) append("-filter_complex \"${filterParts.joinToString(";")}\" ")
             append("-map \"$videoMapLabel\" -map \"$audioMapLabel\" ")
-            if (videoMapLabel.startsWith("[")) append("-c:v libx264 -preset ultrafast -crf 20 ")
+            if (videoMapLabel.startsWith("[")) append("-c:v libx264 -preset fast -crf 20 ")
             else append("-c:v copy ")
             if (audioMapLabel.startsWith("[")) append("-c:a aac -b:a 192k ")
             else append("-c:a copy ")
@@ -287,8 +277,9 @@ class AsterionRenderEngine(
         subclipFiles.forEach { it.delete() }
         runCatching { sceneTempDir.listFiles()?.forEach { it.delete() } }
 
-        return@withContext if (rc.returnCode.isValueSuccess) {
-            onProgress("✅ 완성: ${outputFile.name} (${outputFile.length() / 1024 / 1024}MB)")
+        val ok = outputFile.exists() && outputFile.length() > 0
+        return@withContext if (ok) {
+            onProgress("✅ 완성: ${outputFile.name} (${outputFile.length()/1024/1024}MB)")
             outputFile
         } else {
             Log.e(TAG, "concat 실패: ${rc.logsAsString.takeLast(400)}")
@@ -297,15 +288,13 @@ class AsterionRenderEngine(
         }
     }
 
-    // ── 상태 초기화 ────────────────────────────────────────────────────
-
     fun release() {
         subclipFiles.clear()
         totalDurationSecs = 0f
         runCatching { sceneTempDir.listFiles()?.forEach { it.delete() } }
     }
 
-    // ── ASS 자막 생성 ────────────────────────────────────────────────────
+    // ── ASS 자막 ─────────────────────────────────────────────────────
 
     private fun buildAssSubtitle(
         row: ScriptDataRow, out: File, kf: CardKeyframes, tTotal: Float,
@@ -317,50 +306,31 @@ class AsterionRenderEngine(
         val y3  = (kf.holdY + 268).toInt()
         val dialogueStart = assTime(textStartSecs)
         val end = assTime(tTotal)
-
         val hlWord  = row.highlightWord.trim()
         val hlColor = detectHighlightColor(row.script, hlWord)
         val mainTxt = if (hlWord.isNotBlank() && row.cardMain.contains(hlWord))
             row.cardMain.replace(hlWord, "{\\c&H${hlColor}&}$hlWord{\\c&HFFFFFF&}")
         else row.cardMain
-
         fun prep(t: String) = t.replace("\\n", "\\N").replace("\n", "\\N")
         val fade = "{\\an5\\fad(800,600)}"
-
         out.writeText(buildString {
-            appendLine("[Script Info]")
-            appendLine("ScriptType: v4.00+")
-            appendLine("PlayResX: $VIDEO_W")
-            appendLine("PlayResY: $VIDEO_H")
-            appendLine("")
+            appendLine("[Script Info]"); appendLine("ScriptType: v4.00+")
+            appendLine("PlayResX: $VIDEO_W"); appendLine("PlayResY: $VIDEO_H"); appendLine("")
             appendLine("[V4+ Styles]")
-            appendLine("Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour," +
-                "OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut," +
-                "ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow," +
-                "Alignment,MarginL,MarginR,MarginV,Encoding")
-            appendLine("Style: Main,NotoSansKR-Bold,52,&H00FFFFFF,&H004DDBFF,&H80000000,&H00000000," +
-                "-1,0,0,0,100,100,0,0,1,2,0,5,30,30,80,1")
-            appendLine("Style: Sub,NotoSansKR-Regular,38,&H00CCCCCC,&H00000000,&H80000000,&H00000000," +
-                "0,0,0,0,100,100,0,0,1,1,0,5,30,30,80,1")
-            appendLine("Style: Desc,NotoSansKR-Regular,32,&H00AAAAAA,&H00000000,&H80000000,&H00000000," +
-                "0,0,0,0,100,100,0,0,1,1,0,5,30,30,80,1")
-            appendLine("")
-            appendLine("[Events]")
+            appendLine("Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding")
+            appendLine("Style: Main,NotoSansKR-Bold,52,&H00FFFFFF,&H004DDBFF,&H80000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,5,30,30,80,1")
+            appendLine("Style: Sub,NotoSansKR-Regular,38,&H00CCCCCC,&H00000000,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,1,0,5,30,30,80,1")
+            appendLine("Style: Desc,NotoSansKR-Regular,32,&H00AAAAAA,&H00000000,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,1,0,5,30,30,80,1")
+            appendLine(""); appendLine("[Events]")
             appendLine("Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text")
-
-            val pm = prep(mainTxt)
-            val ps = prep(row.cardSub)
-            val pd = prep(row.cardDesc)
-            if (pm.isNotBlank())
-                appendLine("Dialogue: 0,$dialogueStart,$end,Main,,0,0,0,,${fade}{\\pos($cx,$y1)}${wrapAss(pm, 12)}")
-            if (ps.isNotBlank())
-                appendLine("Dialogue: 0,$dialogueStart,$end,Sub,,0,0,0,,${fade}{\\pos($cx,$y2)}${wrapAss(ps, 18)}")
-            if (pd.isNotBlank())
-                appendLine("Dialogue: 0,$dialogueStart,$end,Desc,,0,0,0,,${fade}{\\pos($cx,$y3)}${wrapAss(pd, 24)}")
+            val pm = prep(mainTxt); val ps = prep(row.cardSub); val pd = prep(row.cardDesc)
+            if (pm.isNotBlank()) appendLine("Dialogue: 0,$dialogueStart,$end,Main,,0,0,0,,${fade}{\\pos($cx,$y1)}${wrapAss(pm, 12)}")
+            if (ps.isNotBlank()) appendLine("Dialogue: 0,$dialogueStart,$end,Sub,,0,0,0,,${fade}{\\pos($cx,$y2)}${wrapAss(ps, 18)}")
+            if (pd.isNotBlank()) appendLine("Dialogue: 0,$dialogueStart,$end,Desc,,0,0,0,,${fade}{\\pos($cx,$y3)}${wrapAss(pd, 24)}")
         }, Charsets.UTF_8)
     }
 
-    // ── FFmpeg 명령어 조립 ───────────────────────────────────────────────
+    // ── FFmpeg 명령어 ──────────────────────────────────────────────────
 
     private fun buildFfmpegCmd(
         bgFile: File, ttsWav: File?, tTotal: Float, assFile: File,
@@ -381,48 +351,25 @@ class AsterionRenderEngine(
         val effDur = transitionDur.coerceIn(0.3f, (tTotal * 0.45f).coerceAtLeast(0.3f))
 
         val fp = mutableListOf<String>()
-        // ───────────────────────────────────────────────────────
-        // [진단 모드] filter_complex 전체 제거 → 최소 명령어 테스트
-        // 이 버전이 성공하면 → filter_complex 내 특정 필터가 원인
-        // 이 버전도 실패하면 → stream_loop/libx264 자체 문제
-        // ───────────────────────────────────────────────────────
-        val diagCmd = buildString {
-            append("ffmpeg -y -stream_loop -1 -i ${bgFile.absolutePath} ")
-            if (ttsWav != null) append("-i ${ttsWav.absolutePath} ")
-            append("-map 0:v ")
-            if (ttsWav != null) append("-map 1:a -c:a aac -b:a 192k ")
-            else                append("-an ")
-            append("-vf format=yuv420p ")
-            append("-t ${tTotal.fmtUS()} ")
-            append("-c:v libx264 -preset ultrafast -crf 23 -movflags +faststart ")
-            append(outputFile.absolutePath)
-        }
-        return diagCmd
-        @Suppress("UNREACHABLE_CODE")
         fp += "[0:v]setpts=PTS-STARTPTS[bg0]"
 
         val bgAfterTrans: String = when (bgTransition) {
             BgTransition.NONE -> "[bg0]"
-
             BgTransition.FADE -> {
                 val fadeOutSt = (tTotal - effDur).coerceAtLeast(0f)
-                fp += "[bg0]fade=t=in:st=0:d=${effDur.fmtUS()}," +
-                      "fade=t=out:st=${fadeOutSt.fmtUS()}:d=${effDur.fmtUS()}[bg_t]"
+                fp += "[bg0]fade=t=in:st=0:d=${effDur.fmtUS()},fade=t=out:st=${fadeOutSt.fmtUS()}:d=${effDur.fmtUS()}[bg_t]"
                 "[bg_t]"
             }
-
             BgTransition.SLIDE_LEFT, BgTransition.WIPE_RIGHT -> {
                 fp += "[$blackBgIdx:v]setpts=PTS-STARTPTS[blackbg]"
                 fp += "[blackbg][bg0]overlay=x='max(0-W,W*(t/${effDur.fmtUS()}-1))':y=0:format=auto[bg_t]"
                 "[bg_t]"
             }
-
             BgTransition.SLIDE_UP -> {
                 fp += "[$blackBgIdx:v]setpts=PTS-STARTPTS[blackbg]"
                 fp += "[blackbg][bg0]overlay=x=0:y='max(0-H,H*(1-t/${effDur.fmtUS()}))':format=auto[bg_t]"
                 "[bg_t]"
             }
-
             else -> {
                 fp += "[bg0]fade=t=in:st=0:d=${effDur.fmtUS()}[bg_t]"
                 "[bg_t]"
@@ -446,25 +393,17 @@ class AsterionRenderEngine(
             val r = (gradient.topColor shr 16) and 0xFF
             val g = (gradient.topColor shr 8)  and 0xFF
             val b = gradient.topColor and 0xFF
-            fp += "${bgFx}drawbox=" +
-                  "x=${kf.holdX.toInt()}:y=${kf.holdY.toInt()}:w=860:h=340:" +
-                  "color=0x${String.format(Locale.US, "%02X%02X%02X", r, g, b)}@${String.format(Locale.US, "%.2f", cardStyle.alpha)}" +
-                  ":t=fill[card]"
+            fp += "${bgFx}drawbox=x=${kf.holdX.toInt()}:y=${kf.holdY.toInt()}:w=860:h=340:" +
+                  "color=0x${String.format(Locale.US, "%02X%02X%02X", r, g, b)}@${String.format(Locale.US, "%.2f", cardStyle.alpha)}:t=fill[card]"
             "[card]"
         } else bgFx
 
-        // subtitles: 폴트 없으면 패스스루, 실패 없음
         fp += "${card}subtitles='${assFile.absolutePath.replace("'", "\\'")}' [sub_out]"
-        // format=yuv420p 강제:
-        // drawbox @alpha 알파 체인이 yuva420p를 유발할 수 있음
-        // scale + format=yuv420p로 yuv420p 엄격 보장 → h264_mediacodec 거부 방지
         fp += "[sub_out]scale=${VIDEO_W}:${VIDEO_H},format=yuv420p[final]"
 
         return buildString {
             append("ffmpeg -y -stream_loop -1 -i ${bgFile.absolutePath} ")
-            if (needsBlackBg) {
-                append("-f lavfi -i color=c=black:size=${VIDEO_W}x${VIDEO_H}:rate=30 ")
-            }
+            if (needsBlackBg) append("-f lavfi -i color=c=black:size=${VIDEO_W}x${VIDEO_H}:rate=30 ")
             if (ttsWav != null) append("-i ${ttsWav.absolutePath} ")
             append("-filter_complex \"${fp.joinToString(";")}\" ")
             append("-map \"[final]\" ")
@@ -476,25 +415,23 @@ class AsterionRenderEngine(
         }
     }
 
-    // ── 키프레임 계산 ───────────────────────────────────────────────────
+    // ── 키프레임 ─────────────────────────────────────────────────────
 
     private fun calcCardKeyframes(pattern: AnimationPattern, tTotal: Float): CardKeyframes {
         val tOut = (tTotal - 1f).coerceAtLeast(1.1f)
         val cx = VIDEO_W / 2f - 430f
         val cy = VIDEO_H / 2f - 170f
         return when (pattern) {
-            AnimationPattern.A -> CardKeyframes(-860f,             VIDEO_H * .18f, VIDEO_W * .05f, VIDEO_H * .18f, CardOutType.TOP,          1f,   tOut, tTotal)
-            AnimationPattern.B -> CardKeyframes(VIDEO_W.toFloat(), VIDEO_H * .18f, VIDEO_W / 2f - 430f, VIDEO_H * .18f, CardOutType.BOTTOM, 1f,   tOut, tTotal)
-            AnimationPattern.C -> CardKeyframes(cx,               -340f,          cx,            cy,             CardOutType.BOTTOM,       1f,   tOut, tTotal)
-            AnimationPattern.D -> CardKeyframes(cx,                cy,            cx,            cy,             CardOutType.FADE,         1f,   tOut, tTotal)
-            AnimationPattern.E -> CardKeyframes(VIDEO_W * .05f,   VIDEO_H * .68f, cx,            cy,             CardOutType.FADE,         1f,   tOut, tTotal)
-            AnimationPattern.F -> CardKeyframes(cx,                cy,            cx,            cy,             CardOutType.SCALE,        0.5f, tOut, tTotal)
-            AnimationPattern.G -> CardKeyframes(-860f,             VIDEO_H * .18f, VIDEO_W * .05f, VIDEO_H * .18f, CardOutType.ROTATE_SCALE, 1f,  tOut, tTotal)
-            else               -> CardKeyframes(cx,                cy,            cx,            cy,             CardOutType.FADE,         1f,   tOut, tTotal)
+            AnimationPattern.A -> CardKeyframes(-860f,             VIDEO_H*.18f, VIDEO_W*.05f, VIDEO_H*.18f, CardOutType.TOP,          1f,   tOut, tTotal)
+            AnimationPattern.B -> CardKeyframes(VIDEO_W.toFloat(), VIDEO_H*.18f, VIDEO_W/2f-430f, VIDEO_H*.18f, CardOutType.BOTTOM, 1f,   tOut, tTotal)
+            AnimationPattern.C -> CardKeyframes(cx,               -340f,         cx,           cy,            CardOutType.BOTTOM,       1f,   tOut, tTotal)
+            AnimationPattern.D -> CardKeyframes(cx,                cy,           cx,           cy,            CardOutType.FADE,         1f,   tOut, tTotal)
+            AnimationPattern.E -> CardKeyframes(VIDEO_W*.05f,     VIDEO_H*.68f,  cx,           cy,            CardOutType.FADE,         1f,   tOut, tTotal)
+            AnimationPattern.F -> CardKeyframes(cx,                cy,           cx,           cy,            CardOutType.SCALE,        0.5f, tOut, tTotal)
+            AnimationPattern.G -> CardKeyframes(-860f,             VIDEO_H*.18f, VIDEO_W*.05f, VIDEO_H*.18f, CardOutType.ROTATE_SCALE, 1f,  tOut, tTotal)
+            else               -> CardKeyframes(cx,                cy,           cx,           cy,            CardOutType.FADE,         1f,   tOut, tTotal)
         }
     }
-
-    // ── 유틸리티 ───────────────────────────────────────────────────────
 
     private fun assTime(s: Float): String {
         val tc = (s * 100).toInt().coerceAtLeast(0)
@@ -509,12 +446,12 @@ class AsterionRenderEngine(
     }
 
     private fun detectHighlightColor(script: String, word: String): String {
-        val rise   = listOf("상승", "강화", "기회", "확장", "대운", "목성", "금성")
-        val fall   = listOf("주의", "조심", "손실", "토성", "라후", "케투", "역행")
+        val rise   = listOf("상승","강화","기회","확장","대운","목성","금성")
+        val fall   = listOf("주의","조심","손실","토성","라후","케투","역행")
         val planet = mapOf(
-            "태양" to "00B7FF", "달"   to "FFC8C8", "화성" to "4444FF",
-            "수성" to "CCFF44", "목성" to "00D7FF", "금성" to "CC88FF",
-            "토성" to "AAAAAA", "라후" to "CC0066", "케투" to "006688"
+            "태양" to "00B7FF","달" to "FFC8C8","화성" to "4444FF",
+            "수성" to "CCFF44","목성" to "00D7FF","금성" to "CC88FF",
+            "토성" to "AAAAAA","라후" to "CC0066","케투" to "006688"
         )
         return planet.entries.firstOrNull { script.contains(it.key) }?.value
             ?: if (rise.any { script.contains(it) }) "4DDBFF"
