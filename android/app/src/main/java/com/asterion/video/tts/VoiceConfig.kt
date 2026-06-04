@@ -77,7 +77,15 @@ class SupertonicTtsEngine(private val context: Context) {
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/" +
             "tts-models/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2"
         const val MODEL_DIR_NAME = "sherpa-onnx-supertonic-3-tts-int8-2026-05-11"
-        private val REQUIRED_FILES = listOf("model.onnx", "lexicon.txt", "tokens.txt")
+        private val REQUIRED_FILES = listOf(
+            "duration_predictor.int8.onnx",
+            "text_encoder.int8.onnx",
+            "vector_estimator.int8.onnx",
+            "vocoder.int8.onnx",
+            "tts.json",
+            "unicode_indexer.bin",
+            "voice.bin"
+        )
     }
 
     suspend fun init(onProgress: (String) -> Unit = {}) = withContext(Dispatchers.IO) {
@@ -86,10 +94,14 @@ class SupertonicTtsEngine(private val context: Context) {
         try {
             val config = OfflineTtsConfig(
                 model = OfflineTtsModelConfig(
-                    vits = OfflineTtsVitsModelConfig(
-                        model   = File(modelDir, "model.onnx").absolutePath,
-                        lexicon = File(modelDir, "lexicon.txt").absolutePath,
-                        tokens  = File(modelDir, "tokens.txt").absolutePath
+                    supertonic = OfflineTtsSupertonicModelConfig(
+                        durationPredictor = File(modelDir, "duration_predictor.int8.onnx").absolutePath,
+                        textEncoder       = File(modelDir, "text_encoder.int8.onnx").absolutePath,
+                        vectorEstimator   = File(modelDir, "vector_estimator.int8.onnx").absolutePath,
+                        vocoder           = File(modelDir, "vocoder.int8.onnx").absolutePath,
+                        ttsJson           = File(modelDir, "tts.json").absolutePath,
+                        unicodeIndexer    = File(modelDir, "unicode_indexer.bin").absolutePath,
+                        voiceStyle        = File(modelDir, "voice.bin").absolutePath,
                     ),
                     numThreads = 2, debug = false
                 )
@@ -106,7 +118,15 @@ class SupertonicTtsEngine(private val context: Context) {
         withContext(Dispatchers.IO) {
             val engine = tts ?: run { Log.e(TAG, "init() 먼저 호출 필요"); return@withContext }
             try {
-                engine.generate(text = text, sid = sid, speed = speed).save(outputFile.absolutePath)
+                val genConfig = GenerationConfig(
+                    sid      = sid,
+                    numSteps = 8,          // 품질/속도 트레이드오프 (4~32, 8이 권장)
+                    speed    = speed,
+                    extra    = mapOf("lang" to "ko"),  // 한국어 필수 — 없으면 영어식 발음
+                )
+                engine.generateWithConfigAndCallback(
+                    text = text, config = genConfig, callback = { 1 }
+                ).save(outputFile.absolutePath)
             } catch (e: Exception) { Log.e(TAG, "TTS 합성 실패: $e") }
         }
 
@@ -114,7 +134,17 @@ class SupertonicTtsEngine(private val context: Context) {
     suspend fun generateRaw(text: String, sid: Int, speed: Float): FloatArray? =
         withContext(Dispatchers.IO) {
             val engine = tts ?: return@withContext null
-            try { engine.generate(text = text, sid = sid, speed = speed).samples }
+            try {
+                val genConfig = GenerationConfig(
+                    sid      = sid,
+                    numSteps = 8,
+                    speed    = speed,
+                    extra    = mapOf("lang" to "ko"),  // 한국어 필수
+                )
+                engine.generateWithConfigAndCallback(
+                    text = text, config = genConfig, callback = { 1 }
+                ).samples
+            }
             catch (e: Exception) { Log.e(TAG, "generateRaw 실패: $e"); null }
         }
 
