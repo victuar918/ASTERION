@@ -376,8 +376,9 @@ class AsterionVideoActivity : AppCompatActivity() {
                     val safeSheet = sheet.replace(Regex("[^\\w가-힣]"), "_")
                     updateStatus("🔗 씬 ${done}개 concat 중...")
                     val finalFile = engine!!.concatSubclips(
-                        outputName  = safeSheet,
-                        bgmFileName = data.videoMeta.mainBgm
+                        outputName    = safeSheet,
+                        bgmFileName   = data.videoMeta.mainBgm,
+                        watermarkText = data.videoMeta.topWatermark   // Video_Meta 시트 Top_Watermark 값
                     ) { msg -> appendLog(msg); updateStatus(msg) }
                     if (finalFile != null && finalFile.exists()) {
                         updateStatus("🎬 완료: ${finalFile.name} (${finalFile.length()/1024/1024}MB)")
