@@ -11,16 +11,13 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.3
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.4
 //
-// [아키텍처]
-//   Activity가 SupertonicTtsEngine.init() 완료 후 주입
-//   voiceConfig는 renderScene() 호출마다 전달 (UI 설정 실시간 반영)
-//
-// [변경로그 v3.3]
-//   • BG Transition: FADE 복원 + SLIDE_LEFT/UP overlay 실제 구현
-//   • 화자 텍스트 타이밍: 모션 패턴(A/B/C/E/G)에서 tIn 후 텍스트 등장
-//   • renderIntro(): 15초 인트로 (BGV1+2 xfade + 중앙 텍스트 페이드)
+// [변경로그 v3.4 — 렌더링 안정화]
+//   • trim 필터 제거 → -t tTotal OUTPUT 옵션으로 대체
+//     trim + stream_loop 조합이 Android FFmpegKit에서 안정적이지 않아 렌더링 실패 유발
+//   • fontsdir=/system/fonts 제거 → SELinux/권한 제한으로 libass 초기화 실패
+//   • BgTransition.NONE 코드 정상화 (열거형에 NONE 추가)
 // =================================================================
 
 private const val TAG         = "AsterionRenderEngine"
@@ -45,15 +42,13 @@ class AsterionRenderEngine(
         File(AppConfig.OUTPUT_DIR, TEMP_SUBDIR).also { it.mkdirs() }
     }
 
-    // ── 인트로 렌더링 ───────────────────────────────────────────────────────────
+    // ── 인트로 렌더링 ──────────────────────────────────────────────────────
 
     /**
      * 인트로 15초 렌더링
      * - Video_Meta의 Intro_BGV1/2 두 배경영상을 xfade로 연결
      * - 중앙에 introText를 부드럽게 페이드 인/아웃
      * - 완성된 인트로 파일을 subclipFiles 맨 앞에 삽입
-     *
-     * @return 렌더링된 인트로 MP4 (introBgv1이 비어있으면 null 반환하고 생략)
      */
     suspend fun renderIntro(
         videoMeta: VideoMeta,
@@ -70,11 +65,8 @@ class AsterionRenderEngine(
         val bgv1    = AppConfig.resolveBgv(videoMeta.introBgv1)
         val hasBgv2 = videoMeta.introBgv2.isNotBlank()
         val bgv2    = if (hasBgv2) AppConfig.resolveBgv(videoMeta.introBgv2) else bgv1
-
-        // 오디오: 싸에서 BGM이 추가되므로 인트로는 무음 트랙
         val silentIdx = if (hasBgv2) 2 else 1
 
-        // 텍스트 타이밍: 3초 등장, 1초 페이드인, 유지, 1초 페이드아웃
         val textStart   = 3.0f
         val textFadeIn  = textStart + 1.0f
         val textFadeOut = (dur - 2.0f).coerceAtLeast(textFadeIn + 1.0f)
@@ -89,23 +81,22 @@ class AsterionRenderEngine(
         val fp = mutableListOf<String>()
 
         if (hasBgv2) {
-            // 두 BGV를 xfade로 연결
-            // 출력 = halfDur + halfDur - 1(오버랩) = dur ✅
+            // 두 BGV를 xfade 연결
+            // trim 없음: -t dur OUTPUT 옵션으로 제한
             val halfDur  = (dur + 1.0f) / 2.0f
             val xfadeOff = (halfDur - 1.0f).coerceAtLeast(0.5f)
-            fp += "[0:v]setpts=PTS-STARTPTS,trim=duration=${String.format("%.3f", halfDur)},setpts=PTS-STARTPTS[v0]"
-            fp += "[1:v]setpts=PTS-STARTPTS,trim=duration=${String.format("%.3f", halfDur)},setpts=PTS-STARTPTS[v1]"
+            fp += "[0:v]setpts=PTS-STARTPTS[v0]"
+            fp += "[1:v]setpts=PTS-STARTPTS[v1]"
             fp += "[v0][v1]xfade=transition=fade:duration=1.0:offset=${String.format("%.3f", xfadeOff)}[bgv]"
         } else {
-            // BGV 단일: 전체 dur로 trim
-            fp += "[0:v]setpts=PTS-STARTPTS,trim=duration=${String.format("%.3f", dur)},setpts=PTS-STARTPTS[bgv]"
+            fp += "[0:v]setpts=PTS-STARTPTS[bgv]"
         }
 
         // BGV 시작/종료 페이드
         val fadeOutSt = (dur - 1.0f).coerceAtLeast(0f)
         fp += "[bgv]fade=t=in:st=0:d=1.0,fade=t=out:st=${String.format("%.3f", fadeOutSt)}:d=1.0[bgv_f]"
 
-        // 중앙 텍스트 (drawtext): 부드럽게 페이드 인/아웃
+        // 중앙 텍스트 (drawtext)
         fp += "[bgv_f]drawtext=" +
               "fontfile=/system/fonts/NotoSansCJK-Regular.ttc:" +
               "text='${safeText}':" +
@@ -122,12 +113,13 @@ class AsterionRenderEngine(
         val cmd = buildString {
             append("ffmpeg -y -stream_loop -1 -i ${bgv1.absolutePath} ")
             if (hasBgv2) append("-stream_loop -1 -i ${bgv2.absolutePath} ")
-            // 무음 오디오: 씬합치기시 BGM 미스매치 방지
-            append("-f lavfi -i anullsrc=r=44100:cl=stereo:d=${String.format("%.3f", dur)} ")
+            append("-f lavfi -i anullsrc=r=44100:cl=stereo ")
             append("-filter_complex \"${fp.joinToString(";")}\" ")
             append("-map \"[final]\" -map ${silentIdx}:a ")
+            // -t OUTPUT 옵션으로 인트로 길이 제한 (trim 사용 안 함)
+            append("-t ${String.format("%.3f", dur)} ")
             append("-c:v h264_mediacodec -b:v 8M -maxrate 8M -bufsize 16M ")
-            append("-c:a aac -b:a 128k -shortest ")
+            append("-c:a aac -b:a 128k ")
             append("-movflags +faststart ${outFile.absolutePath}")
         }
 
@@ -140,19 +132,14 @@ class AsterionRenderEngine(
             return@withContext null
         }
 
-        // 인트로를 씬 목록 맨 앞에 삽입 + 총 길이 반영
         subclipFiles.add(0, outFile)
         totalDurationSecs += dur
         onProgress("✅ 인트로 완료 (${dur.toInt()}초)")
         outFile
     }
 
-    // ── 씬 렌더링 ────────────────────────────────────────────────────────────
+    // ── 씬 렌더링 ───────────────────────────────────────────────────────
 
-    /**
-     * 씬 한 개 렌더링
-     * @param voiceConfig Activity buildVoiceConfig() 결과 — sid/speed/numSteps 실제 반영
-     */
     suspend fun renderScene(
         row: ScriptDataRow,
         videoMeta: VideoMeta,
@@ -175,14 +162,12 @@ class AsterionRenderEngine(
                 ttsEngine.synthesize(row.script, cfg.sid, cfg.speed, ttsWavFile, cfg.numSteps)
             }
 
-            val tTotal = if (ttsWavFile.exists()) ttsEngine.estimateDurationFromFile(ttsWavFile) else 3.0f
+            val tTotal    = if (ttsWavFile.exists()) ttsEngine.estimateDurationFromFile(ttsWavFile) else 3.0f
             totalDurationSecs += tTotal
 
             val pattern   = AnimationPattern.from(row.animation)
             val keyframes = calcCardKeyframes(pattern, tTotal)
-
-            // 모션 패턴: 카드 진입 완료(tIn초) 후 텍스트 등장
-            // 나머지(페이드등)은 즉시 등장 (ASS \fad 효과가 텔스트 페이드 담당)
+            // 모션 패턴: 카드가 hold 위치에 도달한 후(tIn초) 텍스트 등장
             val textStartSecs = if (pattern in MOTION_PATTERNS) keyframes.tIn else 0f
 
             val assFile    = File(sceneTempDir, "${sceneId}.ass")
@@ -217,7 +202,7 @@ class AsterionRenderEngine(
         }
     }
 
-    // ── 씬 합치기 ────────────────────────────────────────────────────────────
+    // ── 씬 합치기 ────────────────────────────────────────────────────
 
     suspend fun concatSubclips(
         outputName: String,
@@ -241,7 +226,6 @@ class AsterionRenderEngine(
         var videoMapLabel = "0:v"
         var audioMapLabel = "0:a"
 
-        // 워터마크: 15초 등장 → wmEnd초 소멸 (영상 종료 5초 전)
         if (watermarkText.isNotBlank()) {
             val esc = watermarkText
                 .replace("\\", "\\\\")
@@ -255,7 +239,6 @@ class AsterionRenderEngine(
             videoMapLabel = "[vout]"
         }
 
-        // BGM 덕킹: 0~13초 0.35 / 13~15초 선형 감소 / 15초~ 0.10
         if (bgmFile != null) {
             filterParts += "[0:a]volume=1.0[tts]"
             filterParts += "[1:a]aformat=sample_rates=44100:channel_layouts=stereo," +
@@ -291,7 +274,7 @@ class AsterionRenderEngine(
         }
     }
 
-    // ── 상태 초기화 ────────────────────────────────────────────────────────────
+    // ── 상태 초기화 ────────────────────────────────────────────────────
 
     fun release() {
         subclipFiles.clear()
@@ -299,17 +282,10 @@ class AsterionRenderEngine(
         runCatching { sceneTempDir.listFiles()?.forEach { it.delete() } }
     }
 
-    // ── ASS 자막 생성 ────────────────────────────────────────────────────────
+    // ── ASS 자막 생성 ────────────────────────────────────────────────────
 
-    /**
-     * ASS 자막 파일 생성
-     * @param textStartSecs 모션 패턴에서는 kf.tIn 전달되어 카드 진입 완료 후 텍스트 등장
-     */
     private fun buildAssSubtitle(
-        row: ScriptDataRow,
-        out: File,
-        kf: CardKeyframes,
-        tTotal: Float,
+        row: ScriptDataRow, out: File, kf: CardKeyframes, tTotal: Float,
         textStartSecs: Float = 0f
     ) {
         val cx  = (kf.holdX + 430).toInt()
@@ -361,7 +337,7 @@ class AsterionRenderEngine(
         }, Charsets.UTF_8)
     }
 
-    // ── FFmpeg 명령어 조립 ────────────────────────────────────────────────────
+    // ── FFmpeg 명령어 조립 ───────────────────────────────────────────────
 
     private fun buildFfmpegCmd(
         bgFile: File, ttsWav: File?, tTotal: Float, assFile: File,
@@ -371,7 +347,6 @@ class AsterionRenderEngine(
         transitionDur: Float, outputFile: File
     ): String {
 
-        // 슬라이드 전환에는 블랙 배경 입력 필요
         val needsBlackBg = bgTransition in setOf(
             BgTransition.SLIDE_LEFT, BgTransition.SLIDE_UP, BgTransition.WIPE_RIGHT
         )
@@ -381,20 +356,16 @@ class AsterionRenderEngine(
             needsBlackBg   -> 2
             else           -> 1
         }
-
-        // 전환 지속 시간: 최소 0.3s, 씬 전체의 45% 이하
         val effDur = transitionDur.coerceIn(0.3f, (tTotal * 0.45f).coerceAtLeast(0.3f))
 
         val fp = mutableListOf<String>()
 
-        // ① BGV: PTS 리셋 → trim(정확한 씬 길이) → PTS 리셋 → 인코더에 깨끗한 스트림
-        fp += "[0:v]setpts=PTS-STARTPTS," +
-              "trim=duration=${String.format("%.3f", tTotal)}," +
-              "setpts=PTS-STARTPTS[bg0]"
+        // ① BGV: PTS 리셋만 수행 (trim 제거)
+        // 실제 요소 제한은 명령 내 -t OUTPUT 옵션으로 명시
+        fp += "[0:v]setpts=PTS-STARTPTS[bg0]"
 
         // ② BG 전환 효과
         val bgAfterTrans: String = when (bgTransition) {
-
             BgTransition.NONE -> "[bg0]"
 
             BgTransition.FADE -> {
@@ -404,7 +375,6 @@ class AsterionRenderEngine(
                 "[bg_t]"
             }
 
-            // SLIDE_LEFT / WIPE_RIGHT: 블랙 위에 현재 씬이 왼쪽에서 밀려 들어오는 효과
             BgTransition.SLIDE_LEFT, BgTransition.WIPE_RIGHT -> {
                 fp += "[$blackBgIdx:v]setpts=PTS-STARTPTS[blackbg]"
                 fp += "[blackbg][bg0]overlay=" +
@@ -412,7 +382,6 @@ class AsterionRenderEngine(
                 "[bg_t]"
             }
 
-            // SLIDE_UP: 블랙 위에 현재 씬이 아래에서 올라오는 효과
             BgTransition.SLIDE_UP -> {
                 fp += "[$blackBgIdx:v]setpts=PTS-STARTPTS[blackbg]"
                 fp += "[blackbg][bg0]overlay=" +
@@ -420,14 +389,13 @@ class AsterionRenderEngine(
                 "[bg_t]"
             }
 
-            // ZOOM_IN, ZOOM_OUT, BLUR_FADE → 페이드로 근사 (xfade 어날)
-            else -> {
+            else -> {  // ZOOM_IN, ZOOM_OUT, BLUR_FADE → 페이드로 근사
                 fp += "[bg0]fade=t=in:st=0:d=${String.format("%.3f", effDur)}[bg_t]"
                 "[bg_t]"
             }
         }
 
-        // ③ BG 조정 효과 (vignette / motion_blur / edge_glow)
+        // ③ BG 조정 효과
         val bgFx: String = when (bgEffect.split(":")[0]) {
             "VIGNETTE"    -> { fp += "${bgAfterTrans}vignette=PI/4[bgfx]"; "[bgfx]" }
             "MOTION_BLUR" -> { fp += "${bgAfterTrans}tmix=frames=3[bgfx]"; "[bgfx]" }
@@ -441,7 +409,7 @@ class AsterionRenderEngine(
             else -> bgAfterTrans
         }
 
-        // ④ 카드 박스 (drawbox — 정적 위치)
+        // ④ 카드 박스
         val card: String = if (cardStyle != CardStyle.NONE && cardStyle != CardStyle.MINIMAL) {
             val r = (gradient.topColor shr 16) and 0xFF
             val g = (gradient.topColor shr 8)  and 0xFF
@@ -453,28 +421,30 @@ class AsterionRenderEngine(
             "[card]"
         } else bgFx
 
-        // ⑤ ASS 자막 (fontsdir 명시으로 libass가 시스템 폰트 인식)
-        fp += "${card}subtitles='${assFile.absolutePath.replace("'", "\\'")}':fontsdir=/system/fonts[final]"
+        // ⑤ ASS 자막 (fontsdir 제거 — Android SELinux에서 /system/fonts 접근 차단 시 libass 실패)
+        fp += "${card}subtitles='${assFile.absolutePath.replace("'", "\\'")}' [final]"
 
         // ⑥ FFmpeg 명령 조립
         return buildString {
             append("ffmpeg -y -stream_loop -1 -i ${bgFile.absolutePath} ")
             if (needsBlackBg) {
-                // SLIDE 전환용 블랙 배경: 씬과 동일한 길이로 생성
-                append("-f lavfi -i color=c=black:size=${VIDEO_W}x${VIDEO_H}" +
-                       ":rate=30:duration=${String.format("%.3f", tTotal)} ")
+                // SLIDE 전환용 블랙 배경 (duration 없음: -t OUTPUT에서 제한)
+                append("-f lavfi -i color=c=black:size=${VIDEO_W}x${VIDEO_H}:rate=30 ")
             }
             if (ttsWav != null) append("-i ${ttsWav.absolutePath} ")
             append("-filter_complex \"${fp.joinToString(";")}\" ")
             append("-map \"[final]\" ")
             if (audioIdx >= 0) append("-map ${audioIdx}:a -c:a aac -b:a 192k ")
             else               append("-an ")
+            // -t OUTPUT 옵션: 입력 측에 두지 않고 출력 인코딩 시간을 제한
+            // (trim 필터 대체 — stream_loop + trim 조합이 Android FFmpegKit에서 불안정)
+            append("-t ${String.format("%.3f", tTotal)} ")
             append("-c:v h264_mediacodec -b:v 8M -maxrate 8M -bufsize 16M -movflags +faststart ")
             append(outputFile.absolutePath)
         }
     }
 
-    // ── 키프레임 계산 ────────────────────────────────────────────────────────
+    // ── 키프레임 계산 ───────────────────────────────────────────────────
 
     private fun calcCardKeyframes(pattern: AnimationPattern, tTotal: Float): CardKeyframes {
         val tOut = (tTotal - 1f).coerceAtLeast(1.1f)
@@ -492,7 +462,7 @@ class AsterionRenderEngine(
         }
     }
 
-    // ── 유틸리티 ────────────────────────────────────────────────────────────
+    // ── 유틸리티 ───────────────────────────────────────────────────────
 
     private fun assTime(s: Float): String {
         val tc = (s * 100).toInt().coerceAtLeast(0)

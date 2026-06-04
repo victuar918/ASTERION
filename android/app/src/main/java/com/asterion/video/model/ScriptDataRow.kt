@@ -56,7 +56,8 @@ enum class CardStyle(val alpha: Float) {
 enum class AnimationPattern { A,B,C,D,E,F,G,NONE;
     companion object { fun from(v: String) = values().firstOrNull { it.name == v } ?: NONE }
 }
-enum class BgTransition { FADE,SLIDE_LEFT,SLIDE_UP,ZOOM_IN,ZOOM_OUT,BLUR_FADE,WIPE_RIGHT;
+// NONE 추가: 시트에서 전환 없음을 명시할 수 있도록 (from() 기본값: FADE)
+enum class BgTransition { NONE,FADE,SLIDE_LEFT,SLIDE_UP,ZOOM_IN,ZOOM_OUT,BLUR_FADE,WIPE_RIGHT;
     companion object { fun from(v: String) = values().firstOrNull { it.name == v } ?: FADE }
 }
 enum class CardExtraEffect { NONE,HEARTBEAT,VIBRATE;
