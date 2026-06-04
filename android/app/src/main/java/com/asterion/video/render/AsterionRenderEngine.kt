@@ -429,8 +429,11 @@ class AsterionRenderEngine(
             "[card]"
         } else bgFx
 
-        // ⑤ ASS 자막 (fontsdir 제거 — Android SELinux에서 /system/fonts 접근 차단 시 libass 실패)
-        fp += "${card}subtitles='${assFile.absolutePath.replace("'", "\\'")}' [final]"
+        // ⑤ ASS 자막 + scale(yuv420p 강제)
+        // subtitles 필터는 파일이 없거나 폰트 없으면 패스스루 처리되므로 렌더링 실패 없음
+        // scale 필터: yuv420p 출력 강제 → h264_mediacodec 호환성 보장
+        fp += "${card}subtitles='${assFile.absolutePath.replace("'", "\\'")}' [sub_out]"
+        fp += "[sub_out]scale=${VIDEO_W}:${VIDEO_H}[final]"
 
         // ⑥ FFmpeg 명령 조립
         return buildString {
