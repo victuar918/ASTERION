@@ -133,7 +133,7 @@ class AsterionRenderEngine(
             append("-filter_complex \"${fp.joinToString(";")}\" ")
             append("-map \"[final]\" -map ${silentIdx}:a ")
             append("-t ${dur.fmtUS()} ")
-            append("-c:v h264_mediacodec -b:v 4M ")
+            append("-c:v libx264 -preset ultrafast -crf 23 ")
             append("-c:a aac -b:a 128k ")
             append("-movflags +faststart ${outFile.absolutePath}")
         }
@@ -275,7 +275,7 @@ class AsterionRenderEngine(
             if (bgmFile != null) append("-i ${bgmFile.absolutePath} ")
             if (filterParts.isNotEmpty()) append("-filter_complex \"${filterParts.joinToString(";")}\" ")
             append("-map \"$videoMapLabel\" -map \"$audioMapLabel\" ")
-            if (videoMapLabel.startsWith("[")) append("-c:v h264_mediacodec -b:v 4M ")
+            if (videoMapLabel.startsWith("[")) append("-c:v libx264 -preset ultrafast -crf 20 ")
             else append("-c:v copy ")
             if (audioMapLabel.startsWith("[")) append("-c:a aac -b:a 192k ")
             else append("-c:a copy ")
@@ -453,7 +453,7 @@ class AsterionRenderEngine(
             if (audioIdx >= 0) append("-map ${audioIdx}:a -c:a aac -b:a 192k ")
             else               append("-an ")
             append("-t ${tTotal.fmtUS()} ")
-            append("-c:v h264_mediacodec -b:v 4M -movflags +faststart ")
+            append("-c:v libx264 -preset ultrafast -crf 23 -movflags +faststart ")
             append(outputFile.absolutePath)
         }
     }
