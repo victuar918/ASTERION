@@ -339,19 +339,43 @@ class AsterionRenderEngine(
         extraEffect: CardExtraEffect, bgEffect: String, bgTransition: BgTransition,
         transitionDur: Float, outputFile: File
     ): String {
-        val needsBlackBg = bgTransition in setOf(
-            BgTransition.SLIDE_LEFT, BgTransition.SLIDE_UP, BgTransition.WIPE_RIGHT
-        )
-        val blackBgIdx = if (needsBlackBg) 1 else -1
-        val audioIdx   = when {
-            ttsWav == null -> -1
-            needsBlackBg   -> 2
-            else           -> 1
-        }
         val effDur = transitionDur.coerceIn(0.3f, (tTotal * 0.45f).coerceAtLeast(0.3f))
 
-        val fp = mutableListOf<String>()
-        fp += "[0:v]setpts=PTS-STARTPTS[bg0]"
+        // -vf 체인: filter_complex + stream_loop 조합이 Android FFmpegKit에서 Invalid argument 유발
+        // -vf는 동일한 필터를 named pad 없이 체인으로 처리
+        val vf = mutableListOf<String>()
+        vf += "setpts=PTS-STARTPTS"
+
+        // BG 전환 효과
+        when (bgTransition) {
+            BgTransition.FADE -> {
+                val fadeOutSt = (tTotal - effDur).coerceAtLeast(0f)
+                vf += "fade=t=in:st=0:d=${effDur.fmtUS()}"
+                vf += "fade=t=out:st=${fadeOutSt.fmtUS()}:d=${effDur.fmtUS()}"
+            }
+            BgTransition.NONE -> { /* no transition */ }
+            else -> {  // SLIDE/ZOOM/BLUR → fade 근사
+                vf += "fade=t=in:st=0:d=${effDur.fmtUS()}"
+            }
+        }
+
+        // BG 조정 효과
+        when (bgEffect.split(":")[0]) {
+            "VIGNETTE"    -> vf += "vignette=PI/4"
+            "MOTION_BLUR" -> vf += "tmix=frames=3"
+        }
+
+        // 카드 박스
+        if (cardStyle != CardStyle.NONE && cardStyle != CardStyle.MINIMAL) {
+            val r = (gradient.topColor shr 16) and 0xFF
+            val g = (gradient.topColor shr 8)  and 0xFF
+            val b = gradient.topColor and 0xFF
+            vf += "drawbox=x=${kf.holdX.toInt()}:y=${kf.holdY.toInt()}:w=860:h=340:" +
+                  "color=0x${String.format(Locale.US, "%02X%02X%02X", r, g, b)}@${String.format(Locale.US, "%.2f", cardStyle.alpha)}:t=fill"
+        }
+
+        // 포맷 정제 (h264 호환성)
+        vf += "scale=${VIDEO_W}:${VIDEO_H},format=yuv420p"
 
         val bgAfterTrans: String = when (bgTransition) {
             BgTransition.NONE -> "[bg0]"
