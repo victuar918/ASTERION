@@ -145,10 +145,30 @@ class AsterionRenderEngine(
 
     // ── 씬 렌더링 ────────────────────────────────────────────────────
 
+    /**
+     * 이미 렌더링된 씬을 subclipFiles에 추가 (실제 렌더링 없이)
+     * Status=DONE + 파일 존재 시 재렌더링 스킵에 사용
+     */
+    fun addExistingSubclip(file: File, onProgress: (String) -> Unit = {}) {
+        val dur = try {
+            val mmr = android.media.MediaMetadataRetriever()
+            mmr.setDataSource(file.absolutePath)
+            val ms = mmr.extractMetadata(
+                android.media.MediaMetadataRetriever.METADATA_KEY_DURATION
+            )?.toLongOrNull() ?: 0L
+            mmr.release()
+            (ms / 1000.0f).coerceAtLeast(1.0f)
+        } catch (e: Exception) { 3.0f }
+        subclipFiles.add(file)
+        totalDurationSecs += dur
+        onProgress("⏭️ 캐시 재사용: ${file.name} (${file.length()/1024}KB, ${dur.fmtUS(1)}s)")
+    }
+
     suspend fun renderScene(
         row: ScriptDataRow,
         videoMeta: VideoMeta,
         voiceConfig: VoiceConfig,
+        cacheDir: File? = null,   // null이면 .temp_scenes, 제공 시 해당 디렉토리에 저장
         onProgress: (String) -> Unit = {}
     ): File? = withContext(Dispatchers.IO) {
         AppConfig.ensureDirs()
@@ -200,7 +220,13 @@ class AsterionRenderEngine(
             // 모션 패턴: 카드 hold 위치 도상 후(tIn초) 텍스트 등장
             val textStartSecs = if (pattern in MOTION_PATTERNS) keyframes.tIn else 0f
 
-            val outputFile = File(sceneTempDir, "${sceneId}.mp4")
+            // cacheDir 제공 시 영구 보관, 없으면 임시
+            val outputFile = if (cacheDir != null) {
+                cacheDir.mkdirs()
+                File(cacheDir, "${sceneId}.mp4")
+            } else {
+                File(sceneTempDir, "${sceneId}.mp4")
+            }
             val cmd = buildFfmpegCmd(
                 bgFile, ttsWavFile.takeIf { it.exists() }, tTotal,
                 CardStyle.from(row.cardStyle), GradientPreset.from(row.gradientPreset),
@@ -298,7 +324,8 @@ class AsterionRenderEngine(
 
         val rc = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
         listFile.delete()
-        subclipFiles.forEach { it.delete() }
+        // .temp_scenes 내 파일만 삭제 — scene_cache 파일은 재렌더링 실제용 영구 보관
+        subclipFiles.filter { it.absolutePath.contains(TEMP_SUBDIR) }.forEach { it.delete() }
         runCatching { sceneTempDir.listFiles()?.forEach { it.delete() } }
 
         val ok = outputFile.exists() && outputFile.length() > 0
