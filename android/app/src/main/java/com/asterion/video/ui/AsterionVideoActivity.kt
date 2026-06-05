@@ -37,6 +37,7 @@ class AsterionVideoActivity : AppCompatActivity() {
     private lateinit var llSpeakers: LinearLayout
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
+    private lateinit var btnReset: Button
     private lateinit var progressBar: ProgressBar
     private lateinit var tvStatus: TextView
     private lateinit var tvLog: TextView
@@ -86,14 +87,27 @@ class AsterionVideoActivity : AppCompatActivity() {
         llSpeakers   = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
         btnStart     = Button(this).apply { text="▶ 영상 제작 시작"; isEnabled=false }
         btnStop      = Button(this).apply { text="⏹ 중지"; isEnabled=false }
+        btnReset     = Button(this).apply { text="🗑 초기화"; isEnabled=false }
         progressBar  = ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply {
             max=100; layoutParams=LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT).also{it.topMargin=12} }
         tvStatus = TextView(this).apply { text="시작 중..."; textSize=14f; setPadding(0,16,0,8) }
         tvLog    = TextView(this).apply { textSize=10f; setTextColor(0xFF777777.toInt()); maxLines=16 }
-        listOf(tvKeyStatus,spinnerSheet,llSpeakers,btnStart,btnStop,progressBar,tvStatus,tvLog).forEach{layout.addView(it)}
+        // 시작/중지/초기화 버튼을 한 행에 배치
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        btnStart.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2f)
+        btnStop.layoutParams  = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        btnReset.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        btnRow.addView(btnStart); btnRow.addView(btnStop); btnRow.addView(btnReset)
+        listOf(tvKeyStatus, spinnerSheet, llSpeakers, btnRow, progressBar, tvStatus, tvLog)
+            .forEach { layout.addView(it) }
         btnStart.setOnClickListener { startRendering() }
         btnStop.setOnClickListener  { stopRendering() }
+        btnReset.setOnClickListener { confirmReset() }
         spinnerSheet.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p:AdapterView<*>?,v:android.view.View?,pos:Int,id:Long) {
                 loadSpeakersFromSheet(spinnerSheet.selectedItem?.toString() ?: return)
@@ -300,8 +314,54 @@ class AsterionVideoActivity : AppCompatActivity() {
                     buildSpeakerUI(speakers)
                     tvStatus.text = "$sheet | 화자 ${speakers.size}명: $speakers"
                     btnStart.isEnabled = speakers.isNotEmpty()
+                    btnReset.isEnabled = speakers.isNotEmpty()
                 }
             } catch(e: Exception) { Log.e("Activity","loadSpeakers: $e") }
+        }
+    }
+
+    /**
+     * 🗑 초기화 연산 확인 다이얼로그
+     * 캐시 MP4 삭제 + 시트 K열 전체 READY 로 초기화
+     */
+    private fun confirmReset() {
+        val sheet = spinnerSheet.selectedItem?.toString() ?: return
+        val cacheDir = AppConfig.sceneCacheDir(sheet)
+        val cachedCount = cacheDir.listFiles()?.size ?: 0
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("초기화 확인")
+            .setMessage("「$sheet」를 초기화합니다.
+
+• 연덬링된 진 수: ${cachedCount}개
+• 시트 상태: 전체 READY
+
+중단한 영상을 완전히 씨버리고
+처음부터 다시 렌더링하려면 초기화하세요.")
+            .setPositiveButton("초기화") { _, _ -> doReset(sheet) }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun doReset(sheet: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            updateStatus("[$sheet] 초기화 중...")
+            // 1. 캐시 MP4 삭제
+            val cacheDir = AppConfig.sceneCacheDir(sheet)
+            val deleted  = cacheDir.listFiles()?.count { it.delete() } ?: 0
+            appendLog("찾수 $deleted 삭제")
+            // 2. 시트 K열 READY 일괄 초기화
+            val token = auth.getAccessToken()
+            val r   = SheetsVideoReader(token, VIDEO_SS_ID)
+            val ok  = r.resetAllStatuses(sheet)
+            // 3. 화자 UI 재로드
+            withContext(Dispatchers.Main) {
+                if (ok) {
+                    updateStatus("✅ [$sheet] 초기화 완료 — 진 ${deleted}개 삭제, 상태 READY 통일")
+                    loadSpeakersFromSheet(sheet)
+                } else {
+                    updateStatus("⚠ 시트 초기화 실패 — 수동으로 K열 READY 확인 필요")
+                }
+            }
         }
     }
 
