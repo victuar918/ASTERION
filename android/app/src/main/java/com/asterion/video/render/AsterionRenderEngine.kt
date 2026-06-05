@@ -387,7 +387,24 @@ class AsterionRenderEngine(
             }
         }
 
-        // ⑥ 픽셀 포맷 정규화
+        // ⑥ BGV 루프 크로스페이드
+        // BGV가 씬보다 짧을 때만 루프 포인트마다 0.5초 fade 삽입
+        val bgvDur = getBgvDurationSecs(bgFile)
+        val xFade = 0.5f
+        if (bgvDur > 1.0f && tTotal > bgvDur + 1.0f) {
+            var lp = bgvDur
+            while (lp + xFade < tTotal) {
+                val fo = (lp - xFade).coerceAtLeast(0f)
+                // 기존 FADE 전환 페이드와 겹치면 스킵 (이중 취존 방지)
+                if (fo > effDur + 0.1f && lp < tTotal - effDur - xFade) {
+                    vf += "fade=t=out:st=${fo.fmtUS()}:d=${xFade.fmtUS()}"
+                    vf += "fade=t=in:st=${lp.fmtUS()}:d=${xFade.fmtUS()}"
+                }
+                lp += bgvDur
+            }
+        }
+
+        // ⑦ 픽셀 포맷 정규화
         vf += "scale=${VIDEO_W}:${VIDEO_H},format=yuv420p"
 
         // ── FFmpeg 명령 조립 ──
@@ -401,6 +418,28 @@ class AsterionRenderEngine(
             append("-t ${tTotal.fmtUS()} ")
             append("-c:v h264_mediacodec -b:v 4M -movflags +faststart ")
             append(outputFile.absolutePath)
+        }
+    }
+
+    // ── BGV 지속 시간 측정 ───────────────────────────────────────────────
+
+    /**
+     * MediaMetadataRetriever로 BGV 파일 실제 길이(초) 측정
+     * 파일 없음 / 측정 실패 시 0f 반환 → 그닥 루프 크로스페이드 스킵
+     */
+    private fun getBgvDurationSecs(bgFile: File): Float {
+        if (!bgFile.exists()) return 0f
+        return try {
+            val mmr = android.media.MediaMetadataRetriever()
+            mmr.setDataSource(bgFile.absolutePath)
+            val ms = mmr.extractMetadata(
+                android.media.MediaMetadataRetriever.METADATA_KEY_DURATION
+            )?.toLongOrNull() ?: 0L
+            mmr.release()
+            ms / 1000.0f
+        } catch (e: Exception) {
+            Log.w(TAG, "BGV 길이 측정 실패: ${e.message}")
+            0f
         }
     }
 
