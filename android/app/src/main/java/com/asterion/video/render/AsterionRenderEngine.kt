@@ -379,19 +379,32 @@ class AsterionRenderEngine(
                 val enableExpr = "between(t\\,${tsS}\\,${tt})"
                 val fontOpt = if (fontPath.isNotEmpty()) "fontfile='${fontPath}':" else ""
 
-                val cx = kf.holdX.toInt()          // 카드 좌욱션
-                val y1 = (kf.holdY + 80).toInt()   // Main y
-                val y2 = (kf.holdY + 185).toInt()  // Sub y
-                val y3 = (kf.holdY + 268).toInt()  // Desc y
-                // 카드 박스 중앙 x: holdX + 430 (폭 860 절반)
+                // 카드 박스 중앙 x
                 val cardCenterX = kf.holdX.toInt() + 430
-                val xExpr = "${cardCenterX}-tw/2"  // 카드 박스 중앙 정렬
+                val xExpr = "${cardCenterX}-tw/2"
 
-                // 한 라인 = 한 개 drawtext 필터 — \n 이스케이프 문제 원체 제거
+                // 동적 세로 배치: 줄 수에 따라 전체 블록을 카드 중앙으로 이동
+                val mainLineCount = if (pm.isNotBlank()) splitToLines(pm, 12).size else 0
+                val subLineCount  = if (ps.isNotBlank()) splitToLines(ps, 18).size else 0
+                val descLineCount = if (pd.isNotBlank()) splitToLines(pd, 24).size else 0
+
+                val mainH  = mainLineCount * 62   // fontsize 52 + spacing 10
+                val subH   = subLineCount  * 46   // fontsize 38 + spacing 8
+                val descH  = descLineCount * 40   // fontsize 32 + spacing 8
+                val gap12  = if (mainLineCount > 0 && subLineCount  > 0) 20 else 0
+                val gap23  = if (subLineCount  > 0 && descLineCount > 0) 12 else 0
+                val totalH = mainH + gap12 + subH + gap23 + descH
+
+                // 카드 박스 중앙 y = holdY + 170 (높이 340의 절반)
+                val blockStartY = (kf.holdY + 170 - totalH / 2).toInt()
+                val y1base = blockStartY
+                val y2base = blockStartY + mainH + gap12
+                val y3base = blockStartY + mainH + gap12 + subH + gap23
+
                 // Main (흰색, fontsize=52, 외괭선)
                 splitToLines(pm, 12).forEachIndexed { i, line ->
                     val esc = escapeDrawtext(line)
-                    val ly  = y1 + i * 62  // lineHeight ≈ fontsize(52)+10
+                    val ly  = y1base + i * 62
                     vf += "drawtext=${fontOpt}text='${esc}':fontsize=52:fontcolor=white:" +
                           "borderw=2:bordercolor=black@0.8:" +
                           "x=${xExpr}:y=${ly}:" +
@@ -400,7 +413,7 @@ class AsterionRenderEngine(
                 // Sub (회색, fontsize=38)
                 splitToLines(ps, 18).forEachIndexed { i, line ->
                     val esc = escapeDrawtext(line)
-                    val ly  = y2 + i * 46  // lineHeight ≈ fontsize(38)+8
+                    val ly  = y2base + i * 46
                     vf += "drawtext=${fontOpt}text='${esc}':fontsize=38:fontcolor=0xCCCCCC:" +
                           "x=${xExpr}:y=${ly}:" +
                           "alpha='${alphaExpr}':enable='${enableExpr}'"
@@ -408,7 +421,7 @@ class AsterionRenderEngine(
                 // Desc (연한 회색, fontsize=32)
                 splitToLines(pd, 24).forEachIndexed { i, line ->
                     val esc = escapeDrawtext(line)
-                    val ly  = y3 + i * 40  // lineHeight ≈ fontsize(32)+8
+                    val ly  = y3base + i * 40
                     vf += "drawtext=${fontOpt}text='${esc}':fontsize=32:fontcolor=0xAAAAAA:" +
                           "x=${xExpr}:y=${ly}:" +
                           "alpha='${alphaExpr}':enable='${enableExpr}'"
