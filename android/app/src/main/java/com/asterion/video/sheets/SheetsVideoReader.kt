@@ -48,6 +48,37 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
     suspend fun readReadyRows(sheetName: String) =
         readScript(sheetName).map { it.copy(scriptRows = it.scriptRows.filter { r -> r.isReady }) }
 
+    /**
+     * 시트의 전체 서크립트 행 K열을 READY로 일괄 초기화
+     * 영상 제작 포기 시 캐시 삭제와 함께 호출
+     */
+    suspend fun resetAllStatuses(sheetName: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val rows = readScript(sheetName).getOrThrow().scriptRows
+            if (rows.isEmpty()) return@runCatching true
+            val lastIdx = rows.maxOf { it.rowIndex }
+            val startSheet = 7
+            val endSheet   = 7 + lastIdx
+            val encoded = java.net.URLEncoder.encode(
+                "$sheetName!K${startSheet}:K${endSheet}", "UTF-8"
+            )
+            val url  = "$base/$spreadsheetId/values/$encoded?valueInputOption=USER_ENTERED"
+            val body = JSONObject().apply {
+                put("values", org.json.JSONArray().also { arr ->
+                    repeat(lastIdx + 1) {
+                        arr.put(org.json.JSONArray().also { row -> row.put("READY") })
+                    }
+                })
+            }
+            val req = Request.Builder().url(url)
+                .addHeader("Authorization", "Bearer $accessToken")
+                .addHeader("Content-Type", "application/json")
+                .put(body.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+            client.newCall(req).execute().isSuccessful
+        }.getOrElse { false }
+    }
+
     suspend fun updateStatus(sheetName: String, rowIndex: Int, status: String = "DONE"): Boolean =
         withContext(Dispatchers.IO) {
             runCatching {
