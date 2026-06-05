@@ -501,7 +501,11 @@ class AsterionRenderEngine(
         outputFile: File, numSteps: Int,
         sceneId: String, onProgress: (String) -> Unit
     ) {
-        val MAX_CHUNK = 250  // 모델 처리 한계 아래로 보수적 설정
+        // 직접 합성 — 청크 방식 제거 (WAV concat 문제)
+        ttsEngine.synthesize(text, speakerId, speed, outputFile, numSteps)
+        return
+        @Suppress("UNREACHABLE_CODE")
+        val MAX_CHUNK = 9999  // 비활성화
 
         // 문장 단위 분리 → 청크 조합
         val chunks = text
