@@ -356,27 +356,43 @@ class AsterionVideoActivity : AppCompatActivity() {
                 val token = auth.getAccessToken()
                 reader = SheetsVideoReader(token, VIDEO_SS_ID)
                 updateStatus("[$sheet] 대본 읽는 중...")
-                val result = reader!!.readReadyRows(sheet)
+                // 전체 행 읽기 (DONE 포함) — 캐시 재사용을 위해 readReadyRows → readScript
+                val result = reader!!.readScript(sheet)
                 if (result.isFailure) {
                     updateStatus("❌ 대본 로드 실패: ${result.exceptionOrNull()?.message}")
                     return@launch
                 }
                 val data = result.getOrThrow()
-                if (data.scriptRows.isEmpty()) { updateStatus("⚠ READY 행 없음"); return@launch }
+                if (data.scriptRows.isEmpty()) { updateStatus("⚠ 대본 행 없음"); return@launch }
                 withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
 
-                // 인트로 렌더링 (Video_Meta의 Intro_BGV1이 설정된 경우만 동작)
+                // 인트로 렌더링
                 engine!!.renderIntro(data.videoMeta) { msg -> appendLog(msg); updateStatus(msg) }
+
+                // 씬캐시 디렉토리 — 시트명별 영구 보관
+                val cacheDir = AppConfig.sceneCacheDir(sheet)
 
                 var done      = 0
                 var processed = 0
                 for (row in data.scriptRows) {
                     if (!isRendering) break
-                    val f = engine!!.renderScene(row, data.videoMeta, voiceConfig) { msg ->
-                        appendLog(msg); updateStatus(msg)
+                    val sceneId   = "scene_${row.rowIndex.toString().padStart(4, '0')}"
+                    val cacheFile = java.io.File(cacheDir, "$sceneId.mp4")
+
+                    if (row.status == "DONE" && cacheFile.exists() && cacheFile.length() > 0) {
+                        // ✅ 이미 렌더링된 씬 — 재렌더링 없이 재사용
+                        engine!!.addExistingSubclip(cacheFile) { msg -> appendLog(msg) }
+                        updateStatus("[$sceneId] ⏭️ DONE — 캐시 (${cacheFile.length()/1024}KB)")
+                        done++
+                    } else {
+                        // 렌더링 필요 (READY / ERROR / 캐시 없는 DONE)
+                        val f = engine!!.renderScene(row, data.videoMeta, voiceConfig, cacheDir) { msg ->
+                            appendLog(msg); updateStatus(msg)
+                        }
+                        val newStatus = if (f != null) "DONE" else "ERROR"
+                        reader!!.updateStatus(sheet, row.rowIndex, newStatus)
+                        if (f != null) done++
                     }
-                    reader!!.updateStatus(sheet, row.rowIndex, if (f != null) "DONE" else "ERROR")
-                    if (f != null) done++
                     processed++
                     withContext(Dispatchers.Main) { progressBar.progress = processed }
                 }
