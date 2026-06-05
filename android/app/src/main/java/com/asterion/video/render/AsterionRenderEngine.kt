@@ -358,7 +358,9 @@ class AsterionRenderEngine(
                 val y1 = (kf.holdY + 80).toInt()   // Main y
                 val y2 = (kf.holdY + 185).toInt()  // Sub y
                 val y3 = (kf.holdY + 268).toInt()  // Desc y
-                val xExpr = "(W-tw)/2"             // 화면 가로 중앙
+                // 카드 박스 중앙 x: holdX + 430 (폭 860 절반)
+                val cardCenterX = kf.holdX.toInt() + 430
+                val xExpr = "${cardCenterX}-tw/2"  // 카드 박스 중앙 정렬
 
                 // Main (흰색, 큰 글자, 외괭선)
                 if (pm.isNotBlank()) {
