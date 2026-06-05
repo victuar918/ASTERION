@@ -397,20 +397,33 @@ class AsterionRenderEngine(
             }
         }
 
-        // ⑥ BGV 루프 크로스페이드
-        // BGV가 씬보다 짧을 때만 루프 포인트마다 0.5초 fade 삽입
+        // ⑥ BGV 루프 크로스페이드 (엠 4쿎 제한)
+        // BGV가 너무 짧으면(에: 1초) loop점이 너무 많아지며 fade 필터 과적재
+        // → h264_mediacodec 낙제 및 검은 화면 유발 ⇒ 엠 4쿎 + 균등 분포
         val bgvDur = getBgvDurationSecs(bgFile)
-        val xFade = 0.5f
-        if (bgvDur > 1.0f && tTotal > bgvDur + 1.0f) {
+        val xFade  = 0.5f
+        if (bgvDur >= 3.0f && tTotal > bgvDur + 1.0f) {
+            // 유효한 루프 포인트 수집
+            val allPoints = mutableListOf<Float>()
             var lp = bgvDur
             while (lp + xFade < tTotal) {
                 val fo = (lp - xFade).coerceAtLeast(0f)
-                // 기존 FADE 전환 페이드와 겹치면 스킵 (이중 취존 방지)
-                if (fo > effDur + 0.1f && lp < tTotal - effDur - xFade) {
-                    vf += "fade=t=out:st=${fo.fmtUS()}:d=${xFade.fmtUS()}"
-                    vf += "fade=t=in:st=${lp.fmtUS()}:d=${xFade.fmtUS()}"
-                }
+                if (fo > effDur + 0.1f && lp < tTotal - effDur - xFade)
+                    allPoints += lp
                 lp += bgvDur
+            }
+            // 엠 4쿎으로 균등 샘플링
+            val maxPairs = 4
+            val selected = if (allPoints.size <= maxPairs) allPoints
+            else {
+                val step = allPoints.size.toFloat() / maxPairs
+                (0 until maxPairs).map { i -> allPoints[(i * step).toInt()] }
+            }
+            // vf 체인에 페이드 슽 삽입
+            selected.forEach { p ->
+                val fo = (p - xFade).coerceAtLeast(0f)
+                vf += "fade=t=out:st=${fo.fmtUS()}:d=${xFade.fmtUS()}"
+                vf += "fade=t=in:st=${p.fmtUS()}:d=${xFade.fmtUS()}"
             }
         }
 
