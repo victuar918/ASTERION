@@ -465,24 +465,27 @@ class AsterionRenderEngine(
 
     /**
      * drawtext 텍스트 이스케이프
-     * -vf 컨텍스트에서 콤론(개행)도 이스케이프 필요
+     * \n 관련 replace 제거 — splitToLines()로 라인 분리 처리
      */
     private fun escapeDrawtext(text: String): String = text
         .replace("\\", "\\\\")
         .replace("'",  "\\'")
         .replace(":",  "\\:")
         .replace(",",  "\\,")
-        .replace("\n", "\\n")
-        .replace("\\N", "\\n")  // ASS 개행 태그 변환
 
     /**
-     * drawtext 용 줄 바꿈
-     * max 글자마다 \n 삽입 (화면 폭 초과 방지)
+     * 텍스트를 라인 단위로 분리
+     * \n / \\n / \\N / 실제 LF 모두 처리, max 글자 초과 시 청킹
      */
-    private fun wrapDrawtext(text: String, max: Int): String {
-        val clean = text.replace("\\N", "\n").replace("\\n", "\n")
-        if (clean.length <= max) return clean
-        return clean.chunked(max).joinToString("\n")
+    private fun splitToLines(text: String, max: Int): List<String> {
+        val normalized = text
+            .replace("\\N", "\n")
+            .replace("\\n", "\n")
+        return normalized.split("\n")
+            .flatMap { line ->
+                if (line.length > max) line.chunked(max) else listOf(line)
+            }
+            .filter { it.isNotBlank() }
     }
 
     private fun assTime(s: Float): String {
