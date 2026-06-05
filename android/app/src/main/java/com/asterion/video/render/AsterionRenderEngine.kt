@@ -157,7 +157,13 @@ class AsterionRenderEngine(
         val sceneId = "scene_${row.rowIndex.toString().padStart(4, '0')}"
         onProgress("[$sceneId] ${row.section} / Speaker ${row.speaker}")
         try {
-            val bgFile     = AppConfig.resolveBgv(row.bgFileName)
+            val bgFile = AppConfig.resolveBgv(row.bgFileName)
+            // bgFile 존재 여부 선체크 — FFmpeg 실패까지 기다리지 않고 즉시 실패 처리
+            if (!bgFile.exists()) {
+                Log.e(TAG, "[$sceneId] bgFile 없음: ${bgFile.absolutePath}")
+                onProgress("[$sceneId] ❌ bgFile 없음: ${row.bgFileName}")
+                return@withContext null
+            }
             val ttsWavFile = File(sceneTempDir, "${sceneId}_tts.wav")
             val hasTts     = row.script.isNotBlank() && row.sectionType != SectionType.BUFFER
 
@@ -362,26 +368,30 @@ class AsterionRenderEngine(
                 val cardCenterX = kf.holdX.toInt() + 430
                 val xExpr = "${cardCenterX}-tw/2"  // 카드 박스 중앙 정렬
 
-                // Main (흰색, 큰 글자, 외괭선)
-                if (pm.isNotBlank()) {
-                    val escaped = escapeDrawtext(wrapDrawtext(pm, 12))
-                    vf += "drawtext=${fontOpt}text='${escaped}':fontsize=52:fontcolor=white:" +
+                // 한 라인 = 한 개 drawtext 필터 — \n 이스케이프 문제 원체 제거
+                // Main (흰색, fontsize=52, 외괭선)
+                splitToLines(pm, 12).forEachIndexed { i, line ->
+                    val esc = escapeDrawtext(line)
+                    val ly  = y1 + i * 62  // lineHeight ≈ fontsize(52)+10
+                    vf += "drawtext=${fontOpt}text='${esc}':fontsize=52:fontcolor=white:" +
                           "borderw=2:bordercolor=black@0.8:" +
-                          "x=${xExpr}:y=${y1}:" +
+                          "x=${xExpr}:y=${ly}:" +
                           "alpha='${alphaExpr}':enable='${enableExpr}'"
                 }
-                // Sub (회색, 중간 글자)
-                if (ps.isNotBlank()) {
-                    val escaped = escapeDrawtext(wrapDrawtext(ps, 18))
-                    vf += "drawtext=${fontOpt}text='${escaped}':fontsize=38:fontcolor=0xCCCCCC:" +
-                          "x=${xExpr}:y=${y2}:" +
+                // Sub (회색, fontsize=38)
+                splitToLines(ps, 18).forEachIndexed { i, line ->
+                    val esc = escapeDrawtext(line)
+                    val ly  = y2 + i * 46  // lineHeight ≈ fontsize(38)+8
+                    vf += "drawtext=${fontOpt}text='${esc}':fontsize=38:fontcolor=0xCCCCCC:" +
+                          "x=${xExpr}:y=${ly}:" +
                           "alpha='${alphaExpr}':enable='${enableExpr}'"
                 }
-                // Desc (연한 회색, 작은 글자)
-                if (pd.isNotBlank()) {
-                    val escaped = escapeDrawtext(wrapDrawtext(pd, 24))
-                    vf += "drawtext=${fontOpt}text='${escaped}':fontsize=32:fontcolor=0xAAAAAA:" +
-                          "x=${xExpr}:y=${y3}:" +
+                // Desc (연한 회색, fontsize=32)
+                splitToLines(pd, 24).forEachIndexed { i, line ->
+                    val esc = escapeDrawtext(line)
+                    val ly  = y3 + i * 40  // lineHeight ≈ fontsize(32)+8
+                    vf += "drawtext=${fontOpt}text='${esc}':fontsize=32:fontcolor=0xAAAAAA:" +
+                          "x=${xExpr}:y=${ly}:" +
                           "alpha='${alphaExpr}':enable='${enableExpr}'"
                 }
             }
