@@ -254,13 +254,14 @@ class AsterionRenderEngine(
             filterParts += "[0:a]volume=1.0[tts]"
             filterParts += "[1:a]aformat=sample_rates=44100:channel_layouts=stereo," +
                 "volume=volume='if(lt(t\\,13)\\,0.35\\,if(lt(t\\,15)\\,0.35+(t-13)*(-0.125)\\,0.10))':eval=frame[bgm]"
-            filterParts += "[tts][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            filterParts += "[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3[aout]"
             audioMapLabel = "[aout]"
         }
 
         val cmd = buildString {
             append("-y -f concat -safe 0 -i ${listFile.absolutePath} ")
-            if (bgmFile != null) append("-i ${bgmFile.absolutePath} ")
+            // BGM: stream_loop -1 로 영상 종료 시까지 자동 반복
+            if (bgmFile != null) append("-stream_loop -1 -i ${bgmFile.absolutePath} ")
             if (filterParts.isNotEmpty()) append("-filter_complex \"${filterParts.joinToString(";")}\" ")
             append("-map \"$videoMapLabel\" -map \"$audioMapLabel\" ")
             if (videoMapLabel.startsWith("[")) append("-c:v libx264 -preset fast -crf 20 ")
