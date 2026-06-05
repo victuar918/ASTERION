@@ -180,10 +180,19 @@ class AsterionRenderEngine(
             if (hasTts) {
                 val cfg = voiceConfig.forSpeaker(row.speaker)
                 onProgress("[$sceneId] TTS: ${cfg.label}(sid=${cfg.sid} spd=${cfg.speed} steps=${cfg.numSteps})")
-                ttsEngine.synthesize(row.script, cfg.sid, cfg.speed, ttsWavFile, cfg.numSteps)
+                synthesizeChunked(row.script, cfg.sid, cfg.speed, ttsWavFile, cfg.numSteps, sceneId, onProgress)
             }
 
-            val tTotal        = if (ttsWavFile.exists()) ttsEngine.estimateDurationFromFile(ttsWavFile) else 3.0f
+            // WAV 진단 로그 + tTotal 계산
+            val tTotal: Float
+            if (ttsWavFile.exists() && ttsWavFile.length() > 1024L) {
+                val dur = ttsEngine.estimateDurationFromFile(ttsWavFile)
+                tTotal = dur.coerceAtLeast(1.0f)
+                onProgress("[$sceneId] WAV: ${ttsWavFile.length()/1024}KB → tTotal=${tTotal.fmtUS(1)}s")
+            } else {
+                tTotal = 3.0f
+                if (hasTts) onProgress("[$sceneId] ⚠️ WAV 없음 또는 1KB 미만 → tTotal=3.0s (TTS 실패 의심)")
+            }
             totalDurationSecs += tTotal
 
             val pattern       = AnimationPattern.from(row.animation)
@@ -474,6 +483,60 @@ class AsterionRenderEngine(
             Log.w(TAG, "BGV 길이 측정 실패: ${e.message}")
             0f
         }
+    }
+
+    // ── TTS 청크 합성 ──────────────────────────────────────────────────────────
+
+    /**
+     * 긴 스크립트를 MAX_CHUNK_LEN 자 이하로 분할 합성 후 FFmpegKit으로 WAV 연결
+     * sherpa-onnx Supertonic-3 최대 처리 한계(~300자)를 우회
+     */
+    private fun synthesizeChunked(
+        text: String, speakerId: Int, speed: Float,
+        outputFile: File, numSteps: Int,
+        sceneId: String, onProgress: (String) -> Unit
+    ) {
+        val MAX_CHUNK = 250  // 모델 처리 한계 아래로 보수적 설정
+
+        // 문장 단위 분리 → 청크 조합
+        val chunks = text
+            .replace("\\n", "\n").replace("\\N", "\n")
+            .split(Regex("(?<=[.!?。\n])"))
+            .flatMap { s ->
+                val t = s.trim().replace("\n", " ")
+                if (t.length > MAX_CHUNK) t.chunked(MAX_CHUNK) else listOf(t)
+            }
+            .filter { it.isNotBlank() }
+
+        if (chunks.size <= 1 || text.length <= MAX_CHUNK) {
+            // 짧은 텍스트: 직접 합성
+            ttsEngine.synthesize(text, speakerId, speed, outputFile, numSteps)
+            return
+        }
+
+        onProgress("[$sceneId] TTS 청크 분할: ${chunks.size}개")
+
+        // 각 청크 개별 합성
+        val chunkFiles = chunks.mapIndexed { i, chunk ->
+            val f = File(outputFile.parent, "${outputFile.nameWithoutExtension}_ck$i.wav")
+            ttsEngine.synthesize(chunk, speakerId, speed, f, numSteps)
+            f
+        }.filter { it.exists() && it.length() > 0 }
+
+        when {
+            chunkFiles.isEmpty() -> return  // 모든 청크 실패
+            chunkFiles.size == 1 -> { chunkFiles[0].renameTo(outputFile); return }
+        }
+
+        // FFmpegKit으로 WAV 청크 연결
+        val listFile = File(outputFile.parent, "${outputFile.nameWithoutExtension}_list.txt")
+        listFile.writeText(chunkFiles.joinToString("\n") { "file '${it.absolutePath}'" })
+        val concatCmd = "-y -f concat -safe 0 -i ${listFile.absolutePath} -ar 44100 -ac 1 ${outputFile.absolutePath}"
+        com.arthenica.ffmpegkit.FFmpegKit.execute(concatCmd)
+        listFile.delete()
+        chunkFiles.forEach { it.delete() }
+
+        onProgress("[$sceneId] WAV 청크 연결 완료 (${if (outputFile.exists()) outputFile.length()/1024 else 0}KB)")
     }
 
     // ── 키프레임 계산 ──────────────────────────────────────────────────
