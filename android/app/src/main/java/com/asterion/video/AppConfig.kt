@@ -41,6 +41,12 @@ object AppConfig {
         "https://github.com/k2-fsa/sherpa-onnx/releases/download/" +
         "tts-models/sherpa-onnx-supertonic-3-tts-int8-2026-05-11.tar.bz2"
 
+    /** 씬 MP4 캐시 디렉토리 — 시트명별 영구 보관, 재렌더링 시 재사용 */
+    fun sceneCacheDir(sheetName: String): File {
+        val safe = sheetName.replace(Regex("[^\\w가-힣]"), "_").take(40)
+        return File(OUTPUT_DIR, "scene_cache/$safe").also { it.mkdirs() }
+    }
+
     fun ensureDirs() {
         listOf(BGV_DIR, BGM_DIR, OUTPUT_DIR, TEMP_SCENES_DIR).forEach { it.mkdirs() }
     }
