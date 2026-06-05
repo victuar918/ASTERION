@@ -439,10 +439,15 @@ class AsterionRenderEngine(
                 (0 until maxPairs).map { i -> allPoints[(i * step).toInt()] }
             }
             // vf 체인에 페이드 슽 삽입
+            // enable= 추가: st 이전 프레임이 검정이 되는 FFmpeg fade 필터 특성 무효화
             selected.forEach { p ->
-                val fo = (p - xFade).coerceAtLeast(0f)
-                vf += "fade=t=out:st=${fo.fmtUS()}:d=${xFade.fmtUS()}"
-                vf += "fade=t=in:st=${p.fmtUS()}:d=${xFade.fmtUS()}"
+                val fo    = (p - xFade).coerceAtLeast(0f)
+                val fiEnd = p + xFade
+                // \, 이스케이프: FFmpeg 표현식 파서가 \, → , 로 해석
+                val foEn = "between(t\\,${fo.fmtUS()}\\,${p.fmtUS()})"
+                val fiEn = "between(t\\,${p.fmtUS()}\\,${fiEnd.fmtUS()})"
+                vf += "fade=t=out:st=${fo.fmtUS()}:d=${xFade.fmtUS()}:enable='${foEn}'"
+                vf += "fade=t=in:st=${p.fmtUS()}:d=${xFade.fmtUS()}:enable='${fiEn}'"
             }
         }
 
