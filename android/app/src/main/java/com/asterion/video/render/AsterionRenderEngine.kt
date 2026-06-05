@@ -158,10 +158,20 @@ class AsterionRenderEngine(
         onProgress("[$sceneId] ${row.section} / Speaker ${row.speaker}")
         try {
             val bgFile = AppConfig.resolveBgv(row.bgFileName)
-            // bgFile 존재 여부 선체크 — FFmpeg 실패까지 기다리지 않고 즉시 실패 처리
-            if (!bgFile.exists()) {
-                Log.e(TAG, "[$sceneId] bgFile 없음: ${bgFile.absolutePath}")
-                onProgress("[$sceneId] ❌ bgFile 없음: ${row.bgFileName}")
+
+            // BGV fallback 여부 UI 표시
+            val requestedBgv = row.bgFileName.split("|").firstOrNull()?.trim() ?: ""
+            if (bgFile.name != requestedBgv) {
+                onProgress("[$sceneId] ⚠️ BGV 대체: '$requestedBgv' → '${bgFile.name}'")
+                Log.w(TAG, "[$sceneId] BGV fallback: $requestedBgv → ${bgFile.name}")
+            } else {
+                onProgress("[$sceneId] BGV: ${bgFile.name} (${bgFile.length()/1024}KB)")
+            }
+
+            // bgFile 존재 여부 + 최소 크기 체크
+            if (!bgFile.exists() || bgFile.length() < 10_000L) {
+                Log.e(TAG, "[$sceneId] bgFile 문제: exist=${bgFile.exists()} size=${bgFile.length()} path=${bgFile.absolutePath}")
+                onProgress("[$sceneId] ❌ bgFile 없음또는 너무 작음(${bgFile.length()}B): ${bgFile.name}")
                 return@withContext null
             }
             val ttsWavFile = File(sceneTempDir, "${sceneId}_tts.wav")
