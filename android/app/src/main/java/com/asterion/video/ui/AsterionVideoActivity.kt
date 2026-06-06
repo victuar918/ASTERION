@@ -425,8 +425,21 @@ class AsterionVideoActivity : AppCompatActivity() {
                 if (data.scriptRows.isEmpty()) { updateStatus("⚠ 대본 행 없음"); return@launch }
                 withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
 
-                // 인트로 렌더링
-                engine!!.renderIntro(data.videoMeta) { msg -> appendLog(msg); updateStatus(msg) }
+                // 면책 TTS 미리 합성 (Video_Meta Intro_Disclaimer 설정 시)
+                val disclaimerWav = if (data.videoMeta.disclaimerText.isNotBlank()) {
+                    val dWav = java.io.File(AppConfig.OUTPUT_DIR, "intro_disclaimer.wav")
+                    try {
+                        val spk = data.scriptRows.firstOrNull()?.speaker ?: 1
+                        val cfg = voiceConfig.forSpeaker(spk)
+                        engine!!.ttsEnginePublic.synthesize(
+                            data.videoMeta.disclaimerText, cfg.sid, cfg.speed, dWav, cfg.numSteps
+                        )
+                        if (dWav.exists() && dWav.length() > 0) dWav else null
+                    } catch (e: Exception) { Log.w("Activity", "disclaimer TTS 실패: $e"); null }
+                } else null
+
+                // 인트로 렌더링 (면책 WAV 있으면 전달)
+                engine!!.renderIntro(data.videoMeta, disclaimerWav) { msg -> appendLog(msg); updateStatus(msg) }
 
                 // 씬캐시 디렉토리 — 시트명별 영구 보관
                 val cacheDir = AppConfig.sceneCacheDir(sheet)
