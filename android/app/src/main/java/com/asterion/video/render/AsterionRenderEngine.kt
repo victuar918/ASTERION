@@ -302,10 +302,12 @@ class AsterionRenderEngine(
         }
 
         if (bgmFile != null) {
-            filterParts += "[0:a]volume=1.0[tts]"
+            filterParts += "[0:a]volume=0.85[tts]"  // TTS: 클리핑 방지용 소폭 감소
             filterParts += "[1:a]aformat=sample_rates=44100:channel_layouts=stereo," +
-                "volume=volume='if(lt(t\\,13)\\,0.35\\,if(lt(t\\,15)\\,0.35+(t-13)*(-0.125)\\,0.10))':eval=frame[bgm]"
-            filterParts += "[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3[aout]"
+                // BGM 덕킹: 인트로(0~13s) 0.40 → 전환(13~15s) 0.40→0.05 → 메인(15s+) 0.05
+                // amix normalize=0 으로 절대 볼륨 사용 시 극적인 덕킹 체감 가능
+                "volume=volume='if(lt(t\\,13)\\,0.40\\,if(lt(t\\,15)\\,0.40+(t-13)*(-0.175)\\,0.05))':eval=frame[bgm]"
+            filterParts += "[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"
             audioMapLabel = "[aout]"
         }
 
