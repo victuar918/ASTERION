@@ -136,10 +136,12 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
             topWatermark      = m["Top_Watermark"] ?: "ASTERION",
             thumbnailText     = m["Thumbnail_Text"] ?: "",
             mainBgm           = m["Main_BGM"] ?: "bgm01.mp3",
-            introBgv1         = m["Intro_BGV1"] ?: "",
+                    introBgv1         = m["Intro_BGV1"] ?: "",
             introBgv2         = m["Intro_BGV2"] ?: "",
-            introText         = m["Intro_Text"] ?: "빛은 선택된 이에게만 닳는다",
-            introDurationSecs = m["Intro_Duration"]?.toFloatOrNull() ?: 15f
+            introText         = m["Intro_Text"] ?: "빛은 선택된 이에게만 닿는다",
+            introDurationSecs = m["Intro_Duration"]?.toFloatOrNull() ?: 15f,
+            introType         = m["Intro_Type"] ?: "",
+            disclaimerText    = m["Intro_Disclaimer"] ?: ""
         )
     }
 
