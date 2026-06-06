@@ -39,6 +39,9 @@ class AsterionRenderEngine(
     private val context: Context,
     private val ttsEngine: SupertonicTtsEngine
 ) {
+    /** Activity에서 면쳥 TTS 합성 시 사용 */
+    val ttsEnginePublic: SupertonicTtsEngine get() = ttsEngine
+
     private val subclipFiles      = mutableListOf<File>()
     private var totalDurationSecs = 0f
 
