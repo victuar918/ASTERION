@@ -349,7 +349,9 @@ class AsterionVideoActivity : AppCompatActivity() {
             // 2. 시트 K열 READY 일괄 초기화
             val token = auth.getAccessToken()
             val r   = SheetsVideoReader(token, VIDEO_SS_ID)
-            val ok  = r.resetAllStatuses(sheet)
+            val token2 = auth.getAccessToken()
+            val r2  = SheetsVideoReader(token2, VIDEO_SS_ID)
+            val ok  = r2.resetAllStatuses(sheet)
             // 3. 화자 UI 재로드
             withContext(Dispatchers.Main) {
                 if (ok) {
@@ -447,7 +449,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                             appendLog(msg); updateStatus(msg)
                         }
                         val newStatus = if (f != null) "DONE" else "ERROR"
-                        reader!!.updateStatus(sheet, row.rowIndex, newStatus)
+                        reader!!.updateStatus(sheet, row.rowIndex, newStatus, data.scriptStartSheetRow)
                         if (f != null) done++
                     }
                     processed++
