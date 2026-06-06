@@ -66,10 +66,17 @@ class AsterionRenderEngine(
         if (fontPath.isNotEmpty()) ":fontfile='${fontPath}'" else ""
     }
 
-    // ── 인트로 렌더링 ──────────────────────────────────────────────────
+    // ── 인트로 렌더링 v2 ──────────────────────────────────────────────────
+    //
+    // ① intro01 전체 재생 (BGV 실제 길이 사용, 15초 컷 없음)
+    // ② Phase1 텍스트: 화면 상단 1/3, intro01 끝날 때 함께 사라짐
+    // ③ xfade 1초로 intro01→intro02 크로스페이드
+    // ④ intro02 전체 재생 + 순차 텍스트 (2초 간격, 마지막 후 6초 유지)
+    // ⑤ 면책 TTS(disclaimerWav): introDurationSecs초에 시작
 
     suspend fun renderIntro(
         videoMeta: VideoMeta,
+        disclaimerWav: File? = null,   // 면책 TTS WAV — introDurationSecs초에 시작
         onProgress: (String) -> Unit = {}
     ): File? = withContext(Dispatchers.IO) {
         if (videoMeta.introBgv1.isBlank()) {
@@ -79,67 +86,109 @@ class AsterionRenderEngine(
         AppConfig.ensureDirs()
         sceneTempDir.mkdirs()
 
-        val dur       = videoMeta.introDurationSecs.coerceAtLeast(5f)
-        val bgv1      = AppConfig.resolveBgv(videoMeta.introBgv1)
-        val hasBgv2   = videoMeta.introBgv2.isNotBlank()
-        val bgv2      = if (hasBgv2) AppConfig.resolveBgv(videoMeta.introBgv2) else bgv1
-        val silentIdx = if (hasBgv2) 2 else 1
+        val bgv1    = AppConfig.resolveBgv(videoMeta.introBgv1)
+        val hasBgv2 = videoMeta.introBgv2.isNotBlank()
+        val bgv2    = if (hasBgv2) AppConfig.resolveBgv(videoMeta.introBgv2) else null
 
-        val textStart   = 3.0f
-        val textFadeIn  = textStart + 1.0f
-        val textFadeOut = (dur - 2.0f).coerceAtLeast(textFadeIn + 1.0f)
-        val textEnd     = (dur - 1.0f).coerceAtLeast(textFadeIn + 2.0f)
+        // BGV 실제 길이 측정
+        val bgv1Dur  = getBgvDurationSecs(bgv1).takeIf { it > 1f } ?: 8f
+        val bgv2Dur  = if (bgv2 != null && bgv2.exists()) getBgvDurationSecs(bgv2).takeIf { it > 1f } ?: 15f else 0f
+        val xfadeDur = if (hasBgv2) 1.0f else 0f
+        val totalDur = if (hasBgv2) bgv1Dur + bgv2Dur - xfadeDur else bgv1Dur
+        onProgress("인트로 측정: bgv1=${bgv1Dur.fmtUS(1)}s bgv2=${bgv2Dur.fmtUS(1)}s total=${totalDur.fmtUS(1)}s")
 
-        val safeText = videoMeta.introText
-            .replace("\\", "\\\\")
-            .replace("'", "\\'")
-            .replace(":", "\\:")
-            .replace(",", "\\,")
+        // 타이밍
+        val p1Start  = 2.0f
+        val p1End    = (bgv1Dur - xfadeDur - 0.3f).coerceAtLeast(p1Start + 1f)
+        val p2Base   = bgv1Dur - xfadeDur
+        val t1 = p2Base + 2f; val t2 = p2Base + 4f
+        val t3 = p2Base + 6f; val t4 = p2Base + 8f
+        val tAllEnd  = t4 + 6f
 
-        val fp = mutableListOf<String>()
-        if (hasBgv2) {
-            val halfDur  = (dur + 1.0f) / 2.0f
-            val xfadeOff = (halfDur - 1.0f).coerceAtLeast(0.5f)
+        // 코인 타입별 텍스트
+        val isXrp      = videoMeta.introType.trim().uppercase() == "XRP"
+        val titleWord  = if (isXrp) "XRP 전망" else "크립토 갤러리"
+        val rotWord    = if (isXrp) "예측하는" else "둘러보는"
+
+        // 호퍼
+        fun esc(s: String) = s.replace("\\","\\\\").replace("'","\\'").replace(":","\\:").replace(",","\\,")
+        fun alpha(ts: Float, te: Float): String {
+            val fi = (ts + 0.5f).fmtUS(2); val fo = (te - 0.5f).coerceAtLeast(ts + 0.6f).fmtUS(2)
+            return "if(lt(t,$fi),(t-${ts.fmtUS(2)})/0.5,if(gt(t,$fo),(${te.fmtUS(2)}-t)/0.5,1))"
+        }
+        fun en(ts: Float, te: Float) = "between(t,${ts.fmtUS(2)},${te.fmtUS(2)})"
+
+        val fp      = mutableListOf<String>()
+        val fOpt    = if (fontPath.isNotEmpty()) "fontfile='$fontPath':" else ""
+
+        // 비디오 쭴인: xfade 또는 단독
+        if (hasBgv2 && bgv2 != null) {
+            val xOff = (bgv1Dur - xfadeDur).coerceAtLeast(0.5f)
             fp += "[0:v]setpts=PTS-STARTPTS[v0]"
             fp += "[1:v]setpts=PTS-STARTPTS[v1]"
-            fp += "[v0][v1]xfade=transition=fade:duration=1.0:offset=${xfadeOff.fmtUS()}[bgv]"
-        } else {
-            fp += "[0:v]setpts=PTS-STARTPTS[bgv]"
+            fp += "[v0][v1]xfade=transition=fade:duration=${xfadeDur.fmtUS()}:offset=${xOff.fmtUS()}[bgv]"
+        } else { fp += "[0:v]setpts=PTS-STARTPTS[bgv]" }
+
+        var cur = "[bgv]"
+
+        // Phase 1 텍스트 (상단 1/3)
+        if (videoMeta.introText.isNotBlank()) {
+            fp += "${cur}drawtext=${fOpt}text='${esc(videoMeta.introText)}':" +
+                  "fontsize=64:fontcolor=white:borderw=3:bordercolor=black@0.8:" +
+                  "x=(W-tw)/2:y=H/3-th/2:" +
+                  "alpha='${alpha(p1Start,p1End)}':enable='${en(p1Start,p1End)}'[p1]"
+            cur = "[p1]"
         }
-        val fadeOutSt = (dur - 1.0f).coerceAtLeast(0f)
-        fp += "[bgv]fade=t=in:st=0:d=1.0,fade=t=out:st=${fadeOutSt.fmtUS()}:d=1.0[bgv_f]"
-        val fontOpt = if (fontPath.isNotEmpty()) "fontfile='${fontPath}':" else ""
-        fp += "[bgv_f]drawtext=${fontOpt}text='${safeText}':" +
-              "fontsize=64:fontcolor=white:borderw=3:bordercolor=black@0.8:" +
-              "x=(W-tw)/2:y=(H-th)/2:" +
-              "enable='between(t,${textStart.fmtUS(1)},${textEnd.fmtUS(1)})':" +
-              "alpha='if(lt(t,${textFadeIn.fmtUS(1)}),(t-${textStart.fmtUS(1)})/1.0," +
-              "if(gt(t,${textFadeOut.fmtUS(1)}),(${textEnd.fmtUS(1)}-t)/1.0,1))' [pre]"
-        fp += "[pre]format=yuv420p[final]"
+
+        // Phase 2 순차 텍스트
+        if (hasBgv2) {
+            val px100 = 80; val px70 = 56; val px40 = 32
+            fp += "${cur}drawtext=${fOpt}text='베다점성술로':fontsize=$px70:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.37-th/2:alpha='${alpha(t1,tAllEnd)}':enable='${en(t1,tAllEnd)}'[t1]"; cur="[t1]"
+            fp += "${cur}drawtext=${fOpt}text='${esc(rotWord)}':fontsize=$px40:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.47-th/2:angle=-30:alpha='${alpha(t2,tAllEnd)}':enable='${en(t2,tAllEnd)}'[t2]"; cur="[t2]"
+            fp += "${cur}drawtext=${fOpt}text='${esc(titleWord)}':fontsize=$px100:fontcolor=white:borderw=3:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.52-th/2:alpha='${alpha(t3,tAllEnd)}':enable='${en(t3,tAllEnd)}'[t3]"; cur="[t3]"
+            fp += "${cur}drawtext=${fOpt}text='by ASTERION':fontsize=$px40:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.62-th/2:alpha='${alpha(t4,tAllEnd)}':enable='${en(t4,tAllEnd)}'[t4]"; cur="[t4]"
+        }
+        fp += "${cur}format=yuv420p[vfinal]"
+
+        // 오디오: 면책 TTS가 있으면 discStart초에 삽입, 없으면 무음
+        val numVid    = if (hasBgv2) 2 else 1
+        val silentIdx = numVid
+        val hasDisc   = disclaimerWav != null && disclaimerWav.exists()
+        if (hasDisc) {
+            val ds = videoMeta.introDurationSecs.fmtUS(1)
+            fp += "[${silentIdx}:a]atrim=0:${ds},asetpts=PTS-STARTPTS[pre_sil]"
+            fp += "[${numVid+1}:a]asetpts=PTS-STARTPTS[disc_a]"
+            fp += "[pre_sil][disc_a]concat=n=2:v=0:a=1[aout]"
+        }
 
         val outFile = File(sceneTempDir, "scene_intro.mp4")
         val cmd = buildString {
-            append("-y -stream_loop -1 -i ${bgv1.absolutePath} ")
-            if (hasBgv2) append("-stream_loop -1 -i ${bgv2.absolutePath} ")
+            append("-y ")
+            append("-stream_loop -1 -i ${bgv1.absolutePath} ")
+            if (hasBgv2 && bgv2 != null) append("-stream_loop -1 -i ${bgv2.absolutePath} ")
             append("-f lavfi -i anullsrc=r=44100:cl=stereo ")
+            if (hasDisc) append("-i ${disclaimerWav!!.absolutePath} ")
             append("-filter_complex \"${fp.joinToString(";")}\" ")
-            append("-map \"[final]\" -map ${silentIdx}:a ")
-            append("-t ${dur.fmtUS()} ")
+            append("-map \"[vfinal]\" ")
+            if (hasDisc) append("-map \"[aout]\" -c:a aac -b:a 128k ")
+            else         append("-map ${silentIdx}:a ")
+            append("-t ${totalDur.fmtUS()} ")
             append("-c:v libx264 -preset ultrafast -crf 23 ")
-            append("-c:a aac -b:a 128k -movflags +faststart ${outFile.absolutePath}")
+            append("-movflags +faststart ${outFile.absolutePath}")
         }
-        onProgress("🎬 인트로 렌더링 중...")
-        Log.i(TAG, "renderIntro: $cmd")
+
+        onProgress("🎬 인트로 렌더링 중 (${totalDur.toInt()}초)...")
+        Log.i(TAG, "renderIntro v2: $cmd")
         val rc = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
         val ok = outFile.exists() && outFile.length() > 0
         if (!ok) {
-            Log.e(TAG, "인트로 실패: ${rc.logsAsString.takeLast(300)}")
+            Log.e(TAG, "인트로 실패: ${rc.logsAsString.takeLast(400)}")
             onProgress("⚠ 인트로 실패 — 본 영상으로 진행")
             return@withContext null
         }
         subclipFiles.add(0, outFile)
-        totalDurationSecs += dur
-        onProgress("✅ 인트로 완료 (${dur.toInt()}초, ${outFile.length()/1024}KB)")
+        totalDurationSecs += totalDur
+        onProgress("✅ 인트로 완료 (${totalDur.toInt()}초, ${outFile.length()/1024}KB)")
         outFile
     }
 
