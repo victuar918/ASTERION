@@ -330,13 +330,10 @@ class AsterionVideoActivity : AppCompatActivity() {
         val cachedCount = cacheDir.listFiles()?.size ?: 0
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("초기화 확인")
-            .setMessage("「$sheet」를 초기화합니다.
-
-• 연덬링된 진 수: ${cachedCount}개
-• 시트 상태: 전체 READY
-
-중단한 영상을 완전히 씨버리고
-처음부터 다시 렌더링하려면 초기화하세요.")
+            .setMessage("「$sheet」를 초기화합니다.\n\n" +
+                    "• 캐시된 진: ${cachedCount}개\n" +
+                    "• 시트 상태: 전체 READY 로 초기화\n\n" +
+                    "중단한 영상을 시움합니다.")
             .setPositiveButton("초기화") { _, _ -> doReset(sheet) }
             .setNegativeButton("취소", null)
             .show()
