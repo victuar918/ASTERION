@@ -370,7 +370,15 @@ class AsterionRenderEngine(
                 vf += "fade=t=out:st=${fadeOutSt.fmtUS()}:d=${effDur.fmtUS()}"
             }
             BgTransition.NONE -> { /* 전환 없음 */ }
-            else -> vf += "fade=t=in:st=0:d=${effDur.fmtUS()}"  // SLIDE/ZOOM → fade 근사
+            BgTransition.SLIDE_LEFT -> {
+                // 오른쪽에서 왼쪽으로 슬라이드 인
+                // pad로 2배 넓이로 확장 후 x를 t 애니메이션, crop으로 왼쪽 iw만 잔류
+                val slideDur = effDur.coerceIn(0.3f, 1.0f)
+                val slideX   = "iw*(1-min(t/${slideDur.fmtUS()}\\,1))"
+                vf += "pad=w=2*iw:h=ih:x='${slideX}':y=0:color=black:eval=frame"
+                vf += "crop=iw:ih:0:0"
+            }
+            else -> vf += "fade=t=in:st=0:d=${effDur.fmtUS()}"  // ZOOM_OUT 등 페이드 근사
         }
 
         // ③ BG 추가 효과
