@@ -14,7 +14,12 @@ import java.util.concurrent.TimeUnit
 private const val TAG = "SheetsVideoReader"
 const val VIDEO_SS_ID = "1ugWJmyLItD95Vz7Jq8Wjxn0_Ml5REjrhUxNZVFoIFmc"
 
-data class VideoScriptData(val sheetName: String, val videoMeta: VideoMeta, val scriptRows: List<ScriptDataRow>)
+data class VideoScriptData(
+    val sheetName: String,
+    val videoMeta: VideoMeta,
+    val scriptRows: List<ScriptDataRow>,
+    val scriptStartSheetRow: Int = 7  // Section 헤더 다음행의 시트 행 번호 (1-indexed)
+)
 
 class SheetsVideoReader(private val accessToken: String, private val spreadsheetId: String = VIDEO_SS_ID) {
 
@@ -37,11 +42,13 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
                 (0 until row.length()).map { j -> row.getString(j) }
             }
             val meta  = parseVideoMeta(rows)
-            val start = rows.indexOfFirst { it.getOrElse(0){""} == "Section" }
-                .let { if (it >= 0) it + 1 else -1 }
+            val sectionIdx = rows.indexOfFirst { it.getOrElse(0){""} == "Section" }
+            val start      = if (sectionIdx >= 0) sectionIdx + 1 else -1
+            // 시트 행 번호 (1-indexed) = 배열 인덱스 + 1
+            val scriptStartRow = if (start >= 0) start + 1 else 7
             val script = if (start >= 0) parseScriptRows(rows, start) else emptyList()
-            Log.i(TAG, "readScript: $sheetName rows=${script.size} ready=${script.count{it.isReady}}")
-            VideoScriptData(sheetName, meta, script)
+            Log.i(TAG, "readScript: $sheetName rows=${script.size} scriptStart=$scriptStartRow")
+            VideoScriptData(sheetName, meta, script, scriptStartRow)
         }
     }
 
@@ -54,11 +61,12 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
      */
     suspend fun resetAllStatuses(sheetName: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            val rows = readScript(sheetName).getOrThrow().scriptRows
+            val data = readScript(sheetName).getOrThrow()
+            val rows = data.scriptRows
             if (rows.isEmpty()) return@runCatching true
-            val lastIdx = rows.maxOf { it.rowIndex }
-            val startSheet = 7
-            val endSheet   = 7 + lastIdx
+            val lastIdx    = rows.maxOf { it.rowIndex }
+            val startSheet = data.scriptStartSheetRow
+            val endSheet   = data.scriptStartSheetRow + lastIdx
             val encoded = java.net.URLEncoder.encode(
                 "$sheetName!K${startSheet}:K${endSheet}", "UTF-8"
             )
@@ -79,11 +87,14 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
         }.getOrElse { false }
     }
 
-    suspend fun updateStatus(sheetName: String, rowIndex: Int, status: String = "DONE"): Boolean =
+    suspend fun updateStatus(
+        sheetName: String, rowIndex: Int,
+        status: String = "DONE",
+        scriptStartRow: Int = 7  // VideoScriptData.scriptStartSheetRow 전달
+    ): Boolean =
         withContext(Dispatchers.IO) {
             runCatching {
-                // rowIndex=0 → 시트 7행 (Video_Meta 5행 + 헤더 1행 + 1-index)
-                val sheetRow = 7 + rowIndex
+                val sheetRow = scriptStartRow + rowIndex
                 val encoded  = java.net.URLEncoder.encode("$sheetName!K$sheetRow", "UTF-8")
                 val url  = "$base/$spreadsheetId/values/$encoded?valueInputOption=USER_ENTERED"
                 val body = JSONObject().apply {
@@ -114,11 +125,10 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
     private fun parseVideoMeta(rows: List<List<String>>): VideoMeta {
         val m = mutableMapOf<String, String>()
         for (r in rows) {
-            val col0 = r.getOrElse(0){""}
-            if (col0 == "Section") break
-            // 시트 형식: A열=Key, B열=Value
-            val key   = col0
-            val value = r.getOrElse(1){""}
+            if (r.getOrElse(0){""} == "Section") break
+            // 시트 형식: A열=섹션마커/빈칸, B열=Key, C열=Value
+            val key   = r.getOrElse(1){""}
+            val value = r.getOrElse(2){""}
             if (key.isNotBlank() && key != "Key") m[key] = value
         }
         return VideoMeta(
