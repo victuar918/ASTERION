@@ -45,8 +45,8 @@ class AsterionVideoActivity : AppCompatActivity() {
     private val speakerSpinners       = mutableMapOf<Int, Spinner>()
     private val speakerSeekBars       = mutableMapOf<Int, SeekBar>()
     private val speakerSpeedLabels    = mutableMapOf<Int, TextView>()
-    private val speakerNumStepsBars   = mutableMapOf<Int, SeekBar>()   // 품질(numSteps) 슬라이더
-    private val speakerNumStepsLabels = mutableMapOf<Int, TextView>()  // numSteps 값 레이블
+    private val speakerNumStepsBars   = mutableMapOf<Int, SeekBar>()
+    private val speakerNumStepsLabels = mutableMapOf<Int, TextView>()
 
     private val auth by lazy { ServiceAccountAuth(this) }
     private var reader: SheetsVideoReader? = null
@@ -93,7 +93,6 @@ class AsterionVideoActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT).also{it.topMargin=12} }
         tvStatus = TextView(this).apply { text="시작 중..."; textSize=14f; setPadding(0,16,0,8) }
         tvLog    = TextView(this).apply { textSize=10f; setTextColor(0xFF777777.toInt()); maxLines=16 }
-        // 시작/중지/초기화 버튼을 한 행에 배치
         val btnRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -136,18 +135,15 @@ class AsterionVideoActivity : AppCompatActivity() {
             textSize = 11f; setTextColor(0xFFAAAAAA.toInt()); setPadding(0, 12, 0, 4)
         })
 
-        // sid 0-4 = 여성, sid 5-9 = 남성
-        // defVoice: ASTERION 화자번호 → 스피너 초기 인덱스 (= sid 값과 동일)
         val defVoice    = mapOf(1 to 5, 2 to 0, 3 to 6)
         val defSpeed    = mapOf(1 to 50, 2 to 42, 3 to 58)
-        val defNumSteps = 4  // progress=4 → numSteps=8
+        val defNumSteps = 4
         val MP = ViewGroup.LayoutParams.MATCH_PARENT
         val WC = ViewGroup.LayoutParams.WRAP_CONTENT
 
         for (sid in speakers.sorted()) {
             val name = when(sid) { 1 -> "아스터"; 2 -> "리언"; 3 -> "나레이터"; else -> "Speaker$sid" }
 
-            // ─ 행 1: [화자이름] [Spinner] [테스트버튼] — 한 줄 ───────────────────
             val headerRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(MP, WC).also { it.topMargin = 20 }
@@ -174,7 +170,6 @@ class AsterionVideoActivity : AppCompatActivity() {
             })
             llSpeakers.addView(headerRow)
 
-            // ─ 행 2: [속도] ━━━━━━━━━━ [x.xx배] — 업는 SeekBar ───────────────
             val speedValueLabel = TextView(this).apply {
                 textSize = 10f; setTextColor(0xFF999999.toInt()); minWidth = 100
                 layoutParams = LinearLayout.LayoutParams(WC, WC).also {
@@ -208,7 +203,6 @@ class AsterionVideoActivity : AppCompatActivity() {
             speedRow.addView(speedValueLabel)
             llSpeakers.addView(speedRow)
 
-            // ─ 행 3: [품질] ━━━━━━━━━━ [Xstep] — numSteps SeekBar ────────────
             val numStepsValueLabel = TextView(this).apply {
                 textSize = 10f; setTextColor(0xFF999999.toInt()); minWidth = 100
                 layoutParams = LinearLayout.LayoutParams(WC, WC).also {
@@ -217,7 +211,7 @@ class AsterionVideoActivity : AppCompatActivity() {
             }
             speakerNumStepsLabels[sid] = numStepsValueLabel
             val numStepsBar = SeekBar(this).apply {
-                max = 28; progress = defNumSteps  // progress 0~28 → numSteps 4~32
+                max = 28; progress = defNumSteps
                 layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
                 setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                     override fun onProgressChanged(s: SeekBar?, v: Int, u: Boolean) {
@@ -260,7 +254,6 @@ class AsterionVideoActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val te  = ttsEngine ?: run { withContext(Dispatchers.Main) { updateStatus("❌ TTS 엔진 미초기화") }; return@launch }
-                // cacheDir: 앱 전용 내부 캐시 (외부 노웈 없음, 권한 불필요)
                 val out = File(applicationContext.cacheDir, "test_sid${sid}.wav")
                 val ok  = te.synthesize(testText, sherpaSid, speed, out, numSteps)
                 withContext(Dispatchers.Main) {
@@ -270,7 +263,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                             setDataSource(out.absolutePath)
                             prepare()
                             start()
-                            setOnCompletionListener { out.delete() }  // 재생 완료 후 캐시 파일 자동 삭제
+                            setOnCompletionListener { out.delete() }
                         }
                         updateStatus("🔊 [$sid] sid=$sherpaSid steps=$numSteps ${out.length()/1024}KB 재생 중")
                     } else {
@@ -285,16 +278,12 @@ class AsterionVideoActivity : AppCompatActivity() {
         }
     }
 
-    /** SeekBar progress(0~100) → 발화 속도 (0.70배~1.30배) */
     private fun progressToSpeed(p: Int): Float =
         String.format("%.2f", 0.7f + p.toFloat() / 100f * 0.6f).toFloat()
 
-    /** SeekBar progress(0~28) → numSteps(4~32) */
     private fun progressToNumSteps(p: Int): Int = p + 4
 
     private fun buildVoiceConfig(): VoiceConfig {
-        // speakerNum = ASTERION 화자 번호 (1,2,3...) — speakerSpinners의 key
-        // sherpaSid  = Supertonic 3 speaker ID (0~9) — 스피너 선택 위치와 동일
         val map = speakerSpinners.keys.associateWith { speakerNum ->
             val sherpaSid = VoiceConfig.SID_LIST[speakerSpinners[speakerNum]?.selectedItemPosition ?: 0]
             val speed     = progressToSpeed(speakerSeekBars[speakerNum]?.progress ?: 50)
@@ -320,10 +309,6 @@ class AsterionVideoActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 🗑 초기화 연산 확인 다이얼로그
-     * 캐시 MP4 삭제 + 시트 K열 전체 READY 로 초기화
-     */
     private fun confirmReset() {
         val sheet = spinnerSheet.selectedItem?.toString() ?: return
         val cacheDir = AppConfig.sceneCacheDir(sheet)
@@ -331,9 +316,9 @@ class AsterionVideoActivity : AppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("초기화 확인")
             .setMessage("「$sheet」를 초기화합니다.\n\n" +
-                    "• 캐시된 진: ${cachedCount}개\n" +
+                    "• 캐시된 씬: ${cachedCount}개\n" +
                     "• 시트 상태: 전체 READY 로 초기화\n\n" +
-                    "중단한 영상을 시움합니다.")
+                    "중단한 영상을 재시작합니다.")
             .setPositiveButton("초기화") { _, _ -> doReset(sheet) }
             .setNegativeButton("취소", null)
             .show()
@@ -342,20 +327,17 @@ class AsterionVideoActivity : AppCompatActivity() {
     private fun doReset(sheet: String) {
         lifecycleScope.launch(Dispatchers.IO) {
             updateStatus("[$sheet] 초기화 중...")
-            // 1. 캐시 MP4 삭제
             val cacheDir = AppConfig.sceneCacheDir(sheet)
             val deleted  = cacheDir.listFiles()?.count { it.delete() } ?: 0
-            appendLog("찾수 $deleted 삭제")
-            // 2. 시트 K열 READY 일괄 초기화
+            appendLog("삭제 $deleted 개")
             val token = auth.getAccessToken()
             val r   = SheetsVideoReader(token, VIDEO_SS_ID)
             val token2 = auth.getAccessToken()
             val r2  = SheetsVideoReader(token2, VIDEO_SS_ID)
             val ok  = r2.resetAllStatuses(sheet)
-            // 3. 화자 UI 재로드
             withContext(Dispatchers.Main) {
                 if (ok) {
-                    updateStatus("✅ [$sheet] 초기화 완료 — 진 ${deleted}개 삭제, 상태 READY 통일")
+                    updateStatus("✅ [$sheet] 초기화 완료 — 씬 ${deleted}개 삭제, 상태 READY 통일")
                     loadSpeakersFromSheet(sheet)
                 } else {
                     updateStatus("⚠ 시트 초기화 실패 — 수동으로 K열 READY 확인 필요")
@@ -415,7 +397,6 @@ class AsterionVideoActivity : AppCompatActivity() {
                 val token = auth.getAccessToken()
                 reader = SheetsVideoReader(token, VIDEO_SS_ID)
                 updateStatus("[$sheet] 대본 읽는 중...")
-                // 전체 행 읽기 (DONE 포함) — 캐시 재사용을 위해 readReadyRows → readScript
                 val result = reader!!.readScript(sheet)
                 if (result.isFailure) {
                     updateStatus("❌ 대본 로드 실패: ${result.exceptionOrNull()?.message}")
@@ -425,23 +406,43 @@ class AsterionVideoActivity : AppCompatActivity() {
                 if (data.scriptRows.isEmpty()) { updateStatus("⚠ 대본 행 없음"); return@launch }
                 withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
 
-                // 면책 TTS 미리 합성 (Video_Meta Intro_Disclaimer 설정 시)
-                val disclaimerWav = if (data.videoMeta.disclaimerText.isNotBlank()) {
+                // ✅ 시트명 기반 인트로 메타 자동 구성 (시트 셀 불필요)
+                val isXrp = sheet.contains("XRP", ignoreCase = true)
+                val mergedMeta = data.videoMeta.copy(
+                    introBgv1        = "intro01_asterion_signature_bracelet.mp4",
+                    introBgv2        = "intro02_golden_fluid_ink_loop_slow.mp4",
+                    introText        = "빛은 선택된 이에게만 닿는다",
+                    introDurationSecs = 21f,
+                    introType        = if (isXrp) "XRP" else "CRYPTO",
+                    disclaimerText   = if (data.videoMeta.disclaimerText.isNotBlank())
+                                           data.videoMeta.disclaimerText
+                                       else
+                                           "본 영상은 투자 권유 또는 투자 조언이 아닙니다. " +
+                                           "모든 투자 결정은 시청자 본인의 판단과 책임 하에 이루어져야 하며, " +
+                                           "본 분석은 베딕 점성술 에너지 구조를 기반으로 한 참고 정보입니다. " +
+                                           "투자에는 원금 손실 위험이 존재하며, 과거 수익률이 미래를 보장하지 않습니다.",
+                    topWatermark     = if (isXrp)
+                                           "베다점성술로 예측하는 XRP 전망 by ASTERION"
+                                       else
+                                           "베다점성술로 둘러보는 크립토 갤러리 by ASTERION"
+                )
+
+                // 면책 TTS 미리 합성
+                val disclaimerWav = if (mergedMeta.disclaimerText.isNotBlank()) {
                     val dWav = java.io.File(AppConfig.OUTPUT_DIR, "intro_disclaimer.wav")
                     try {
                         val spk = data.scriptRows.firstOrNull()?.speaker ?: 1
                         val cfg = voiceConfig.forSpeaker(spk)
                         engine!!.ttsEnginePublic.synthesize(
-                            data.videoMeta.disclaimerText, cfg.sid, cfg.speed, dWav, cfg.numSteps
+                            mergedMeta.disclaimerText, cfg.sid, cfg.speed, dWav, cfg.numSteps
                         )
                         if (dWav.exists() && dWav.length() > 0) dWav else null
                     } catch (e: Exception) { Log.w("Activity", "disclaimer TTS 실패: $e"); null }
                 } else null
 
-                // 인트로 렌더링 (면책 WAV 있으면 전달)
-                engine!!.renderIntro(data.videoMeta, disclaimerWav) { msg -> appendLog(msg); updateStatus(msg) }
+                // 인트로 렌더링 (mergedMeta 사용)
+                engine!!.renderIntro(mergedMeta, disclaimerWav) { msg -> appendLog(msg); updateStatus(msg) }
 
-                // 씬캐시 디렉토리 — 시트명별 영구 보관
                 val cacheDir = AppConfig.sceneCacheDir(sheet)
 
                 var done      = 0
@@ -452,13 +453,12 @@ class AsterionVideoActivity : AppCompatActivity() {
                     val cacheFile = java.io.File(cacheDir, "$sceneId.mp4")
 
                     if (row.status == "DONE" && cacheFile.exists() && cacheFile.length() > 0) {
-                        // ✅ 이미 렌더링된 씬 — 재렌더링 없이 재사용
                         engine!!.addExistingSubclip(cacheFile) { msg -> appendLog(msg) }
                         updateStatus("[$sceneId] ⏭️ DONE — 캐시 (${cacheFile.length()/1024}KB)")
                         done++
                     } else {
-                        // 렌더링 필요 (READY / ERROR / 캐시 없는 DONE)
-                        val f = engine!!.renderScene(row, data.videoMeta, voiceConfig, cacheDir) { msg ->
+                        // mergedMeta로 씬 렌더링
+                        val f = engine!!.renderScene(row, mergedMeta, voiceConfig, cacheDir) { msg ->
                             appendLog(msg); updateStatus(msg)
                         }
                         val newStatus = if (f != null) "DONE" else "ERROR"
@@ -474,8 +474,9 @@ class AsterionVideoActivity : AppCompatActivity() {
                     updateStatus("🔗 씬 ${done}개 concat 중...")
                     val finalFile = engine!!.concatSubclips(
                         outputName    = safeSheet,
-                        bgmFileName   = data.videoMeta.mainBgm,
-                        watermarkText = data.videoMeta.topWatermark   // Video_Meta 시트 Top_Watermark 값
+                        bgmFileName   = mergedMeta.mainBgm,
+                        watermarkText = mergedMeta.topWatermark,
+                        introDurSecs  = mergedMeta.introDurationSecs  // ✅ 동적 타이밍 전달
                     ) { msg -> appendLog(msg); updateStatus(msg) }
                     if (finalFile != null && finalFile.exists()) {
                         updateStatus("🎬 완료: ${finalFile.name} (${finalFile.length()/1024/1024}MB)")
