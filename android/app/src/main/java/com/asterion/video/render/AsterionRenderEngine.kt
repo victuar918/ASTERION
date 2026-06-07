@@ -12,11 +12,12 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.10
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.11
 //
-// [변경로그 v3.10]
-//   - renderIntro: drawtext angle=-30 제거 (FFmpegKit 6.0-2.LTS 미지원)
-//   - renderIntro: 실패 시 FFmpeg 에러 라인을 onProgress로 UI 출력
+// [변경로그 v3.11]
+//   - SLIDE_LEFT: pad+eval=frame → crop 오프셋 방식으로 교체 (FFmpegKit 호환)
+//   - SLIDE_UP: 동일 방식 적용
+//   - 인트로 Phase2 텍스트 폰트 사이즈 2배 (px40→64, px70→112, px100→160)
 // =================================================================
 
 private const val TAG         = "AsterionRenderEngine"
@@ -46,10 +47,6 @@ class AsterionRenderEngine(
         File(AppConfig.OUTPUT_DIR, TEMP_SUBDIR).also { it.mkdirs() }
     }
 
-    /**
-     * drawtext 용 폰트 절대경로
-     * SELinux 접근 가능한 폰트를 lazy로 탐색
-     */
     private val fontPath: String by lazy {
         listOf(
             "/system/fonts/NotoSansCJK-Regular.ttc",
@@ -61,22 +58,15 @@ class AsterionRenderEngine(
         } ?: ""
     }
 
-    /** drawtext 옵션 필드용 fontfile 인수 */
     private val fontArg: String by lazy {
         if (fontPath.isNotEmpty()) ":fontfile='${fontPath}'" else ""
     }
 
     // ── 인트로 렌더링 v2 ──────────────────────────────────────────────────
-    //
-    // ① intro01 전체 재생 (BGV 실제 길이 사용, 중간 컷 없음)
-    // ② Phase1 텍스트: 화면 상단 1/3, intro01 끝날 때 함께 사라짐
-    // ③ xfade 1초로 intro01→intro02 크로스페이드
-    // ④ intro02 전체 재생 + 순차 텍스트 (2초 간격, 마지막 후 6초 유지)
-    // ⑤ 면책 TTS(disclaimerWav): introDurationSecs초에 시작
 
     suspend fun renderIntro(
         videoMeta: VideoMeta,
-        disclaimerWav: File? = null,   // 면책 TTS WAV — introDurationSecs초에 시작
+        disclaimerWav: File? = null,
         onProgress: (String) -> Unit = {}
     ): File? = withContext(Dispatchers.IO) {
         if (videoMeta.introBgv1.isBlank()) {
@@ -90,28 +80,23 @@ class AsterionRenderEngine(
         val hasBgv2 = videoMeta.introBgv2.isNotBlank()
         val bgv2    = if (hasBgv2) AppConfig.resolveBgv(videoMeta.introBgv2) else null
 
-        // BGV 실제 길이 측정
         val bgv1Dur  = getBgvDurationSecs(bgv1).takeIf { it > 1f } ?: 8f
         val bgv2Dur  = if (bgv2 != null && bgv2.exists()) getBgvDurationSecs(bgv2).takeIf { it > 1f } ?: 15f else 0f
         val xfadeDur = if (hasBgv2) 1.0f else 0f
         val totalDur = if (hasBgv2) bgv1Dur + bgv2Dur - xfadeDur else bgv1Dur
         onProgress("인트로 측정: bgv1=${bgv1Dur.fmtUS(1)}s bgv2=${bgv2Dur.fmtUS(1)}s total=${totalDur.fmtUS(1)}s")
 
-        // 타이밍
         val p1Start  = 2.0f
         val p1End    = (bgv1Dur - xfadeDur - 0.3f).coerceAtLeast(p1Start + 1f)
         val p2Base   = bgv1Dur - xfadeDur
         val t1 = p2Base + 2f; val t2 = p2Base + 4f
         val t3 = p2Base + 6f; val t4 = p2Base + 8f
-        // ✅ FIX: tAllEnd가 totalDur을 초과하지 않도록 클램프
         val tAllEnd  = (t4 + 6f).coerceAtMost(totalDur - 0.5f)
 
-        // 코인 타입별 텍스트
         val isXrp      = videoMeta.introType.trim().uppercase() == "XRP"
         val titleWord  = if (isXrp) "XRP 전망" else "크립토 갤러리"
         val rotWord    = if (isXrp) "예측하는" else "둘러보는"
 
-        // 헬퍼
         fun esc(s: String) = s.replace("\\","\\\\").replace("'","\\'").replace(":","\\:").replace(",","\\,")
         fun alpha(ts: Float, te: Float): String {
             val fi = (ts + 0.5f).fmtUS(2); val fo = (te - 0.5f).coerceAtLeast(ts + 0.6f).fmtUS(2)
@@ -119,10 +104,9 @@ class AsterionRenderEngine(
         }
         fun en(ts: Float, te: Float) = "between(t,${ts.fmtUS(2)},${te.fmtUS(2)})"
 
-        val fp      = mutableListOf<String>()
-        val fOpt    = if (fontPath.isNotEmpty()) "fontfile='$fontPath':" else ""
+        val fp   = mutableListOf<String>()
+        val fOpt = if (fontPath.isNotEmpty()) "fontfile='$fontPath':" else ""
 
-        // 비디오 전환: xfade 또는 단독
         if (hasBgv2 && bgv2 != null) {
             val xOff = (bgv1Dur - xfadeDur).coerceAtLeast(0.5f)
             fp += "[0:v]setpts=PTS-STARTPTS[v0]"
@@ -132,7 +116,6 @@ class AsterionRenderEngine(
 
         var cur = "[bgv]"
 
-        // Phase 1 텍스트 (상단 1/3)
         if (videoMeta.introText.isNotBlank()) {
             fp += "${cur}drawtext=${fOpt}text='${esc(videoMeta.introText)}':" +
                   "fontsize=64:fontcolor=white:borderw=3:bordercolor=black@0.8:" +
@@ -141,10 +124,10 @@ class AsterionRenderEngine(
             cur = "[p1]"
         }
 
-        // Phase 2 순차 텍스트
-        // ✅ FIX v3.10: angle=-30 제거 — FFmpegKit 6.0-2.LTS drawtext 미지원 파라미터
+        // ✅ v3.11: 폰트 사이즈 2배 (px40=64, px70=112, px100=160)
+        // ✅ v3.10: angle=-30 제거 (FFmpegKit 미지원)
         if (hasBgv2) {
-            val px100 = 80; val px70 = 56; val px40 = 32
+            val px100 = 160; val px70 = 112; val px40 = 64
             fp += "${cur}drawtext=${fOpt}text='베다점성술로':fontsize=$px70:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.15-th/2:alpha='${alpha(t1,tAllEnd)}':enable='${en(t1,tAllEnd)}'[t1]"; cur="[t1]"
             fp += "${cur}drawtext=${fOpt}text='${esc(rotWord)}':fontsize=$px40:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.37-th/2:alpha='${alpha(t2,tAllEnd)}':enable='${en(t2,tAllEnd)}'[t2]"; cur="[t2]"
             fp += "${cur}drawtext=${fOpt}text='${esc(titleWord)}':fontsize=$px100:fontcolor=white:borderw=3:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.57-th/2:alpha='${alpha(t3,tAllEnd)}':enable='${en(t3,tAllEnd)}'[t3]"; cur="[t3]"
@@ -152,7 +135,6 @@ class AsterionRenderEngine(
         }
         fp += "${cur}format=yuv420p[vfinal]"
 
-        // 오디오: 면책 TTS가 있으면 introDurationSecs초에 삽입, 없으면 무음
         val numVid    = if (hasBgv2) 2 else 1
         val silentIdx = numVid
         val hasDisc   = disclaimerWav != null && disclaimerWav.exists()
@@ -184,7 +166,6 @@ class AsterionRenderEngine(
         val rc = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
         val ok = outFile.exists() && outFile.length() > 0
         if (!ok) {
-            // ✅ FIX v3.10: 에러 핵심 라인을 UI에도 출력 (logcat 전용에서 변경)
             val errLog  = rc.logsAsString
             val errLine = errLog.lines().lastOrNull {
                 it.contains("Error",   ignoreCase = true) ||
@@ -206,10 +187,6 @@ class AsterionRenderEngine(
 
     // ── 씬 렌더링 ────────────────────────────────────────────────────
 
-    /**
-     * 이미 렌더링된 씬을 subclipFiles에 추가 (실제 렌더링 없이)
-     * Status=DONE + 파일 존재 시 재렌더링 스킵에 사용
-     */
     fun addExistingSubclip(file: File, onProgress: (String) -> Unit = {}) {
         val dur = try {
             val mmr = android.media.MediaMetadataRetriever()
@@ -229,7 +206,7 @@ class AsterionRenderEngine(
         row: ScriptDataRow,
         videoMeta: VideoMeta,
         voiceConfig: VoiceConfig,
-        cacheDir: File? = null,   // null이면 .temp_scenes, 제공 시 해당 디렉토리에 저장
+        cacheDir: File? = null,
         onProgress: (String) -> Unit = {}
     ): File? = withContext(Dispatchers.IO) {
         AppConfig.ensureDirs()
@@ -240,7 +217,6 @@ class AsterionRenderEngine(
         try {
             val bgFile = AppConfig.resolveBgv(row.bgFileName)
 
-            // BGV fallback 여부 UI 표시
             val requestedBgv = row.bgFileName.split("|").firstOrNull()?.trim() ?: ""
             if (bgFile.name != requestedBgv) {
                 onProgress("[$sceneId] ⚠️ BGV 대체: '$requestedBgv' → '${bgFile.name}'")
@@ -249,7 +225,6 @@ class AsterionRenderEngine(
                 onProgress("[$sceneId] BGV: ${bgFile.name} (${bgFile.length()/1024}KB)")
             }
 
-            // bgFile 존재 여부 + 최소 크기 체크
             if (!bgFile.exists() || bgFile.length() < 10_000L) {
                 Log.e(TAG, "[$sceneId] bgFile 문제: exist=${bgFile.exists()} size=${bgFile.length()} path=${bgFile.absolutePath}")
                 onProgress("[$sceneId] ❌ bgFile 없음 또는 너무 작음(${bgFile.length()}B): ${bgFile.name}")
@@ -264,7 +239,6 @@ class AsterionRenderEngine(
                 synthesizeChunked(row.script, cfg.sid, cfg.speed, ttsWavFile, cfg.numSteps, sceneId, onProgress)
             }
 
-            // WAV 진단 로그 + tTotal 계산
             val tTotal: Float
             if (ttsWavFile.exists() && ttsWavFile.length() > 1024L) {
                 val dur = ttsEngine.estimateDurationFromFile(ttsWavFile)
@@ -331,7 +305,7 @@ class AsterionRenderEngine(
         outputName: String,
         bgmFileName: String,
         watermarkText: String = "",
-        introDurSecs: Float = 21f,   // ✅ 워터마크/BGM 타이밍 기준 (인트로 종료 시점)
+        introDurSecs: Float = 21f,
         onProgress: (String) -> Unit = {}
     ): File? = withContext(Dispatchers.IO) {
         if (subclipFiles.isEmpty()) { onProgress("⚠️ 클립 없음"); return@withContext null }
@@ -353,7 +327,6 @@ class AsterionRenderEngine(
         if (watermarkText.isNotBlank()) {
             val esc = escapeDrawtext(watermarkText)
             val fontOpt = if (fontPath.isNotEmpty()) "fontfile='${fontPath}':" else ""
-            // ✅ 워터마크: introDurSecs 이후 ~ wmEnd
             filterParts += "[0:v]drawtext=${fontOpt}text='$esc':" +
                 "fontsize=34:fontcolor=white@0.65:shadowcolor=black@0.75:shadowx=2:shadowy=2:" +
                 "x=30:y=40:enable='between(t\\,${introDurSecs.fmtUS(1)}\\,${wmEnd.fmtUS(1)})' [wm_pre]"
@@ -363,7 +336,6 @@ class AsterionRenderEngine(
 
         if (bgmFile != null) {
             filterParts += "[0:a]volume=0.85[tts]"
-            // ✅ BGM 덕킹: introDurSecs 기반 동적 계산
             val bgmFadeStart = (introDurSecs - 2f).fmtUS(1)
             val bgmFadeEnd   = introDurSecs.fmtUS(1)
             filterParts += "[1:a]aformat=sample_rates=44100:channel_layouts=stereo," +
@@ -377,7 +349,6 @@ class AsterionRenderEngine(
             if (bgmFile != null) append("-stream_loop -1 -i ${bgmFile.absolutePath} ")
             if (filterParts.isNotEmpty()) append("-filter_complex \"${filterParts.joinToString(";")}\" ")
             append("-map \"$videoMapLabel\" -map \"$audioMapLabel\" ")
-            // ✅ 항상 libx264 사용 (stream copy 시 워터마크 필터 미적용 문제 방지)
             append("-c:v libx264 -preset fast -crf 20 ")
             if (audioMapLabel.startsWith("[")) append("-c:a aac -b:a 192k ")
             else append("-c:a copy ")
@@ -423,6 +394,8 @@ class AsterionRenderEngine(
         vf += "setpts=PTS-STARTPTS"
 
         // ② BG 전환 효과
+        // ✅ v3.11: SLIDE_LEFT/UP — pad+eval=frame 방식 제거
+        //          crop 오프셋 방식으로 교체 (FFmpegKit -vf 단순 체인에서 eval=frame 미동작)
         when (bgTransition) {
             BgTransition.FADE -> {
                 val fadeOutSt = (tTotal - effDur).coerceAtLeast(0f)
@@ -431,10 +404,19 @@ class AsterionRenderEngine(
             }
             BgTransition.NONE -> { /* 전환 없음 */ }
             BgTransition.SLIDE_LEFT -> {
-                val slideDur = effDur.coerceIn(0.3f, 1.0f)
-                val slideX   = "iw*(1-min(t/${slideDur.fmtUS()}\\,1))"
-                vf += "pad=w=2*iw:h=ih:x='${slideX}':y=0:color=black:eval=frame"
-                vf += "crop=iw:ih:0:0"
+                // 왼쪽에서 오른쪽으로 슬라이드인:
+                // 전체 너비 2배 pad → 오른쪽 절반에서 시작해 0으로 crop x 이동
+                // scale로 강제 해상도 고정 후 crop
+                val slideDur = effDur.coerceIn(0.3f, 1.5f)
+                vf += "scale=${VIDEO_W * 2}:${VIDEO_H}"
+                vf += "crop=${VIDEO_W}:${VIDEO_H}:'(${VIDEO_W}*(1-min(t/${slideDur.fmtUS()}\\,1)))':0"
+                vf += "scale=${VIDEO_W}:${VIDEO_H}"
+            }
+            BgTransition.SLIDE_UP -> {
+                val slideDur = effDur.coerceIn(0.3f, 1.5f)
+                vf += "scale=${VIDEO_W}:${VIDEO_H * 2}"
+                vf += "crop=${VIDEO_W}:${VIDEO_H}:0:'(${VIDEO_H}*(1-min(t/${slideDur.fmtUS()}\\,1)))'"
+                vf += "scale=${VIDEO_W}:${VIDEO_H}"
             }
             else -> vf += "fade=t=in:st=0:d=${effDur.fmtUS()}"
         }
@@ -467,9 +449,9 @@ class AsterionRenderEngine(
                 val fo = (tTotal - 0.6f).coerceAtLeast(ts + 1f).fmtUS(2)
                 val tt = tTotal.fmtUS(2)
                 val tsS = ts.fmtUS(2)
-                val alphaExpr = "if(lt(t,${fi}),(t-${tsS})/0.8,if(gt(t,${fo}),(${tt}-t)/0.6,1))"
+                val alphaExpr  = "if(lt(t,${fi}),(t-${tsS})/0.8,if(gt(t,${fo}),(${tt}-t)/0.6,1))"
                 val enableExpr = "between(t\\,${tsS}\\,${tt})"
-                val fontOpt = if (fontPath.isNotEmpty()) "fontfile='${fontPath}':" else ""
+                val fontOpt    = if (fontPath.isNotEmpty()) "fontfile='${fontPath}':" else ""
 
                 val cardCenterX = kf.holdX.toInt() + 430
                 val xExpr = "${cardCenterX}-tw/2"

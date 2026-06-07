@@ -406,25 +406,23 @@ class AsterionVideoActivity : AppCompatActivity() {
                 if (data.scriptRows.isEmpty()) { updateStatus("⚠ 대본 행 없음"); return@launch }
                 withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
 
-                // ✅ 시트명 기반 인트로 메타 자동 구성 (시트 셀 불필요)
                 val isXrp = sheet.contains("XRP", ignoreCase = true)
                 val mergedMeta = data.videoMeta.copy(
-                    introBgv1        = "intro01_asterion_signature_bracelet.mp4",
-                    introBgv2        = "intro02_golden_fluid_ink_loop_slow.mp4",
-                    introText        = "빛은 선택된 이에게만 닿는다",
+                    introBgv1         = "intro01_asterion_signature_bracelet.mp4",
+                    introBgv2         = "intro02_golden_fluid_ink_loop_slow.mp4",
+                    introText         = "빛은 선택된 이에게만 닿는다",
                     introDurationSecs = 21f,
-                    introType        = if (isXrp) "XRP" else "CRYPTO",
-                    disclaimerText   = if (data.videoMeta.disclaimerText.isNotBlank())
-                                           data.videoMeta.disclaimerText
-                                       else
-                                           "본 영상은 투자 권유 또는 투자 조언이 아닙니다. " +
-                                           "모든 투자 결정은 시청자 본인의 판단과 책임 하에 이루어져야 하며, " +
-                                           "본 분석은 베딕 점성술 에너지 구조를 기반으로 한 참고 정보입니다. " +
-                                           "투자에는 원금 손실 위험이 존재하며, 과거 수익률이 미래를 보장하지 않습니다.",
-                    topWatermark     = if (isXrp)
-                                           "베다점성술로 예측하는 XRP 전망 by ASTERION"
-                                       else
-                                           "베다점성술로 둘러보는 크립토 갤러리 by ASTERION"
+                    introType         = if (isXrp) "XRP" else "CRYPTO",
+                    // ✅ v3.11: 면책 텍스트 단축 — '참고 정보입니다.'까지만
+                    disclaimerText    = if (data.videoMeta.disclaimerText.isNotBlank())
+                                            data.videoMeta.disclaimerText
+                                        else
+                                            "본 영상은 투자 권유 또는 투자 조언이 아닙니다. " +
+                                            "본 분석은 베딕 점성술 에너지 구조를 기반으로 한 참고 정보입니다.",
+                    topWatermark      = if (isXrp)
+                                            "베다점성술로 예측하는 XRP 전망 by ASTERION"
+                                        else
+                                            "베다점성술로 둘러보는 크립토 갤러리 by ASTERION"
                 )
 
                 // 면책 TTS 미리 합성
@@ -440,7 +438,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                     } catch (e: Exception) { Log.w("Activity", "disclaimer TTS 실패: $e"); null }
                 } else null
 
-                // 인트로 렌더링 (mergedMeta 사용)
+                // 인트로 렌더링
                 engine!!.renderIntro(mergedMeta, disclaimerWav) { msg -> appendLog(msg); updateStatus(msg) }
 
                 val cacheDir = AppConfig.sceneCacheDir(sheet)
@@ -457,7 +455,6 @@ class AsterionVideoActivity : AppCompatActivity() {
                         updateStatus("[$sceneId] ⏭️ DONE — 캐시 (${cacheFile.length()/1024}KB)")
                         done++
                     } else {
-                        // mergedMeta로 씬 렌더링
                         val f = engine!!.renderScene(row, mergedMeta, voiceConfig, cacheDir) { msg ->
                             appendLog(msg); updateStatus(msg)
                         }
@@ -476,7 +473,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                         outputName    = safeSheet,
                         bgmFileName   = mergedMeta.mainBgm,
                         watermarkText = mergedMeta.topWatermark,
-                        introDurSecs  = mergedMeta.introDurationSecs  // ✅ 동적 타이밍 전달
+                        introDurSecs  = mergedMeta.introDurationSecs
                     ) { msg -> appendLog(msg); updateStatus(msg) }
                     if (finalFile != null && finalFile.exists()) {
                         updateStatus("🎬 완료: ${finalFile.name} (${finalFile.length()/1024/1024}MB)")
