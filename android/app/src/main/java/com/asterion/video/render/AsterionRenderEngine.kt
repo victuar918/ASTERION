@@ -12,13 +12,11 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.9
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.10
 //
-// [변경로그 v3.9]
-//   - tAllEnd coerceAtMost(totalDur - 0.5f) — 인트로 길이 초과 방지
-//   - concatSubclips: introDurSecs 파라미터 추가 (워터마크/BGM 타이밍 동적화)
-//   - 워터마크 enable: 15초 하드코딩 → introDurSecs 파라미터 사용
-//   - BGM 덕킹: 인트로 길이 기반 동적 계산
+// [변경로그 v3.10]
+//   - renderIntro: drawtext angle=-30 제거 (FFmpegKit 6.0-2.LTS 미지원)
+//   - renderIntro: 실패 시 FFmpeg 에러 라인을 onProgress로 UI 출력
 // =================================================================
 
 private const val TAG         = "AsterionRenderEngine"
@@ -144,10 +142,11 @@ class AsterionRenderEngine(
         }
 
         // Phase 2 순차 텍스트
+        // ✅ FIX v3.10: angle=-30 제거 — FFmpegKit 6.0-2.LTS drawtext 미지원 파라미터
         if (hasBgv2) {
             val px100 = 80; val px70 = 56; val px40 = 32
             fp += "${cur}drawtext=${fOpt}text='베다점성술로':fontsize=$px70:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.15-th/2:alpha='${alpha(t1,tAllEnd)}':enable='${en(t1,tAllEnd)}'[t1]"; cur="[t1]"
-            fp += "${cur}drawtext=${fOpt}text='${esc(rotWord)}':fontsize=$px40:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.37-th/2:angle=-30:alpha='${alpha(t2,tAllEnd)}':enable='${en(t2,tAllEnd)}'[t2]"; cur="[t2]"
+            fp += "${cur}drawtext=${fOpt}text='${esc(rotWord)}':fontsize=$px40:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.37-th/2:alpha='${alpha(t2,tAllEnd)}':enable='${en(t2,tAllEnd)}'[t2]"; cur="[t2]"
             fp += "${cur}drawtext=${fOpt}text='${esc(titleWord)}':fontsize=$px100:fontcolor=white:borderw=3:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.57-th/2:alpha='${alpha(t3,tAllEnd)}':enable='${en(t3,tAllEnd)}'[t3]"; cur="[t3]"
             fp += "${cur}drawtext=${fOpt}text='by ASTERION':fontsize=$px40:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.77-th/2:alpha='${alpha(t4,tAllEnd)}':enable='${en(t4,tAllEnd)}'[t4]"; cur="[t4]"
         }
@@ -185,8 +184,18 @@ class AsterionRenderEngine(
         val rc = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
         val ok = outFile.exists() && outFile.length() > 0
         if (!ok) {
-            Log.e(TAG, "인트로 실패: ${rc.logsAsString.takeLast(400)}")
-            onProgress("⚠ 인트로 실패 — 본 영상으로 진행")
+            // ✅ FIX v3.10: 에러 핵심 라인을 UI에도 출력 (logcat 전용에서 변경)
+            val errLog  = rc.logsAsString
+            val errLine = errLog.lines().lastOrNull {
+                it.contains("Error",   ignoreCase = true) ||
+                it.contains("Invalid", ignoreCase = true) ||
+                it.contains("No such", ignoreCase = true) ||
+                it.contains("failed",  ignoreCase = true) ||
+                it.contains("Option",  ignoreCase = true)
+            } ?: errLog.takeLast(200)
+            Log.e(TAG, "인트로 실패:\n${errLog.takeLast(600)}")
+            onProgress("⚠ 인트로 실패: ${errLine.takeLast(120)}")
+            onProgress("→ 본 영상으로 진행")
             return@withContext null
         }
         subclipFiles.add(0, outFile)
