@@ -12,12 +12,16 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.13
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.14
 //
+// [변경로그 v3.14]
+//   - FADE effDur 하드개 0.3s 고정 (tTotal 비례 계산 제거)
+//   - fade-in 제거: 씨 시작 시 검은화면 제거, fade-out만 유지
+//   - SLIDE_LEFT/UP 동일하게 effDur 0.3s 고정
 // [변경로그 v3.13]
 //   - 써 렌더링: h264_mediacodec 우선, 실패 시 libx264 ultrafast fallback
-//   - drawbox/drawtext 있으면 필터 포함 시 libx264 전환 (하드웨어 인코더 완전 지원 안함)
-//   - concatSubclips: libx264 유지 (워터마크 drawtext 필터 포함)
+//   - drawbox/drawtext 있으면 필터 포함 시 libx264 전환
+//   - concatSubclips: libx264 유지
 // [변경로그 v3.12]
 //   - BGV 루프 크로스페이드 블록 완전 제거
 //     h264_mediacodec + enable= 조건부 fade → 검은 화면 버그 근본 수정
@@ -394,7 +398,8 @@ class AsterionRenderEngine(
         extraEffect: CardExtraEffect, bgEffect: String, bgTransition: BgTransition,
         transitionDur: Float, outputFile: File
     ): String {
-        val effDur = transitionDur.coerceIn(0.3f, (tTotal * 0.45f).coerceAtLeast(0.3f))
+        // v3.14: effDur 0.3s 하드개 — tTotal 비례 계산하면 긴 씨에서 fade-in 구간이 길어져 검은화면 발생
+        val effDur = 0.3f
 
         val vf = mutableListOf<String>()
 
@@ -406,8 +411,9 @@ class AsterionRenderEngine(
         //          crop 오프셋 방식으로 교체 (FFmpegKit -vf 단순 체인에서 eval=frame 미동작)
         when (bgTransition) {
             BgTransition.FADE -> {
-                val fadeOutSt = (tTotal - effDur).coerceAtLeast(0f)
-                vf += "fade=t=in:st=0:d=${effDur.fmtUS()}"
+                // v3.14: fade-in 제거, fade-out만 유지
+                // fade-in(st=0)은 대사 시작과 동시에 검은화면을 만들어냄
+                val fadeOutSt = (tTotal - effDur).coerceAtLeast(tTotal * 0.8f)
                 vf += "fade=t=out:st=${fadeOutSt.fmtUS()}:d=${effDur.fmtUS()}"
             }
             BgTransition.NONE -> { /* 전환 없음 */ }
