@@ -12,12 +12,16 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.11
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.12
 //
+// [변경로그 v3.12]
+//   - BGV 루프 크로스페이드 블록 완전 제거
+//     h264_mediacodec + enable= 조건부 fade → 검은 화면 버그 근본 수정
+//     -stream_loop -1 단순 무한 루프로 대체 (안정적)
 // [변경로그 v3.11]
 //   - SLIDE_LEFT: pad+eval=frame → crop 오프셋 방식으로 교체 (FFmpegKit 호환)
 //   - SLIDE_UP: 동일 방식 적용
-//   - 인트로 Phase2 텍스트 폰트 사이즈 2배 (px40→64, px70→112, px100→160)
+//   - 인트로 Phase2 텍스트 폰트 사이즈 2배
 // =================================================================
 
 private const val TAG         = "AsterionRenderEngine"
