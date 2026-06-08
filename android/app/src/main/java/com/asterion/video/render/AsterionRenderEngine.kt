@@ -12,12 +12,16 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.14
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.15
 //
+// [변경로그 v3.15]
+//   - renderScene: fade 완전 제거 (씨 내부 fade는 검은화면 원인)
+//   - -shortest 추가: WAV 길이와 BGV 타이밍 정확 동기화
+//   - h264_mediacodec 조건 제거 → 모든 씨 libx264 ultrafast 통일
+//     (ultrafast는 충분히 빠르며 하드웨어 인코더 검은화면 버그 해소)
+//   - 씨 간 전환은 concatSubclips에서 xfade로 통합 처리 예정
 // [변경로그 v3.14]
-//   - FADE effDur 하드개 0.3s 고정 (tTotal 비례 계산 제거)
-//   - fade-in 제거: 씨 시작 시 검은화면 제거, fade-out만 유지
-//   - SLIDE_LEFT/UP 동일하게 effDur 0.3s 고정
+//   - FADE effDur 0.3s 고정, fade-in 제거
 // [변경로그 v3.13]
 //   - 써 렌더링: h264_mediacodec 우선, 실패 시 libx264 ultrafast fallback
 //   - drawbox/drawtext 있으면 필터 포함 시 libx264 전환
@@ -398,41 +402,30 @@ class AsterionRenderEngine(
         extraEffect: CardExtraEffect, bgEffect: String, bgTransition: BgTransition,
         transitionDur: Float, outputFile: File
     ): String {
-        // v3.14: effDur 0.3s 하드개 — tTotal 비례 계산하면 긴 씨에서 fade-in 구간이 길어져 검은화면 발생
-        val effDur = 0.3f
-
         val vf = mutableListOf<String>()
 
         // ① PTS 정규화
         vf += "setpts=PTS-STARTPTS"
 
         // ② BG 전환 효과
-        // ✅ v3.11: SLIDE_LEFT/UP — pad+eval=frame 방식 제거
-        //          crop 오프셋 방식으로 교체 (FFmpegKit -vf 단순 체인에서 eval=frame 미동작)
+        // v3.15: 씨 내부 fade 완전 제거
+        //   fade=t=in → 씨 시작 시 검은화면 (대사는 시작되지만 화면은 어두운 상태)
+        //   fade=t=out → 다음 씨 취합면에서 검은화면 + 이전 씨 컨텐츠가 잘려지는 문제
+        //   씨 간 전환 효과는 concatSubclips xfade로 통합 처리 예정
         when (bgTransition) {
-            BgTransition.FADE -> {
-                // v3.14: fade-in 제거, fade-out만 유지
-                // fade-in(st=0)은 대사 시작과 동시에 검은화면을 만들어냄
-                val fadeOutSt = (tTotal - effDur).coerceAtLeast(tTotal * 0.8f)
-                vf += "fade=t=out:st=${fadeOutSt.fmtUS()}:d=${effDur.fmtUS()}"
-            }
-            BgTransition.NONE -> { /* 전환 없음 */ }
             BgTransition.SLIDE_LEFT -> {
-                // 왼쪽에서 오른쪽으로 슬라이드인:
-                // 전체 너비 2배 pad → 오른쪽 절반에서 시작해 0으로 crop x 이동
-                // scale로 강제 해상도 고정 후 crop
-                val slideDur = effDur.coerceIn(0.3f, 1.5f)
+                val slideDur = 0.3f
                 vf += "scale=${VIDEO_W * 2}:${VIDEO_H}"
                 vf += "crop=${VIDEO_W}:${VIDEO_H}:'(${VIDEO_W}*(1-min(t/${slideDur.fmtUS()}\\,1)))':0"
                 vf += "scale=${VIDEO_W}:${VIDEO_H}"
             }
             BgTransition.SLIDE_UP -> {
-                val slideDur = effDur.coerceIn(0.3f, 1.5f)
+                val slideDur = 0.3f
                 vf += "scale=${VIDEO_W}:${VIDEO_H * 2}"
                 vf += "crop=${VIDEO_W}:${VIDEO_H}:0:'(${VIDEO_H}*(1-min(t/${slideDur.fmtUS()}\\,1)))'"
                 vf += "scale=${VIDEO_W}:${VIDEO_H}"
             }
-            else -> vf += "fade=t=in:st=0:d=${effDur.fmtUS()}"
+            else -> { /* FADE/NONE/기타 모두 전환 없음 — clean cut */ }
         }
 
         // ③ BG 추가 효과
@@ -518,26 +511,18 @@ class AsterionRenderEngine(
         //    → -stream_loop -1 단순 무한 루프로 충분하며 안정적
         vf += "scale=${VIDEO_W}:${VIDEO_H},format=yuv420p"
 
-        // ★ 인코더 선택 전략 (v3.13)
-        // - drawbox/drawtext 필터가 없으면: h264_mediacodec(소프트웨어 인코더 포함 안하는 GPU) 시도
-        // - 오버레이 필터 있으면: libx264 ultrafast (하드웨어 인코더가 drawtext 등 소프트웨어 필터 지원 안함)
-        val hasOverlay = cardStyle != CardStyle.NONE && cardStyle != CardStyle.MINIMAL &&
-            (row.cardMain.isNotBlank() || row.cardSub.isNotBlank() || row.cardDesc.isNotBlank())
-        val encoderCmd = if (!hasOverlay) {
-            "-c:v h264_mediacodec -b:v 4M"
-        } else {
-            "-c:v libx264 -preset ultrafast -crf 23"
-        }
-
+        // v3.15: libx264 ultrafast 단일 인코더 통일
+        //   h264_mediacodec은 -vf 체인의 drawtext/drawbox/format 필터와 충돌 → 검은화면
+        //   libx264 ultrafast는 소프트웨어지만 안드로이드에서 충분히 빠름
         return buildString {
             append("-y -stream_loop -1 -i ${bgFile.absolutePath} ")
             if (ttsWav != null) append("-i ${ttsWav.absolutePath} ")
             append("-vf \"${vf.joinToString(",")}\" ")
             append("-map 0:v ")
-            if (ttsWav != null) append("-map 1:a -c:a aac -b:a 128k ")
+            if (ttsWav != null) append("-map 1:a -c:a aac -b:a 128k -shortest ")
             else                append("-an ")
             append("-t ${tTotal.fmtUS()} ")
-            append("$encoderCmd -movflags +faststart ")
+            append("-c:v libx264 -preset ultrafast -crf 23 -movflags +faststart ")
             append(outputFile.absolutePath)
         }
     }
