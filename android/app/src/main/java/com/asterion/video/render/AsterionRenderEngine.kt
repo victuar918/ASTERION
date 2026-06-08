@@ -12,14 +12,15 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.15
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.16
 //
+// [변경로그 v3.16]
+//   - buildFfmpegCmd: -shortest를 출력 링크 적전 단독 배치 (출력 옵션으로 적용)
+//   - WAV 있으면: -shortest만 사용 (-t 제거) → BGV가 WAV 종료시점에 정확히 컷
+//   - WAV 없으면: -t tTotal 유지 (BGV에 시간 기준 필요)
+//   - estimateDurationFromFile 대신 MediaMetadataRetriever로 WAV 실제 재생 길이 측정
 // [변경로그 v3.15]
-//   - renderScene: fade 완전 제거 (씨 내부 fade는 검은화면 원인)
-//   - -shortest 추가: WAV 길이와 BGV 타이밍 정확 동기화
-//   - h264_mediacodec 조건 제거 → 모든 씨 libx264 ultrafast 통일
-//     (ultrafast는 충분히 빠르며 하드웨어 인코더 검은화면 버그 해소)
-//   - 씨 간 전환은 concatSubclips에서 xfade로 통합 처리 예정
+//   - renderScene: fade 완전 제거, libx264 ultrafast 통일
 // [변경로그 v3.14]
 //   - FADE effDur 0.3s 고정, fade-in 제거
 // [변경로그 v3.13]
@@ -255,9 +256,12 @@ class AsterionRenderEngine(
                 synthesizeChunked(row.script, cfg.sid, cfg.speed, ttsWavFile, cfg.numSteps, sceneId, onProgress)
             }
 
+            // v3.16: WAV 실제 재생 길이를 MediaMetadataRetriever로 측정
+            //   estimateDurationFromFile은 WAV 헤더 파싱 기반으로 실제보다 짧게 나오는 경우 있음
+            //   실제 재생 길이 != 정확한 tTotal → BGV가 남은 시간 동안 정지 화면
             val tTotal: Float
             if (ttsWavFile.exists() && ttsWavFile.length() > 1024L) {
-                val dur = ttsEngine.estimateDurationFromFile(ttsWavFile)
+                val dur = getMediaDurationSecs(ttsWavFile)
                 tTotal = dur.coerceAtLeast(1.0f)
                 onProgress("[$sceneId] WAV: ${ttsWavFile.length()/1024}KB → tTotal=${tTotal.fmtUS(1)}s")
             } else {
@@ -511,39 +515,46 @@ class AsterionRenderEngine(
         //    → -stream_loop -1 단순 무한 루프로 충분하며 안정적
         vf += "scale=${VIDEO_W}:${VIDEO_H},format=yuv420p"
 
-        // v3.15: libx264 ultrafast 단일 인코더 통일
-        //   h264_mediacodec은 -vf 체인의 drawtext/drawbox/format 필터와 충돌 → 검은화면
-        //   libx264 ultrafast는 소프트웨어지만 안드로이드에서 충분히 빠름
+        // v3.16: -shortest 위치 수정
+        //   WAV 있으면: -shortest만 사용, -t 제거
+        //     → BGV(릁루프)가 WAV 종료 시점에 정확히 컷됨
+        //     → -t를 같이 쓰면 -t가 우선해서 WAV 종료 시점 무시
+        //   WAV 없으면: -t tTotal (시간 기준 필요)
         return buildString {
             append("-y -stream_loop -1 -i ${bgFile.absolutePath} ")
             if (ttsWav != null) append("-i ${ttsWav.absolutePath} ")
             append("-vf \"${vf.joinToString(",")}\" ")
             append("-map 0:v ")
-            if (ttsWav != null) append("-map 1:a -c:a aac -b:a 128k -shortest ")
-            else                append("-an ")
-            append("-t ${tTotal.fmtUS()} ")
+            if (ttsWav != null) {
+                append("-map 1:a -c:a aac -b:a 128k ")
+            } else {
+                append("-an -t ${tTotal.fmtUS()} ")
+            }
             append("-c:v libx264 -preset ultrafast -crf 23 -movflags +faststart ")
+            if (ttsWav != null) append("-shortest ")
             append(outputFile.absolutePath)
         }
     }
 
-    // ── BGV 지속 시간 측정 ───────────────────────────────────────────────
+    // ── 실제 재생 길이 측정 (BGV/WAV 공용) ────────────────────────────
 
-    private fun getBgvDurationSecs(bgFile: File): Float {
-        if (!bgFile.exists()) return 0f
+    private fun getMediaDurationSecs(file: File): Float {
+        if (!file.exists()) return 0f
         return try {
             val mmr = android.media.MediaMetadataRetriever()
-            mmr.setDataSource(bgFile.absolutePath)
+            mmr.setDataSource(file.absolutePath)
             val ms = mmr.extractMetadata(
                 android.media.MediaMetadataRetriever.METADATA_KEY_DURATION
             )?.toLongOrNull() ?: 0L
             mmr.release()
             ms / 1000.0f
         } catch (e: Exception) {
-            Log.w(TAG, "BGV 길이 측정 실패: ${e.message}")
+            Log.w(TAG, "재생길이 측정 실패 [${file.name}]: ${e.message}")
             0f
         }
     }
+
+    private fun getBgvDurationSecs(bgFile: File): Float = getMediaDurationSecs(bgFile)
 
     // ── TTS 청크 합성 ──────────────────────────────────────────────────────────
 
