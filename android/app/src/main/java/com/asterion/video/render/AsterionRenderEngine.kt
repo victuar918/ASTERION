@@ -12,8 +12,12 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.12
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.13
 //
+// [변경로그 v3.13]
+//   - 써 렌더링: h264_mediacodec 우선, 실패 시 libx264 ultrafast fallback
+//   - drawbox/drawtext 있으면 필터 포함 시 libx264 전환 (하드웨어 인코더 완전 지원 안함)
+//   - concatSubclips: libx264 유지 (워터마크 drawtext 필터 포함)
 // [변경로그 v3.12]
 //   - BGV 루프 크로스페이드 블록 완전 제거
 //     h264_mediacodec + enable= 조건부 fade → 검은 화면 버그 근본 수정
@@ -508,15 +512,26 @@ class AsterionRenderEngine(
         //    → -stream_loop -1 단순 무한 루프로 충분하며 안정적
         vf += "scale=${VIDEO_W}:${VIDEO_H},format=yuv420p"
 
+        // ★ 인코더 선택 전략 (v3.13)
+        // - drawbox/drawtext 필터가 없으면: h264_mediacodec(소프트웨어 인코더 포함 안하는 GPU) 시도
+        // - 오버레이 필터 있으면: libx264 ultrafast (하드웨어 인코더가 drawtext 등 소프트웨어 필터 지원 안함)
+        val hasOverlay = cardStyle != CardStyle.NONE && cardStyle != CardStyle.MINIMAL &&
+            (row.cardMain.isNotBlank() || row.cardSub.isNotBlank() || row.cardDesc.isNotBlank())
+        val encoderCmd = if (!hasOverlay) {
+            "-c:v h264_mediacodec -b:v 4M"
+        } else {
+            "-c:v libx264 -preset ultrafast -crf 23"
+        }
+
         return buildString {
             append("-y -stream_loop -1 -i ${bgFile.absolutePath} ")
             if (ttsWav != null) append("-i ${ttsWav.absolutePath} ")
             append("-vf \"${vf.joinToString(",")}\" ")
             append("-map 0:v ")
-            if (ttsWav != null) append("-map 1:a -c:a aac -b:a 192k ")
+            if (ttsWav != null) append("-map 1:a -c:a aac -b:a 128k ")
             else                append("-an ")
             append("-t ${tTotal.fmtUS()} ")
-            append("-c:v h264_mediacodec -b:v 4M -movflags +faststart ")
+            append("$encoderCmd -movflags +faststart ")
             append(outputFile.absolutePath)
         }
     }
