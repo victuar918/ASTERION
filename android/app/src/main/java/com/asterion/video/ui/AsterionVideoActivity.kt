@@ -1,7 +1,6 @@
 package com.asterion.video.ui
 
 import android.content.Intent
-import android.content.pm.ServiceInfo
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
@@ -19,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import com.asterion.video.AppConfig
 import com.asterion.video.auth.ServiceAccountAuth
 import com.asterion.video.render.AsterionRenderEngine
+import com.asterion.video.render.ScenePrep
 import com.asterion.video.service.RenderForegroundService
 import com.asterion.video.sheets.SheetsVideoReader
 import com.asterion.video.sheets.VIDEO_SS_ID
@@ -32,15 +32,15 @@ import java.io.File
 
 class AsterionVideoActivity : AppCompatActivity() {
 
-    private lateinit var tvKeyStatus: TextView
-    private lateinit var spinnerSheet: Spinner
-    private lateinit var llSpeakers: LinearLayout
-    private lateinit var btnStart: Button
-    private lateinit var btnStop: Button
-    private lateinit var btnReset: Button
-    private lateinit var progressBar: ProgressBar
-    private lateinit var tvStatus: TextView
-    private lateinit var tvLog: TextView
+    private lateinit var tvKeyStatus   : TextView
+    private lateinit var spinnerSheet  : Spinner
+    private lateinit var llSpeakers    : LinearLayout
+    private lateinit var btnStart      : Button
+    private lateinit var btnStop       : Button
+    private lateinit var btnReset      : Button
+    private lateinit var progressBar   : ProgressBar
+    private lateinit var tvStatus      : TextView
+    private lateinit var tvLog         : TextView
 
     private val speakerSpinners       = mutableMapOf<Int, Spinner>()
     private val speakerSeekBars       = mutableMapOf<Int, SeekBar>()
@@ -49,25 +49,23 @@ class AsterionVideoActivity : AppCompatActivity() {
     private val speakerNumStepsLabels = mutableMapOf<Int, TextView>()
 
     private val auth by lazy { ServiceAccountAuth(this) }
-    private var reader: SheetsVideoReader? = null
-    private var engine: AsterionRenderEngine? = null
-    private var ttsEngine: SupertonicTtsEngine? = null
+    private var reader     : SheetsVideoReader? = null
+    private var engine     : AsterionRenderEngine? = null
+    private var ttsEngine  : SupertonicTtsEngine? = null
     private var isRendering = false
     private var mediaPlayer: MediaPlayer? = null
 
     private fun hasAllFilesPermission(): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
             Environment.isExternalStorageManager()
-        else
-            true
+        else true
 
     private fun requestAllFilesPermission() {
         try {
-            val intent = Intent(
+            startActivity(Intent(
                 Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                 Uri.parse("package:${packageName}")
-            )
-            startActivity(intent)
+            ))
         } catch (e: Exception) {
             startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
         }
@@ -89,14 +87,13 @@ class AsterionVideoActivity : AppCompatActivity() {
         btnStop      = Button(this).apply { text="⏹ 중지"; isEnabled=false }
         btnReset     = Button(this).apply { text="🗑 초기화"; isEnabled=false }
         progressBar  = ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply {
-            max=100; layoutParams=LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT).also{it.topMargin=12} }
+            max=100; layoutParams=LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).also{it.topMargin=12} }
         tvStatus = TextView(this).apply { text="시작 중..."; textSize=14f; setPadding(0,16,0,8) }
         tvLog    = TextView(this).apply { textSize=10f; setTextColor(0xFF777777.toInt()); maxLines=16 }
         val btnRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
         btnStart.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2f)
         btnStop.layoutParams  = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -123,7 +120,8 @@ class AsterionVideoActivity : AppCompatActivity() {
         }
     }
 
-    // ── 화자 UI ───────────────────────────────────────────────────────────────
+    // ── 화자 UI ────────────────────────────────────────────────
+
     private fun buildSpeakerUI(speakers: List<Int>) {
         llSpeakers.removeAllViews()
         speakerSpinners.clear(); speakerSeekBars.clear(); speakerSpeedLabels.clear()
@@ -131,110 +129,67 @@ class AsterionVideoActivity : AppCompatActivity() {
         if (speakers.isEmpty()) return
 
         llSpeakers.addView(TextView(this).apply {
-            text = "🎤 화자 설정 (Supertonic 3)"
-            textSize = 11f; setTextColor(0xFFAAAAAA.toInt()); setPadding(0, 12, 0, 4)
+            text="🎤 화자 설정 (Supertonic 3)"; textSize=11f; setTextColor(0xFFAAAAAA.toInt()); setPadding(0,12,0,4)
         })
-
-        val defVoice    = mapOf(1 to 5, 2 to 0, 3 to 6)
-        val defSpeed    = mapOf(1 to 50, 2 to 42, 3 to 58)
-        val defNumSteps = 4
-        val MP = ViewGroup.LayoutParams.MATCH_PARENT
-        val WC = ViewGroup.LayoutParams.WRAP_CONTENT
+        val defVoice=mapOf(1 to 5,2 to 0,3 to 6); val defSpeed=mapOf(1 to 50,2 to 42,3 to 58)
+        val MP=ViewGroup.LayoutParams.MATCH_PARENT; val WC=ViewGroup.LayoutParams.WRAP_CONTENT
 
         for (sid in speakers.sorted()) {
-            val name = when(sid) { 1 -> "아스터"; 2 -> "리언"; 3 -> "나레이터"; else -> "Speaker$sid" }
-
+            val name = when(sid){1->"아스터";2->"리언";3->"나레이터";else->"Speaker$sid"}
             val headerRow = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(MP, WC).also { it.topMargin = 20 }
+                orientation=LinearLayout.HORIZONTAL
+                layoutParams=LinearLayout.LayoutParams(MP,WC).also{it.topMargin=20}
             }
             headerRow.addView(TextView(this).apply {
-                text = name; textSize = 12f; setTextColor(0xFFEEEEEE.toInt())
-                layoutParams = LinearLayout.LayoutParams(WC, WC).also {
-                    it.gravity = Gravity.CENTER_VERTICAL; it.marginEnd = 8
-                }
+                text=name; textSize=12f; setTextColor(0xFFEEEEEE.toInt())
+                layoutParams=LinearLayout.LayoutParams(WC,WC).also{it.gravity=Gravity.CENTER_VERTICAL;it.marginEnd=8}
             })
             val spinner = Spinner(this).apply {
-                layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
-                adapter = ArrayAdapter(this@AsterionVideoActivity,
-                    android.R.layout.simple_spinner_item, VoiceConfig.VOICE_LABELS)
-                    .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-                setSelection(defVoice[sid] ?: 0)
+                layoutParams=LinearLayout.LayoutParams(0,WC,1f)
+                adapter=ArrayAdapter(this@AsterionVideoActivity, android.R.layout.simple_spinner_item, VoiceConfig.VOICE_LABELS)
+                    .also{it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)}
+                setSelection(defVoice[sid]?:0)
             }
-            speakerSpinners[sid] = spinner
+            speakerSpinners[sid]=spinner
             headerRow.addView(spinner)
             headerRow.addView(Button(this).apply {
-                text = "🔊"; textSize = 13f
-                layoutParams = LinearLayout.LayoutParams(WC, WC)
-                setOnClickListener { testSpeaker(sid) }
+                text="🔊"; textSize=13f; layoutParams=LinearLayout.LayoutParams(WC,WC)
+                setOnClickListener{testSpeaker(sid)}
             })
             llSpeakers.addView(headerRow)
 
-            val speedValueLabel = TextView(this).apply {
-                textSize = 10f; setTextColor(0xFF999999.toInt()); minWidth = 100
-                layoutParams = LinearLayout.LayoutParams(WC, WC).also {
-                    it.gravity = Gravity.CENTER_VERTICAL; it.marginStart = 6
-                }
+            val speedLabel = TextView(this).apply {
+                textSize=10f; setTextColor(0xFF999999.toInt()); minWidth=100
+                layoutParams=LinearLayout.LayoutParams(WC,WC).also{it.gravity=Gravity.CENTER_VERTICAL;it.marginStart=6}
             }
-            speakerSpeedLabels[sid] = speedValueLabel
+            speakerSpeedLabels[sid]=speedLabel
             val speedBar = SeekBar(this).apply {
-                max = 100; progress = defSpeed[sid] ?: 50
-                layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
-                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                    override fun onProgressChanged(s: SeekBar?, v: Int, u: Boolean) {
-                        speedValueLabel.text = "${progressToSpeed(v)}x"
-                    }
-                    override fun onStartTrackingTouch(s: SeekBar?) {}
-                    override fun onStopTrackingTouch(s: SeekBar?) {}
+                max=100; progress=defSpeed[sid]?:50; layoutParams=LinearLayout.LayoutParams(0,WC,1f)
+                setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
+                    override fun onProgressChanged(s:SeekBar?,v:Int,u:Boolean){speedLabel.text="${progressToSpeed(v)}x"}
+                    override fun onStartTrackingTouch(s:SeekBar?){}
+                    override fun onStopTrackingTouch(s:SeekBar?){}
                 })
             }
-            speedValueLabel.text = "${progressToSpeed(speedBar.progress)}x"
-            speakerSeekBars[sid] = speedBar
+            speedLabel.text="${progressToSpeed(speedBar.progress)}x"; speakerSeekBars[sid]=speedBar
+            val speedRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;layoutParams=LinearLayout.LayoutParams(MP,WC).also{it.topMargin=6}}
+            speedRow.addView(TextView(this).apply{text="속도";textSize=10f;setTextColor(0xFF777777.toInt());minWidth=72;layoutParams=LinearLayout.LayoutParams(WC,WC).also{it.gravity=Gravity.CENTER_VERTICAL}})
+            speedRow.addView(speedBar); speedRow.addView(speedLabel); llSpeakers.addView(speedRow)
 
-            val speedRow = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(MP, WC).also { it.topMargin = 6 }
-            }
-            speedRow.addView(TextView(this).apply {
-                text = "속도"; textSize = 10f; setTextColor(0xFF777777.toInt()); minWidth = 72
-                layoutParams = LinearLayout.LayoutParams(WC, WC).also { it.gravity = Gravity.CENTER_VERTICAL }
-            })
-            speedRow.addView(speedBar)
-            speedRow.addView(speedValueLabel)
-            llSpeakers.addView(speedRow)
-
-            val numStepsValueLabel = TextView(this).apply {
-                textSize = 10f; setTextColor(0xFF999999.toInt()); minWidth = 100
-                layoutParams = LinearLayout.LayoutParams(WC, WC).also {
-                    it.gravity = Gravity.CENTER_VERTICAL; it.marginStart = 6
-                }
-            }
-            speakerNumStepsLabels[sid] = numStepsValueLabel
-            val numStepsBar = SeekBar(this).apply {
-                max = 28; progress = defNumSteps
-                layoutParams = LinearLayout.LayoutParams(0, WC, 1f)
-                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                    override fun onProgressChanged(s: SeekBar?, v: Int, u: Boolean) {
-                        numStepsValueLabel.text = "${progressToNumSteps(v)}step"
-                    }
-                    override fun onStartTrackingTouch(s: SeekBar?) {}
-                    override fun onStopTrackingTouch(s: SeekBar?) {}
+            val stepsLabel=TextView(this).apply{textSize=10f;setTextColor(0xFF999999.toInt());minWidth=100;layoutParams=LinearLayout.LayoutParams(WC,WC).also{it.gravity=Gravity.CENTER_VERTICAL;it.marginStart=6}}
+            speakerNumStepsLabels[sid]=stepsLabel
+            val stepsBar=SeekBar(this).apply{
+                max=28; progress=4; layoutParams=LinearLayout.LayoutParams(0,WC,1f)
+                setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
+                    override fun onProgressChanged(s:SeekBar?,v:Int,u:Boolean){stepsLabel.text="${progressToNumSteps(v)}step"}
+                    override fun onStartTrackingTouch(s:SeekBar?){}
+                    override fun onStopTrackingTouch(s:SeekBar?){}
                 })
             }
-            numStepsValueLabel.text = "${progressToNumSteps(numStepsBar.progress)}step"
-            speakerNumStepsBars[sid] = numStepsBar
-
-            val numStepsRow = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(MP, WC).also { it.topMargin = 2 }
-            }
-            numStepsRow.addView(TextView(this).apply {
-                text = "품질"; textSize = 10f; setTextColor(0xFF777777.toInt()); minWidth = 72
-                layoutParams = LinearLayout.LayoutParams(WC, WC).also { it.gravity = Gravity.CENTER_VERTICAL }
-            })
-            numStepsRow.addView(numStepsBar)
-            numStepsRow.addView(numStepsValueLabel)
-            llSpeakers.addView(numStepsRow)
+            stepsLabel.text="${progressToNumSteps(stepsBar.progress)}step"; speakerNumStepsBars[sid]=stepsBar
+            val stepsRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;layoutParams=LinearLayout.LayoutParams(MP,WC).also{it.topMargin=2}}
+            stepsRow.addView(TextView(this).apply{text="품질";textSize=10f;setTextColor(0xFF777777.toInt());minWidth=72;layoutParams=LinearLayout.LayoutParams(WC,WC).also{it.gravity=Gravity.CENTER_VERTICAL}})
+            stepsRow.addView(stepsBar); stepsRow.addView(stepsLabel); llSpeakers.addView(stepsRow)
         }
     }
 
@@ -242,39 +197,27 @@ class AsterionVideoActivity : AppCompatActivity() {
         val sherpaSid = VoiceConfig.SID_LIST[speakerSpinners[sid]?.selectedItemPosition ?: 0]
         val speed     = progressToSpeed(speakerSeekBars[sid]?.progress ?: 50)
         val numSteps  = progressToNumSteps(speakerNumStepsBars[sid]?.progress ?: 4)
-        val testText  = when(sid) {
-            1    -> "안녕하세요. 에너지 분석을 시작합니다."
-            2    -> "극과의 에너지가 축적되는 구간입니다."
-            else -> "운명은 해석하는 순간 바뀌지 않습니다."
-        }
+        val testText  = when(sid){1->"안녕하세요. 에너지 분석을 시작합니다.";2->"극과의 에너지가 축적되는 구간입니다.";else->"운명은 해석하는 순간 바뀌지 않습니다."}
         AppConfig.ensureDirs()
-        val errFile = File(applicationContext.filesDir, "tts_error.txt")
-        errFile.delete()
         updateStatus("🔊 [$sid] sid=$sherpaSid steps=$numSteps speed=$speed 합성 중...")
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val te  = ttsEngine ?: run { withContext(Dispatchers.Main) { updateStatus("❌ TTS 엔진 미초기화") }; return@launch }
+                val te  = ttsEngine ?: run { withContext(Dispatchers.Main){updateStatus("❌ TTS 엔진 미초기화")}; return@launch }
                 val out = File(applicationContext.cacheDir, "test_sid${sid}.wav")
                 val ok  = te.synthesize(testText, sherpaSid, speed, out, numSteps)
                 withContext(Dispatchers.Main) {
                     if (ok) {
                         mediaPlayer?.release()
                         mediaPlayer = MediaPlayer().apply {
-                            setDataSource(out.absolutePath)
-                            prepare()
-                            start()
+                            setDataSource(out.absolutePath); prepare(); start()
                             setOnCompletionListener { out.delete() }
                         }
-                        updateStatus("🔊 [$sid] sid=$sherpaSid steps=$numSteps ${out.length()/1024}KB 재생 중")
+                        updateStatus("🔊 [$sid] ${out.length()/1024}KB 재생 중")
                     } else {
-                        val errMsg = if (errFile.exists()) errFile.readText() else "synthesize() false"
-                        updateStatus("❌ TTS 실패:\n$errMsg")
-                        appendLog("❌ $errMsg")
+                        updateStatus("❌ TTS 실패")
                     }
                 }
-            } catch(e: Exception) {
-                withContext(Dispatchers.Main) { updateStatus("❌ 예외: ${e.javaClass.simpleName}: ${e.message}") }
-            }
+            } catch(e:Exception){ withContext(Dispatchers.Main){updateStatus("❌ 예외: ${e.message}")} }
         }
     }
 
@@ -288,7 +231,7 @@ class AsterionVideoActivity : AppCompatActivity() {
             val sherpaSid = VoiceConfig.SID_LIST[speakerSpinners[speakerNum]?.selectedItemPosition ?: 0]
             val speed     = progressToSpeed(speakerSeekBars[speakerNum]?.progress ?: 50)
             val numSteps  = progressToNumSteps(speakerNumStepsBars[speakerNum]?.progress ?: 4)
-            val name      = when(speakerNum) { 1 -> "아스터"; 2 -> "리언"; 3 -> "나레이터"; else -> "Speaker$speakerNum" }
+            val name      = when(speakerNum){1->"아스터";2->"리언";3->"나레이터";else->"Speaker$speakerNum"}
             SpeakerConfig(sherpaSid, speed, name, numSteps)
         }
         return if (map.isEmpty()) VoiceConfig.DEFAULT else VoiceConfig(map)
@@ -305,19 +248,19 @@ class AsterionVideoActivity : AppCompatActivity() {
                     btnStart.isEnabled = speakers.isNotEmpty()
                     btnReset.isEnabled = speakers.isNotEmpty()
                 }
-            } catch(e: Exception) { Log.e("Activity","loadSpeakers: $e") }
+            } catch(e:Exception){ Log.e("Activity","loadSpeakers: $e") }
         }
     }
 
     private fun confirmReset() {
-        val sheet = spinnerSheet.selectedItem?.toString() ?: return
-        val cacheDir = AppConfig.sceneCacheDir(sheet)
+        val sheet      = spinnerSheet.selectedItem?.toString() ?: return
+        val cacheDir   = AppConfig.sceneCacheDir(sheet)
         val cachedCount = cacheDir.listFiles()?.size ?: 0
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("초기화 확인")
-            .setMessage("「$sheet」를 초기화합니다.\n\n" +
-                    "• 캐시된 씬: ${cachedCount}개\n" +
-                    "• 시트 상태: 전체 READY 로 초기화\n\n" +
+            .setMessage("『$sheet』를 초기화합니다.\n\n" +
+                    "• 캐시 파일: ${cachedCount}개 (WAV, BGV cut)\n" +
+                    "• 시트 상태: 전체 READY로 초기화\n\n" +
                     "중단한 영상을 재시작합니다.")
             .setPositiveButton("초기화") { _, _ -> doReset(sheet) }
             .setNegativeButton("취소", null)
@@ -328,16 +271,15 @@ class AsterionVideoActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             updateStatus("[$sheet] 초기화 중...")
             val cacheDir = AppConfig.sceneCacheDir(sheet)
+            // WAV, BGV cut, 기존 MP4 모두 삭제
             val deleted  = cacheDir.listFiles()?.count { it.delete() } ?: 0
             appendLog("삭제 $deleted 개")
-            val token = auth.getAccessToken()
-            val r   = SheetsVideoReader(token, VIDEO_SS_ID)
             val token2 = auth.getAccessToken()
-            val r2  = SheetsVideoReader(token2, VIDEO_SS_ID)
-            val ok  = r2.resetAllStatuses(sheet)
+            val r2     = SheetsVideoReader(token2, VIDEO_SS_ID)
+            val ok     = r2.resetAllStatuses(sheet)
             withContext(Dispatchers.Main) {
                 if (ok) {
-                    updateStatus("✅ [$sheet] 초기화 완료 — 씬 ${deleted}개 삭제, 상태 READY 통일")
+                    updateStatus("✅ [$sheet] 초기화 완료 — 파일 ${deleted}개 삭제, 상태 READY")
                     loadSpeakersFromSheet(sheet)
                 } else {
                     updateStatus("⚠ 시트 초기화 실패 — 수동으로 K열 READY 확인 필요")
@@ -349,9 +291,7 @@ class AsterionVideoActivity : AppCompatActivity() {
     private suspend fun initCore() {
         if (!hasAllFilesPermission()) {
             withContext(Dispatchers.Main) {
-                tvStatus.text = "⚠ '모든 파일 접근' 권한 필요\n" +
-                    "BGV/BGM/출력 폴더에 접근하려면 해당 권한이 필요합니다.\n" +
-                    "설정 화면으로 이동합니다..."
+                tvStatus.text = "⚠ '모든 파일 접근' 권한 필요\n설정 화면으로 이동합니다..."
                 requestAllFilesPermission()
             }
             return
@@ -375,13 +315,15 @@ class AsterionVideoActivity : AppCompatActivity() {
                     tvStatus.text = "VS_ 시트 ${sheets.size}개 — 선택 후 화자 설정"
                 }
             }
-        } catch(e: Exception) { withContext(Dispatchers.Main) { tvStatus.text = "❌ ${e.message}" } }
+        } catch(e:Exception){ withContext(Dispatchers.Main){tvStatus.text="❌ ${e.message}"} }
     }
+
+    // ── 렌더링 메인 ─────────────────────────────────────────────
 
     private fun startRendering() {
         if (isRendering) return
         if (!hasAllFilesPermission()) {
-            updateStatus("⚠ '모든 파일 접근' 권한이 없습니다. 설정에서 부여해 주세요.")
+            updateStatus("⚠ '모든 파일 접근' 권한이 없습니다.")
             requestAllFilesPermission()
             return
         }
@@ -389,10 +331,13 @@ class AsterionVideoActivity : AppCompatActivity() {
         val voiceConfig = buildVoiceConfig()
 
         startForegroundService(Intent(this, RenderForegroundService::class.java))
-
         isRendering = true; btnStart.isEnabled = false; btnStop.isEnabled = true
+
         lifecycleScope.launch(Dispatchers.IO) {
             try {
+                // ▶ 엔진 초기화 (중요: 재렌더링 시 인트로 중복 방지)
+                engine!!.release()
+
                 updateStatus("[$sheet] 토큰 갱신...")
                 val token = auth.getAccessToken()
                 reader = SheetsVideoReader(token, VIDEO_SS_ID)
@@ -406,28 +351,30 @@ class AsterionVideoActivity : AppCompatActivity() {
                 if (data.scriptRows.isEmpty()) { updateStatus("⚠ 대본 행 없음"); return@launch }
                 withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
 
-                val isXrp = sheet.contains("XRP", ignoreCase = true)
+                // ── 인트로 메타 자동 구성 (시트명 기반) ─────────────────
+                val isXrp      = sheet.contains("XRP", ignoreCase = true)
                 val mergedMeta = data.videoMeta.copy(
                     introBgv1         = "intro01_asterion_signature_bracelet.mp4",
                     introBgv2         = "intro02_golden_fluid_ink_loop_slow.mp4",
                     introText         = "빛은 선택된 이에게만 닿는다",
                     introDurationSecs = 21f,
                     introType         = if (isXrp) "XRP" else "CRYPTO",
-                    // ✅ v3.11: 면책 텍스트 단축 — '참고 정보입니다.'까지만
                     disclaimerText    = if (data.videoMeta.disclaimerText.isNotBlank())
                                             data.videoMeta.disclaimerText
                                         else
                                             "본 영상은 투자 권유 또는 투자 조언이 아닙니다. " +
-                                            "본 분석은 베딕 점성술 에너지 구조를 기반으로 한 참고 정보입니다.",
+                                            "모든 투자 결정은 시청자 본인의 판단과 책임 하에 이루어져야 하며, " +
+                                            "본 분석은 베딕 점성술 에너지 구조를 기반으로 한 참고 정보입니다. " +
+                                            "투자에는 원금 손실 위험이 존재하며, 과거 수익률이 미래를 보장하지 않습니다.",
                     topWatermark      = if (isXrp)
                                             "베다점성술로 예측하는 XRP 전망 by ASTERION"
                                         else
                                             "베다점성술로 둘러보는 크립토 갤러리 by ASTERION"
                 )
 
-                // 면책 TTS 미리 합성
+                // ── 인트로 렌더링 ─────────────────────────────────────
                 val disclaimerWav = if (mergedMeta.disclaimerText.isNotBlank()) {
-                    val dWav = java.io.File(AppConfig.OUTPUT_DIR, "intro_disclaimer.wav")
+                    val dWav = File(AppConfig.OUTPUT_DIR, "intro_disclaimer.wav")
                     try {
                         val spk = data.scriptRows.firstOrNull()?.speaker ?: 1
                         val cfg = voiceConfig.forSpeaker(spk)
@@ -435,58 +382,78 @@ class AsterionVideoActivity : AppCompatActivity() {
                             mergedMeta.disclaimerText, cfg.sid, cfg.speed, dWav, cfg.numSteps
                         )
                         if (dWav.exists() && dWav.length() > 0) dWav else null
-                    } catch (e: Exception) { Log.w("Activity", "disclaimer TTS 실패: $e"); null }
+                    } catch (e: Exception) { Log.w("Activity","disclaimer TTS 실패: $e"); null }
                 } else null
 
-                // 인트로 렌더링
                 engine!!.renderIntro(mergedMeta, disclaimerWav) { msg -> appendLog(msg); updateStatus(msg) }
 
-                val cacheDir = AppConfig.sceneCacheDir(sheet)
+                // ── Phase 1: 모든 씬 TTS + BGV pre-cut ───────────────
+                val cacheDir    = AppConfig.sceneCacheDir(sheet)
+                val prepList    = mutableListOf<ScenePrep>()
+                var cumSecs     = 0f
+                var processed   = 0
 
-                var done      = 0
-                var processed = 0
                 for (row in data.scriptRows) {
                     if (!isRendering) break
-                    val sceneId   = "scene_${row.rowIndex.toString().padStart(4, '0')}"
-                    val cacheFile = java.io.File(cacheDir, "$sceneId.mp4")
+                    val sceneId = "scene_${row.rowIndex.toString().padStart(4,'0')}"
 
-                    if (row.status == "DONE" && cacheFile.exists() && cacheFile.length() > 0) {
-                        engine!!.addExistingSubclip(cacheFile) { msg -> appendLog(msg) }
-                        updateStatus("[$sceneId] ⏭️ DONE — 캐시 (${cacheFile.length()/1024}KB)")
-                        done++
+                    val prep = engine!!.prepareScene(
+                        row         = row,
+                        voiceConfig = voiceConfig,
+                        startSecs   = cumSecs,
+                        cacheDir    = cacheDir
+                    ) { msg -> appendLog(msg); updateStatus(msg) }
+
+                    if (prep != null) {
+                        prepList.add(prep)
+                        cumSecs += prep.wavDuration
+                        reader!!.updateStatus(sheet, row.rowIndex, "DONE", data.scriptStartSheetRow)
                     } else {
-                        val f = engine!!.renderScene(row, mergedMeta, voiceConfig, cacheDir) { msg ->
-                            appendLog(msg); updateStatus(msg)
-                        }
-                        val newStatus = if (f != null) "DONE" else "ERROR"
-                        reader!!.updateStatus(sheet, row.rowIndex, newStatus, data.scriptStartSheetRow)
-                        if (f != null) done++
+                        reader!!.updateStatus(sheet, row.rowIndex, "ERROR", data.scriptStartSheetRow)
+                        appendLog("[$sceneId] ❌ prepareScene 실패")
                     }
+
                     processed++
                     withContext(Dispatchers.Main) { progressBar.progress = processed }
                 }
 
-                if (isRendering && done > 0) {
-                    val safeSheet = sheet.replace(Regex("[^\\w가-힣]"), "_")
-                    updateStatus("🔗 씬 ${done}개 concat 중...")
-                    val finalFile = engine!!.concatSubclips(
-                        outputName    = safeSheet,
-                        bgmFileName   = mergedMeta.mainBgm,
-                        watermarkText = mergedMeta.topWatermark,
-                        introDurSecs  = mergedMeta.introDurationSecs
-                    ) { msg -> appendLog(msg); updateStatus(msg) }
-                    if (finalFile != null && finalFile.exists()) {
-                        updateStatus("🎬 완료: ${finalFile.name} (${finalFile.length()/1024/1024}MB)")
-                    } else {
-                        updateStatus("❌ concat 실패 — output 폴더의 씬별 MP4 확인")
-                    }
-                } else if (!isRendering) {
-                    updateStatus("⏹ 중지 — 씬 ${done}개 완료")
-                } else {
-                    updateStatus("⚠ 성공한 씬 없음 — 오류 로그 확인")
+                if (!isRendering) {
+                    updateStatus("⏹ 중지 — Phase 1 완료 ${prepList.size}/${data.scriptRows.size}씬")
+                    return@launch
                 }
+
+                // ── Phase 2: 단일 인코딩 조립 ─────────────────────────
+                val safeSheet = sheet.replace(Regex("[^\\w가-힣]"), "_")
+
+                if (prepList.isNotEmpty()) {
+                    updateStatus("🎬 단일 인코딩 조립 중 (${prepList.size}씬)...")
+                    val bodyFile = engine!!.assembleBody(prepList, safeSheet) { msg ->
+                        appendLog(msg); updateStatus(msg)
+                    }
+                    if (bodyFile == null) {
+                        updateStatus("❌ body 조립 실패 — output 폴더의 임시파일 확인")
+                        return@launch
+                    }
+                }
+
+                // ── 최종: intro + body concat + BGM + 워터마크 ──────────
+                updateStatus("🔗 최종 합치기 + BGM...")
+                val finalFile = engine!!.concatSubclips(
+                    outputName    = safeSheet,
+                    bgmFileName   = mergedMeta.mainBgm,
+                    watermarkText = mergedMeta.topWatermark,
+                    introDurSecs  = mergedMeta.introDurationSecs
+                ) { msg -> appendLog(msg); updateStatus(msg) }
+
+                if (finalFile != null && finalFile.exists()) {
+                    updateStatus("🎬 완료: ${finalFile.name} (${finalFile.length()/1024/1024}MB)")
+                } else {
+                    updateStatus("❌ 최종 합치기 실패 — output 폴더 확인")
+                }
+
             } catch(e: Exception) {
                 updateStatus("❌ ${e.message}")
+                Log.e("Activity", "startRendering 예외", e)
             } finally {
                 isRendering = false
                 stopService(Intent(this@AsterionVideoActivity, RenderForegroundService::class.java))
