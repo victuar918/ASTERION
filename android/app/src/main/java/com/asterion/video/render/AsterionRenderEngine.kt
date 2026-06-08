@@ -501,35 +501,11 @@ class AsterionRenderEngine(
             }
         }
 
-        // ⑥ BGV 루프 크로스페이드
-        val bgvDur = getBgvDurationSecs(bgFile)
-        val xFade  = 0.5f
-        if (bgvDur >= 3.0f && tTotal > bgvDur + 1.0f) {
-            val allPoints = mutableListOf<Float>()
-            var lp = bgvDur
-            while (lp + xFade < tTotal) {
-                val fo = (lp - xFade).coerceAtLeast(0f)
-                if (fo > effDur + 0.1f && lp < tTotal - effDur - xFade)
-                    allPoints += lp
-                lp += bgvDur
-            }
-            val maxPairs = 4
-            val selected = if (allPoints.size <= maxPairs) allPoints
-            else {
-                val step = allPoints.size.toFloat() / maxPairs
-                (0 until maxPairs).map { i -> allPoints[(i * step).toInt()] }
-            }
-            selected.forEach { p ->
-                val fo    = (p - xFade).coerceAtLeast(0f)
-                val fiEnd = p + xFade
-                val foEn = "between(t\\,${fo.fmtUS()}\\,${p.fmtUS()})"
-                val fiEn = "between(t\\,${p.fmtUS()}\\,${fiEnd.fmtUS()})"
-                vf += "fade=t=out:st=${fo.fmtUS()}:d=${xFade.fmtUS()}:enable='${foEn}'"
-                vf += "fade=t=in:st=${p.fmtUS()}:d=${xFade.fmtUS()}:enable='${fiEn}'"
-            }
-        }
-
-        // ⑦ 픽셀 포맷 정규화
+        // ⑥ 픽셀 포맷 정규화
+        // ※ BGV 루프 크로스페이드 제거 (v3.12)
+        //    h264_mediacodec은 -vf 체인의 enable= 조건부 fade 미지원
+        //    → 루프 경계마다 검은 프레임 삽입 버그
+        //    → -stream_loop -1 단순 무한 루프로 충분하며 안정적
         vf += "scale=${VIDEO_W}:${VIDEO_H},format=yuv420p"
 
         return buildString {
