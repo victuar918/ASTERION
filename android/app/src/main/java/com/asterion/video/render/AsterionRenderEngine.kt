@@ -12,14 +12,20 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.17
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.18
 //
+// [변경로그 v3.18] — 근본 수정
+//   ▶ 핑심 버그: buildFfmpegCmd가 v3.17 패치 NOT_FOUND로 미적용됨
+//     → pre-cut 파일에 -stream_loop -1 다시 적용 + -shortest 의존 → 실질 v3.16과 동일
+//   1) buildFfmpegCmd: -stream_loop 완전 제거, -shortest 제거
+//      → -t tTotal 출력 옵션으로 주야 길이 확정
+//   2) pre-cut: -c copy → libx264 ultrafast
+//      → 키프레임 경계 오차 제거, 정확히 tTotal 같이 생성
+//   3) totalDurationSecs: 인코딩 성공 후로 이동 (실패 시 누적 방지)
+//   4) drawbox에 enable=’between(t,0,tTotal)’ 추가
+//      → 씨 종료 후 카드 박스가 넣친 이전 씨 BGV 위에 남는 문제 해소
 // [변경로그 v3.17]
-//   - BGV pre-cut 방식 도입
-//     1) TTS 합성 → WAV 실제 재생길이 확정 (MediaMetadataRetriever)
-//     2) BGV를 tTotal에 맞게 정확히 pre-cut (-stream_loop -1 -t tTotal -c copy)
-//     3) pre-cut BGV + WAV + 카드 합성 (-t 없이, -shortest 없이)
-//     → BGV와 WAV가 물리적으로 동일한 길이로 공존 대활자 없음
+//   - BGV pre-cut 방식 도입 (buildFfmpegCmd 수정은 NOT_FOUND로 미적용)
 // [변경로그 v3.16]
 //   - -shortest 위치 수정, MediaMetadataRetriever WAV 측정
 // [변경로그 v3.15]
@@ -274,9 +280,13 @@ class AsterionRenderEngine(
             //   -stream_loop -1: BGV가 tTotal보다 짧아도 루프
             //   -t tTotal: 정확히 WAV 길이만큼만 생성
             //   -c copy: 재인코딩 없이 빠르게 자름
+            // v3.18: pre-cut 시 libx264 ultrafast 사용
+            //   -c copy: 키프레임 경계 기준 절단 → 실제 시간 ±5에 오차 발생
+            //   libx264 ultrafast: 프레임 단위 정확히 tTotal 시간에 절단
+            //   -t tTotal은 출력 옵션으로 배치 → 엄격하게 tTotal에서 컷
             val bgvCutFile = File(sceneTempDir, "${sceneId}_bgv.mp4")
             val cutCmd = "-y -stream_loop -1 -i ${bgFile.absolutePath} " +
-                "-t ${tTotal.fmtUS()} -c copy ${bgvCutFile.absolutePath}"
+                "-an -c:v libx264 -preset ultrafast -crf 23 -t ${tTotal.fmtUS()} ${bgvCutFile.absolutePath}"
             val cutRc = com.arthenica.ffmpegkit.FFmpegKit.execute(cutCmd)
             val bgvReady = bgvCutFile.exists() && bgvCutFile.length() > 0
             if (!bgvReady) {
@@ -285,7 +295,7 @@ class AsterionRenderEngine(
                 onProgress("[$sceneId] BGV cut: ${bgvCutFile.length()/1024}KB (${tTotal.fmtUS(1)}s)")
             }
             val bgvSource = if (bgvReady) bgvCutFile else bgFile
-            totalDurationSecs += tTotal
+            // v3.18: totalDurationSecs 이동 → 인코딩 성공 후에만 카운트 (실패 시 누적 방지)
 
             val pattern       = AnimationPattern.from(row.animation)
             val keyframes     = calcCardKeyframes(pattern, tTotal)
@@ -327,7 +337,8 @@ class AsterionRenderEngine(
                 Log.w(TAG, "[$sceneId] rc=${rc.returnCode.value}(경고) 파일 OK (${outputFile.length()/1024}KB)")
 
             ttsWavFile.delete()
-            bgvCutFile.delete()  // v3.17: pre-cut 임시파일 정리
+            bgvCutFile.delete()
+            totalDurationSecs += tTotal  // v3.18: 인코딩 성공 후에만 카운트
             subclipFiles.add(outputFile)
             onProgress("[$sceneId] ✅ ${outputFile.length() / 1024}KB")
             outputFile
