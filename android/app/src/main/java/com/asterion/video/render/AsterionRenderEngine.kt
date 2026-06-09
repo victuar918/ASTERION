@@ -342,8 +342,10 @@ class AsterionRenderEngine(
         val wavListFile = File(sceneTempDir, "wav_list.txt")
         wavListFile.writeText(wavFiles.joinToString("\n") { "file '${it.absolutePath}'" })
         val ttsBodyFile = File(sceneTempDir, "tts_body.wav")
+        // v3.20: 44100Hz 스테레오로 정규화
+        //   intro.mp4 오디오(44100Hz 스테레오)와 포맷 통일 → concat 시 불일치 방지
         val wavRc = com.arthenica.ffmpegkit.FFmpegKit.execute(
-            "-y -f concat -safe 0 -i ${wavListFile.absolutePath} -ar 24000 -ac 1 ${ttsBodyFile.absolutePath}"
+            "-y -f concat -safe 0 -i ${wavListFile.absolutePath} -ar 44100 -ac 2 ${ttsBodyFile.absolutePath}"
         )
         if (!ttsBodyFile.exists() || ttsBodyFile.length() == 0L) {
             Log.e(TAG, "WAV concat 실패: ${wavRc.logsAsString.takeLast(400)}")
@@ -434,7 +436,7 @@ class AsterionRenderEngine(
             "-filter_complex_script ${filterScriptFile.absolutePath} " +
             "-map [vout] -map 1:a " +
             "-c:v libx264 -preset ultrafast -crf 20 " +
-            "-c:a aac -b:a 128k " +
+            "-c:a aac -b:a 192k " +  // intro와 동일한 비트레이트
             "-t ${totalBodyDur.fmtUS()} " +
             "-movflags +faststart " +
             bodyFile.absolutePath
@@ -515,8 +517,9 @@ class AsterionRenderEngine(
             if (filterParts.isNotEmpty()) append("-filter_complex \"${filterParts.joinToString(";")}\" ")
             append("-map \"$videoMapLabel\" -map \"$audioMapLabel\" ")
             append("-c:v libx264 -preset fast -crf 20 ")
-            if (audioMapLabel.startsWith("[")) append("-c:a aac -b:a 192k ")
-            else append("-c:a copy ")
+            // v3.20: 항상 오디오 재인코딩 (-c:a copy 제거)
+            //   -c:a copy: intro(44100Hz) + body(24kHz) 포맷 다르면 20MB 불완전 파일 생성
+            append("-c:a aac -b:a 192k ")
             append("-movflags +faststart ${outputFile.absolutePath}")
         }
 
