@@ -120,7 +120,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         }
     }
 
-    // ── 화자 UI ────────────────────────────────────────────────
+    // ── 화자 UI ────────────────────────────────────────────────────
 
     private fun buildSpeakerUI(speakers: List<Int>) {
         llSpeakers.removeAllViews()
@@ -129,7 +129,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         if (speakers.isEmpty()) return
 
         llSpeakers.addView(TextView(this).apply {
-            text="🎤 화자 설정 (Supertonic 3)"; textSize=11f; setTextColor(0xFFAAAAAA.toInt()); setPadding(0,12,0,4)
+            text="🎙 화자 설정 (Supertonic 3)"; textSize=11f; setTextColor(0xFFAAAAAA.toInt()); setPadding(0,12,0,4)
         })
         val defVoice=mapOf(1 to 5,2 to 0,3 to 6); val defSpeed=mapOf(1 to 50,2 to 42,3 to 58)
         val MP=ViewGroup.LayoutParams.MATCH_PARENT; val WC=ViewGroup.LayoutParams.WRAP_CONTENT
@@ -197,7 +197,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         val sherpaSid = VoiceConfig.SID_LIST[speakerSpinners[sid]?.selectedItemPosition ?: 0]
         val speed     = progressToSpeed(speakerSeekBars[sid]?.progress ?: 50)
         val numSteps  = progressToNumSteps(speakerNumStepsBars[sid]?.progress ?: 4)
-        val testText  = when(sid){1->"안녕하세요. 에너지 분석을 시작합니다.";2->"극과의 에너지가 축적되는 구간입니다.";else->"운명은 해석하는 순간 바뀌지 않습니다."}
+        val testText  = when(sid){1->"안녕하세요. 에너지 분석을 시작합니다.";2->"극과의 에너지가 축적되는 구간입니다.";else->"운명은 해석하는 순간 바뀏지 않습니다."}
         AppConfig.ensureDirs()
         updateStatus("🔊 [$sid] sid=$sherpaSid steps=$numSteps speed=$speed 합성 중...")
         lifecycleScope.launch(Dispatchers.IO) {
@@ -271,7 +271,6 @@ class AsterionVideoActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             updateStatus("[$sheet] 초기화 중...")
             val cacheDir = AppConfig.sceneCacheDir(sheet)
-            // WAV, BGV cut, 기존 MP4 모두 삭제
             val deleted  = cacheDir.listFiles()?.count { it.delete() } ?: 0
             appendLog("삭제 $deleted 개")
             val token2 = auth.getAccessToken()
@@ -318,7 +317,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         } catch(e:Exception){ withContext(Dispatchers.Main){tvStatus.text="❌ ${e.message}"} }
     }
 
-    // ── 렌더링 메인 ─────────────────────────────────────────────
+    // ── 렌더링 메인 ───────────────────────────────────────────────
 
     private fun startRendering() {
         if (isRendering) return
@@ -335,7 +334,6 @@ class AsterionVideoActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                // ▶ 엔진 초기화 (중요: 재렌더링 시 인트로 중복 방지)
                 engine!!.release()
 
                 updateStatus("[$sheet] 토큰 갱신...")
@@ -351,7 +349,6 @@ class AsterionVideoActivity : AppCompatActivity() {
                 if (data.scriptRows.isEmpty()) { updateStatus("⚠ 대본 행 없음"); return@launch }
                 withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
 
-                // ── 인트로 메타 자동 구성 (시트명 기반) ─────────────────
                 val isXrp      = sheet.contains("XRP", ignoreCase = true)
                 val mergedMeta = data.videoMeta.copy(
                     introBgv1         = "intro01_asterion_signature_bracelet.mp4",
@@ -359,7 +356,6 @@ class AsterionVideoActivity : AppCompatActivity() {
                     introText         = "빛은 선택된 이에게만 닿는다",
                     introDurationSecs = 21f,
                     introType         = if (isXrp) "XRP" else "CRYPTO",
-                    // v3.21: 2문장으로 단축 — 인트로 18초 제한 내 완전 재생 (TTS 약 8시간)
                     disclaimerText    = if (data.videoMeta.disclaimerText.isNotBlank())
                                             data.videoMeta.disclaimerText
                                         else
@@ -371,7 +367,6 @@ class AsterionVideoActivity : AppCompatActivity() {
                                             "베다점성술로 둘러보는 크립토 갤러리 by ASTERION"
                 )
 
-                // ── 인트로 렌더링 ─────────────────────────────────────
                 val disclaimerWav = if (mergedMeta.disclaimerText.isNotBlank()) {
                     val dWav = File(AppConfig.OUTPUT_DIR, "intro_disclaimer.wav")
                     try {
@@ -386,7 +381,6 @@ class AsterionVideoActivity : AppCompatActivity() {
 
                 engine!!.renderIntro(mergedMeta, disclaimerWav) { msg -> appendLog(msg); updateStatus(msg) }
 
-                // ── Phase 1: 모든 씬 TTS + BGV pre-cut ───────────────
                 val cacheDir    = AppConfig.sceneCacheDir(sheet)
                 val prepList    = mutableListOf<ScenePrep>()
                 var cumSecs     = 0f
@@ -421,7 +415,6 @@ class AsterionVideoActivity : AppCompatActivity() {
                     return@launch
                 }
 
-                // ── Phase 2: 단일 인코딩 조립 ─────────────────────────
                 val safeSheet = sheet.replace(Regex("[^\\w가-힣]"), "_")
 
                 if (prepList.isNotEmpty()) {
@@ -435,13 +428,15 @@ class AsterionVideoActivity : AppCompatActivity() {
                     }
                 }
 
-                // ── 최종: intro + body concat + BGM + 워터마크 ──────────
                 updateStatus("🔗 최종 합치기 + BGM...")
                 val finalFile = engine!!.concatSubclips(
                     outputName    = safeSheet,
                     bgmFileName   = mergedMeta.mainBgm,
                     watermarkText = mergedMeta.topWatermark,
-                    introDurSecs  = mergedMeta.introDurationSecs
+                    // v3.25: renderIntro가 저장한 실제 인트로 길이 사용
+                    //   워터마크 시작 시점, BGM 페이드 기준점 정확히
+                    //   (이전: mergedMeta.introDurationSecs = 21f 하드코딩 → 실제 22s외 불일치)
+                    introDurSecs  = engine!!.actualIntroDurationSecs
                 ) { msg -> appendLog(msg); updateStatus(msg) }
 
                 if (finalFile != null && finalFile.exists()) {
