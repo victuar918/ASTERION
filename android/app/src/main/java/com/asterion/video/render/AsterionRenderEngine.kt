@@ -162,7 +162,8 @@ class AsterionRenderEngine(
             return "if(lt(t,$fi),(t-${ts.fmtUS(2)})/0.5,if(gt(t,$fo),(${te.fmtUS(2)}-t)/0.5,1))"
         }
         fun en(ts:Float,te:Float)="between(t,${ts.fmtUS(2)},${te.fmtUS(2)})"
-        val fp=mutableListOf<String>(); val fOpt=if(fontPath.isNotEmpty())"fontfile='$fontPath':"else""
+        val fp   = mutableListOf<String>()
+        val fOpt = if (fontPath.isNotEmpty()) "fontfile='$fontPath':" else ""
         if(hasBgv2&&bgv2!=null){
             val xOff=(bgv1Dur-xfadeDur).coerceAtLeast(0.5f)
             fp+="[0:v]setpts=PTS-STARTPTS[v0]"; fp+="[1:v]setpts=PTS-STARTPTS[v1]"
