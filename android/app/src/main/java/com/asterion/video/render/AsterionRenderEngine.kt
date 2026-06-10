@@ -93,14 +93,21 @@ class AsterionRenderEngine(
         return fb.coerceAtLeast(0.5f)
     }
 
+    // 이모지 제거: FFmpeg drawtext 이모지 미지원 → filter 실패 방지
+    private fun String.stripEmoji(): String = this
+        .replace(Regex("[\\uD83C-\\uDBFF][\\uDC00-\\uDFFF]"), "")
+        .replace(Regex("[\\u2600-\\u27BF]"), "")
+        .replace(Regex("[\\u2B00-\\u2BFF]"), "")
+        .replace(Regex("  +"), " ").trim()
+
     // ── 카드 VF 빌더 (시간 조건 없음, 복잡한 enable= 불필요) ──────────
     // 검은 배경 위에 직접 그림, colorkey 시 검은색=투명
     // bordercolor 제거, shadowcolor=0x404040 (컄러키 안전리)
     private fun buildCardVf(prep: ScenePrep): String? {
         if (prep.cardStyle == CardStyle.NONE || prep.cardStyle == CardStyle.MINIMAL) return null
-        val pm = prep.row.cardMain.trim()
-        val ps = prep.row.cardSub.trim()
-        val pd = prep.row.cardDesc.trim()
+        val pm = prep.row.cardMain.trim().stripEmoji()
+        val ps = prep.row.cardSub.trim().stripEmoji()
+        val pd = prep.row.cardDesc.trim().stripEmoji()
         val r = (prep.gradient.topColor shr 16) and 0xFF
         val g = (prep.gradient.topColor shr 8)  and 0xFF
         val b =  prep.gradient.topColor and 0xFF
