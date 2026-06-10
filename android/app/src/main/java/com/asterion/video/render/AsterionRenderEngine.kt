@@ -390,14 +390,15 @@ class AsterionRenderEngine(
         // shadowcolor=0x404040 사용한 텍스트 스노우: threshold(0.05)보다 높아 투명화 안됨
         val bodyFile = File(AppConfig.OUTPUT_DIR, "${outputName}_body.mp4")
         onProgress("🎬 BGV+카드 블렌딩 (${actualBodyDur.fmtUS(1)}s)...")
-        Log.i(TAG, "assembleBody v3.27: ${uniqueBgvList.size}소스, ${preps.size}씨, ${actualBodyDur.fmtUS(1)}s")
+        Log.i(TAG, "assembleBody v3.27: src=${uniqueBgvList.size} preps=${preps.size} dur=${actualBodyDur.fmtUS(1)}s")
+        // filter_complex: 이스케이프 없이 변수로 분리 (parser 오류 방지)
+        val ckFilter = "[1:v]format=rgb24,colorkey=black:0.05:0.0,format=yuv420p[ck];" +
+            "[0:v][ck]overlay=0:0,format=yuv420p[vout]"
         val bRc = com.arthenica.ffmpegkit.FFmpegKit.execute(
             "-y " +
             "-i ${bgvBodyFile.absolutePath} " +
             "-i ${bodyCardsFile.absolutePath} " +
-            "-filter_complex " +
-            "\"[1:v]format=rgb24,colorkey=black:0.05:0.0,format=yuv420p[ck];" +
-            "[0:v][ck]overlay=0:0,format=yuv420p[vout]\" " +
+            "-filter_complex $ckFilter " +
             "-map [vout] -map 1:a " +
             "-c:v libx264 -preset ultrafast -crf 20 " +
             "-c:a aac -b:a 192k " +
