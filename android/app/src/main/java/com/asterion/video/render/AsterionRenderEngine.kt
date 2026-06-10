@@ -351,8 +351,8 @@ class AsterionRenderEngine(
         val vfNorm        = "scale=${VIDEO_W}:${VIDEO_H}:force_original_aspect_ratio=decrease," +
             "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p"
         val vfNormFade    = "$vfNorm," +
-            "fade=type=video:in:st=0:d=3," +
-            "fade=type=video:out:st=${fadeSafe.fmtUS()}:d=3"
+            "fade=t=in:st=0:d=3," +
+            "fade=t=out:st=${fadeSafe.fmtUS()}:d=3"
         val bgvBodyFile   = File(sceneTempDir, "bgv_body.mp4")
 
         if (uniqueBgvList.size == 1) {
@@ -389,8 +389,8 @@ class AsterionRenderEngine(
             normFiles.forEach { if (it.name.startsWith("bgv_norm_")) it.delete() }
             // 캤 파일에 전역 페이드 적용
             val fadeVf  = "scale=${VIDEO_W}:${VIDEO_H},format=yuv420p," +
-                "fade=type=video:in:st=0:d=3," +
-                "fade=type=video:out:st=${fadeSafe.fmtUS()}:d=3"
+                "fade=t=in:st=0:d=3," +
+                "fade=t=out:st=${fadeSafe.fmtUS()}:d=3"
             val cmd2 = "-y -stream_loop -1 -i ${catFile.absolutePath} " +
                 "-an -vf \"$fadeVf\" -r 30 __CODEC__ " +
                 "-t ${totalBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
