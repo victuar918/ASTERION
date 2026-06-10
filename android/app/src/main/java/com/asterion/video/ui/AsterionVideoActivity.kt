@@ -359,13 +359,12 @@ class AsterionVideoActivity : AppCompatActivity() {
                     introText         = "빛은 선택된 이에게만 닿는다",
                     introDurationSecs = 21f,
                     introType         = if (isXrp) "XRP" else "CRYPTO",
+                    // v3.21: 2문장으로 단축 — 인트로 18초 제한 내 완전 재생 (TTS 약 8시간)
                     disclaimerText    = if (data.videoMeta.disclaimerText.isNotBlank())
                                             data.videoMeta.disclaimerText
                                         else
                                             "본 영상은 투자 권유 또는 투자 조언이 아닙니다. " +
-                                            "모든 투자 결정은 시청자 본인의 판단과 책임 하에 이루어져야 하며, " +
-                                            "본 분석은 베딕 점성술 에너지 구조를 기반으로 한 참고 정보입니다. " +
-                                            "투자에는 원금 손실 위험이 존재하며, 과거 수익률이 미래를 보장하지 않습니다.",
+                                            "모든 투자 결정은 시청자 본인의 판단과 책임 하에 이루어져야 합니다.",
                     topWatermark      = if (isXrp)
                                             "베다점성술로 예측하는 XRP 전망 by ASTERION"
                                         else
