@@ -437,7 +437,8 @@ class AsterionRenderEngine(
         onProgress("합치기: ${subclipFiles.size}개 / ${duration.toInt()}초")
         val fp = mutableListOf<String>(); var vMap="0:v"; var aMap="0:a"
         if (watermarkText.isNotBlank()) {
-            val esc=escapeDrawtext(watermarkText); val fo=if(fontPath.isNotEmpty())"fontfile='${fontPath}':"else""
+            val esc = escapeDrawtext(watermarkText)
+            val fo  = if (fontPath.isNotEmpty()) "fontfile='${fontPath}':" else ""
             fp+="[0:v]drawtext=${fo}text='$esc':fontsize=34:fontcolor=white@0.65:shadowcolor=black@0.75:shadowx=2:shadowy=2:x=30:y=40:enable='between(t\\,${introDurSecs.fmtUS(1)}\\,${wmEnd.fmtUS(1)})'[wm]"
             fp+="[wm]format=yuv420p[vout]"; vMap="[vout]"
         }
