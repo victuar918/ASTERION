@@ -499,9 +499,10 @@ class AsterionRenderEngine(
         }
     }
     private fun escapeDrawtext(text:String):String=text.replace("\\","\\\\").replace("'","\\'").replace(":","\\:").replace(",","\\,")
-    private fun splitToLines(text:String,max:Int):List<String>=
-        text.replace("\\N","\n").replace("\\n","\n").split("\n")
-            .flatMap{if(it.length>max)it.chunked(max)else listOf(it)}.filter{it.isNotBlank()}
+    private fun splitToLines(text: String, max: Int): List<String> =
+        text.replace("\\N", "\n").replace("\\n", "\n").split("\n")
+            .flatMap { line -> if (line.length > max) line.chunked(max) else listOf(line) }
+            .filter { line -> line.isNotBlank() }
 }
 
 data class CardKeyframes(
