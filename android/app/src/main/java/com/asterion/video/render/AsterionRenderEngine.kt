@@ -234,9 +234,22 @@ class AsterionRenderEngine(
                 }
             }
 
-            val wavDuration = if (ttsWavFile.exists() && ttsWavFile.length() > 1024L)
-                getMediaDurationSecs(ttsWavFile).coerceAtLeast(1.0f)
-            else 3.0f.also { if (hasTts) onProgress("[$sceneId] ⚠️ WAV 생성 실패 → 3.0s 기본값") }
+            // v3.21: WAV 길이 측정 개선 — 이것이 "카드가 항상 BGV와 동기화"되던 근본 원인
+            //   MediaMetadataRetriever: Supertonic WAV에서 0ms 반환 가능
+            //   → 0일 때 wavDuration=1.0f 고정 → BGV pre-cut도 1초 → 카드도 1초 간격
+            //   → BGV와 카드가 릌다 동일한 잘못된 1초 기준으로 돌아감
+            //   Fix: 파일크기 기반 측정으로 fallback (Supertonic = 24kHz mono 16-bit = 48000 bytes/sec)
+            val wavDuration = if (ttsWavFile.exists() && ttsWavFile.length() > 1024L) {
+                val mmrDur = getMediaDurationSecs(ttsWavFile)
+                if (mmrDur >= 0.5f) {
+                    mmrDur
+                } else {
+                    val dataBytes = (ttsWavFile.length() - 44L).coerceAtLeast(0L)
+                    val fileDur   = dataBytes / 48000.0f  // 24000Hz × 1ch × 2bytes
+                    onProgress("[$sceneId] WAV MMR=0 → 파일크기 기반: ${fileDur.fmtUS(1)}s")
+                    fileDur.coerceAtLeast(1.0f)
+                }
+            } else 3.0f.also { if (hasTts) onProgress("[$sceneId] ⚠️ WAV 생성 실패 → 3.0s 기본값") }
 
             onProgress("[$sceneId] WAV: ${ttsWavFile.length()/1024}KB → ${wavDuration.fmtUS(1)}s")
 
