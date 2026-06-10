@@ -12,21 +12,19 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.19
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.23
 //
-// [변경로그 v3.19] — 아키텍처 전면 재설계
-//   ▶ 핵심 문제: 씬별 MP4 중간파일 방식의 타이밍 누적 오차
-//     buildFfmpegCmd의 -stream_loop + -shortest 조합이
-//     v3.17/v3.18 두 번 모두 NOT_FOUND로 미적용됨
-//   ■ 새 아키텍처 (2단계):
-//     Phase 1: prepareScene — TTS합성 + BGV pre-cut만 수행 (MP4 인코딩 없음)
-//     Phase 2: assembleBody — 모든 씬을 단일 FFmpeg 호출로 조립
-//       - BGV 스트림 = 씬별 pre-cut BGV concat
-//       - TTS 스트림 = 씬별 WAV concat
-//       - 카드/텍스트 = 절대시간 enable= 조건부 filter_complex_script
-//       → 씬별 MP4 없음 → 타이밍 불일치 근본 해결
-//   ■ BGM 볼륨 0.05 → 0.02 (TTS 방해 감소)
-// [변경로그 v3.18] 이전 버전
+// [변경로그 v3.23] — 4개 버그 수정
+//   ■ BUG FIX (빌드): bgvCutFile.takeIf{nullable.exists()} → null 직접 대입
+//   ■ BUG FIX (면책문구): ds = introDurationSecs(21s) 묵음 → 1.0s 묵음
+//     이전: 21s 침묵 후 t=21s에 TTS 시작 → totalDur≈22s에서 1초만 들림
+//     수정: t=1s부터 TTS 재생 → 면책문구 전체 정상 청취
+//   ■ BUG FIX (freeze): apad whole_dur = totalDur+1s (오디오<비디오 방지)
+//   ■ BGM 본문 볼륨 0.02 → 0.01 (TTS 방해 최소화)
+// [변경로그 v3.22] BGV 씬별 pre-cut 제거 → 연속 동일소스 그룹 단위 cut
+// [변경로그 v3.21] WAV MMR=0 fallback → 파일크기 기반 길이 계산
+// [변경로그 v3.20] intro/body 오디오 44100Hz 스테레오 통일
+// [변경로그 v3.19] 씬별 MP4 → 단일 FFmpeg filter_complex_script
 // =================================================================
 
 private const val TAG         = "AsterionRenderEngine"
@@ -155,14 +153,13 @@ class AsterionRenderEngine(
         val silentIdx = numVid
         val hasDisc   = disclaimerWav != null && disclaimerWav.exists()
         if (hasDisc) {
-            // v3.22: apad으로 audio를 totalDur까지 연장
-            //   면책 TTS(~8초)가 끝나면 audio track이 종료되지만 video는 totalDur까지 재생
-            //   → 두 트랙 길이 불일치 → 플레이어가 intro 끝부분을 freeze로 표시
-            //   → apad=whole_dur=totalDur 로 audio를 video 길이에 맞게 묵음 패딩
-            val ds = videoMeta.introDurationSecs.fmtUS(1)
+            // v3.23: 면책문구는 t=1s부터 재생 (이전: ds=introDurationSecs=21s → t=21s 시작 → 1초만 들림)
+            //   수정: ds=1.0 → t=1s부터 TTS 재생 → 전체 면책문구 정상 청취
+            //   apad whole_dur = totalDur+1s → 오디오가 비디오보다 짧아지는 freeze 완전 방지
+            val ds = "1.0"  // 1초 초기 침묵 후 면책문구 시작
             fp += "[${silentIdx}:a]atrim=0:${ds},asetpts=PTS-STARTPTS[pre_sil]"
             fp += "[${numVid+1}:a]asetpts=PTS-STARTPTS[disc_a]"
-            fp += "[pre_sil][disc_a]concat=n=2:v=0:a=1,apad=whole_dur=${totalDur.fmtUS(1)}[aout]"
+            fp += "[pre_sil][disc_a]concat=n=2:v=0:a=1,apad=whole_dur=${(totalDur + 1.0f).fmtUS(1)}[aout]"
         }
 
         val outFile = File(sceneTempDir, "scene_intro.mp4")
@@ -275,7 +272,7 @@ class AsterionRenderEngine(
             ScenePrep(
                 row           = row,
                 wavFile       = ttsWavFile.takeIf { it.exists() && it.length() > 1024L },
-                bgvCutFile    = bgvCutFile.takeIf { it.exists() && it.length() > 0L },
+                bgvCutFile    = null,  // v3.23: assembleBody 그룹 단위 처리 — 항상 null
                 bgFile        = bgFile,
                 wavDuration   = wavDuration,
                 startSecs     = startSecs,
@@ -535,7 +532,7 @@ class AsterionRenderEngine(
             val bgmFadeStart = (introDurSecs - 2f).fmtUS(1)
             val bgmFadeEnd   = introDurSecs.fmtUS(1)
             filterParts += "[1:a]aformat=sample_rates=44100:channel_layouts=stereo," +
-                "volume=volume='if(lt(t\\,$bgmFadeStart)\\,0.40\\,if(lt(t\\,$bgmFadeEnd)\\,0.40+(t-$bgmFadeStart)*(-0.19)\\,0.02))':eval=frame[bgm]"
+                "volume=volume='if(lt(t\\,$bgmFadeStart)\\,0.40\\,if(lt(t\\,$bgmFadeEnd)\\,0.40+(t-$bgmFadeStart)*(-0.195)\\,0.01))':eval=frame[bgm]"
             filterParts += "[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"
             audioMapLabel = "[aout]"
         }
