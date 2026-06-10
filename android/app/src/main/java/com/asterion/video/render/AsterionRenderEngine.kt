@@ -87,23 +87,6 @@ class AsterionRenderEngine(
         } ?: ""
     }
 
-    // ── GPU 활용: h264_mediacodec 우선, libx264 fallback ───────────────
-    // h264_mediacodec: Android MediaCodec 하드웨어 인코더 (2-3배 빠름)
-    // 리코더 가용한 경우 자동 사용, 버거 단말 시 libx264 자동 전환
-    // 주의: filter(drawbox, drawtext, scale) 자체는 CPU 연산
-    private fun encodeVideo(
-        cmd   : String,          // __CODEC__ 자리호환자 포함
-        output: File,
-        hwFlag: String = "-c:v h264_mediacodec -b:v 6M",
-        swFlag: String = "-c:v libx264 -preset ultrafast -crf 23"
-    ): Boolean {
-        com.arthenica.ffmpegkit.FFmpegKit.execute(cmd.replace("__CODEC__", hwFlag))
-        if (output.exists() && output.length() > 0L) return true
-        output.delete()
-        Log.w(TAG, "HW encode 실패 → SW fallback: ${output.name}")
-        com.arthenica.ffmpegkit.FFmpegKit.execute(cmd.replace("__CODEC__", swFlag))
-        return output.exists() && output.length() > 0L
-    }
 
     // ── WAV 길이 정밀 측정 ────────────────────────────────────────
     // FFprobeKit: 마이크로초 단위 정확도, WAV 헤더 파싱
@@ -504,21 +487,17 @@ class AsterionRenderEngine(
         onProgress("🎬 단일 인코딩 (BGV독립+페이드, ${totalBodyDur.toInt()}초, ${preps.size}씬)...")
         Log.i(TAG, "assembleBody v3.25: BGV ${uniqueBgvList.size}소스, WAV ${totalBodyDur.fmtUS(1)}s, filter ${vfParts.size}줄")
 
-        val bodyCmd = "-y " +
+        val rc = com.arthenica.ffmpegkit.FFmpegKit.execute(
+            "-y " +
             "-i ${bgvBodyFile.absolutePath} " +
             "-i ${ttsBodyFile.absolutePath} " +
             "-filter_complex_script ${filterScriptFile.absolutePath} " +
             "-map [vout] -map 1:a " +
-            "__CODEC__ " +
+            "-c:v libx264 -preset ultrafast -crf 20 " +
             "-c:a aac -b:a 192k " +
             "-t ${totalBodyDur.fmtUS()} " +
             "-movflags +faststart " +
             bodyFile.absolutePath
-        // 본문 인코딩: CRF 20 (libx264) 또는 6M (h264_mediacodec)
-        val bodyOk = encodeVideo(
-            bodyCmd, bodyFile,
-            hwFlag = "-c:v h264_mediacodec -b:v 6M",
-            swFlag = "-c:v libx264 -preset ultrafast -crf 20"
         )
 
         // 임시 파일 정리
@@ -529,8 +508,8 @@ class AsterionRenderEngine(
             prep.wavFile?.let { if (it.absolutePath.contains(TEMP_SUBDIR)) it.delete() }
         }
 
-        if (!bodyOk) {
-            Log.e(TAG, "assembleBody 실패")
+        if (!bodyFile.exists() || bodyFile.length() == 0L) {
+            Log.e(TAG, "assembleBody 실패: ${rc.logsAsString.takeLast(400)}")
             onProgress("❌ body 인코딩 실패")
             return@withContext null
         }
