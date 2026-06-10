@@ -155,10 +155,14 @@ class AsterionRenderEngine(
         val silentIdx = numVid
         val hasDisc   = disclaimerWav != null && disclaimerWav.exists()
         if (hasDisc) {
+            // v3.22: apad으로 audio를 totalDur까지 연장
+            //   면책 TTS(~8초)가 끝나면 audio track이 종료되지만 video는 totalDur까지 재생
+            //   → 두 트랙 길이 불일치 → 플레이어가 intro 끝부분을 freeze로 표시
+            //   → apad=whole_dur=totalDur 로 audio를 video 길이에 맞게 묵음 패딩
             val ds = videoMeta.introDurationSecs.fmtUS(1)
             fp += "[${silentIdx}:a]atrim=0:${ds},asetpts=PTS-STARTPTS[pre_sil]"
             fp += "[${numVid+1}:a]asetpts=PTS-STARTPTS[disc_a]"
-            fp += "[pre_sil][disc_a]concat=n=2:v=0:a=1[aout]"
+            fp += "[pre_sil][disc_a]concat=n=2:v=0:a=1,apad=whole_dur=${totalDur.fmtUS(1)}[aout]"
         }
 
         val outFile = File(sceneTempDir, "scene_intro.mp4")
@@ -253,33 +257,15 @@ class AsterionRenderEngine(
 
             onProgress("[$sceneId] WAV: ${ttsWavFile.length()/1024}KB → ${wavDuration.fmtUS(1)}s")
 
-            // ── BGV pre-cut: 캐시 확인 또는 생성 ──────────────────────
-            //   libx264 + scale 정규화 → 모든 BGV 1920x1080 30fps yuv420p로 통일
-            //   -t wavDuration: 정확히 WAV 길이에 맞춤 (frame 단위 정밀)
+            // ── BGV 원본 파일만 설정 (pre-cut은 assembleBody 그룹 단위로 처리) ──
+            // v3.22: 씬별 BGV pre-cut 완전 제거
+            //   기존 문제: 씬마다 BGV를 wavDuration으로 잘라 concat
+            //             → 같은 소스가 연속으로 나올 때 매번 처음부터 재시작
+            //             → BGV가 마치 WAV에 동기화된 듯 중간에 끊기는 증상
+            //   수정: assembleBody에서 연속 동일소스를 그룹화 → 한 번에 pre-cut
+            //         → BGV가 BGM처럼 연속 재생됨
             val bgFile   = AppConfig.resolveBgv(row.bgFileName)
-            val bgvCache = cacheDir?.let { File(it, "${sceneId}_bgv.mp4") }
-            val useBgvCache = bgvCache != null && bgvCache.exists() && bgvCache.length() > 0L
-
-            val bgvCutFile: File
-            if (useBgvCache) {
-                bgvCutFile = bgvCache!!
-                onProgress("[$sceneId] BGV 캐시 사용: ${bgvCache.length()/1024}KB")
-            } else {
-                bgvCutFile = File(sceneTempDir, "${sceneId}_bgv.mp4")
-                val cutCmd = "-y -stream_loop -1 -i ${bgFile.absolutePath} " +
-                    "-an -vf \"scale=${VIDEO_W}:${VIDEO_H}:force_original_aspect_ratio=decrease," +
-                    "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p\" " +
-                    "-r 30 -c:v libx264 -preset ultrafast -crf 23 " +
-                    "-t ${wavDuration.fmtUS()} ${bgvCutFile.absolutePath}"
-                val cutRc = com.arthenica.ffmpegkit.FFmpegKit.execute(cutCmd)
-                if (!bgvCutFile.exists() || bgvCutFile.length() == 0L) {
-                    Log.w(TAG, "[$sceneId] BGV pre-cut 실패: ${cutRc.logsAsString.takeLast(200)}")
-                    onProgress("[$sceneId] ⚠️ BGV pre-cut 실패 → 원본 사용")
-                } else {
-                    onProgress("[$sceneId] BGV cut: ${bgvCutFile.length()/1024}KB (${wavDuration.fmtUS(1)}s)")
-                    if (bgvCache != null) try { bgvCutFile.copyTo(bgvCache, overwrite = true) } catch (_: Exception) {}
-                }
-            }
+            val bgvCutFile: File? = null  // assembleBody 그룹 단위 처리
 
             // ── 카드 메타 계산 ────────────────────────────────────────
             val pattern       = AnimationPattern.from(row.animation)
@@ -318,24 +304,54 @@ class AsterionRenderEngine(
 
         sceneTempDir.mkdirs()
 
-        // ─ Step 1: BGV cuts concat ─────────────────────────────────
-        onProgress("📹 BGV 스트림 구성 중 (${preps.size}개)...")
+        // ─ Step 1: BGV 그룹 pre-cut + concat ──────────────────────
+        // v3.22: 연속 동일 BGV 소스를 그룹화하여 한 번에 pre-cut
+        //   기존: 씬마다 BGV pre-cut → 동일 소스가 연속으로 나올 때 매 씬 처음부터 재시작
+        //   수정: 연속 동일 소스 = 1개 그룹 → 그룹 전체 WAV 합산 시간만큼 한 번에 cut
+        //         → BGV가 BGM처럼 끊기지 않고 연속 재생
+        onProgress("📹 BGV 그룹 분석 중...")
+        // 연속 동일 BGV 소스 그룹화
+        val bgvGroups = mutableListOf<Pair<File, Float>>()
+        for (prep in preps) {
+            val last = bgvGroups.lastOrNull()
+            if (last != null && last.first.absolutePath == prep.bgFile.absolutePath) {
+                bgvGroups[bgvGroups.lastIndex] = last.first to (last.second + prep.wavDuration)
+            } else {
+                bgvGroups.add(prep.bgFile to prep.wavDuration)
+            }
+        }
+        onProgress("📹 BGV 그룹 ${bgvGroups.size}개 pre-cut 중 (씬 ${preps.size}개)...")
+        val vfNorm = "scale=${VIDEO_W}:${VIDEO_H}:force_original_aspect_ratio=decrease," +
+            "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p"
+        val groupCutFiles = bgvGroups.mapIndexed { idx, (bgFile, dur) ->
+            val cutFile = File(sceneTempDir, "bgv_grp_${idx}.mp4")
+            val cutCmd = "-y -stream_loop -1 -i ${bgFile.absolutePath} " +
+                "-an -vf $vfNorm " +
+                "-r 30 -c:v libx264 -preset ultrafast -crf 23 " +
+                "-t ${dur.fmtUS()} ${cutFile.absolutePath}"
+            com.arthenica.ffmpegkit.FFmpegKit.execute(cutCmd)
+            if (cutFile.exists() && cutFile.length() > 0L) {
+                onProgress("  그룹$idx: ${bgFile.name} × ${dur.fmtUS(1)}s")
+                cutFile
+            } else {
+                Log.w(TAG, "BGV 그룹${idx} pre-cut 실패 → 원본 사용")
+                bgFile
+            }
+        }
         val bgvListFile = File(sceneTempDir, "bgv_list.txt")
-        bgvListFile.writeText(preps.joinToString("\n") {
-            val f = it.bgvCutFile?.takeIf { f -> f.exists() && f.length() > 0L } ?: it.bgFile
-            "file '${f.absolutePath}'"
-        })
+        bgvListFile.writeText(groupCutFiles.joinToString("\n") { "file '${it.absolutePath}'" })
         val bgvBodyFile = File(sceneTempDir, "bgv_body.mp4")
         val bgvRc = com.arthenica.ffmpegkit.FFmpegKit.execute(
             "-y -f concat -safe 0 -i ${bgvListFile.absolutePath} -c copy ${bgvBodyFile.absolutePath}"
         )
+        groupCutFiles.forEach { if (it.absolutePath.contains(TEMP_SUBDIR)) it.delete() }
         if (!bgvBodyFile.exists() || bgvBodyFile.length() == 0L) {
             Log.e(TAG, "BGV concat 실패: ${bgvRc.logsAsString.takeLast(400)}")
             onProgress("❌ BGV 스트림 실패")
             bgvListFile.delete()
             return@withContext null
         }
-        onProgress("✅ BGV 스트림: ${bgvBodyFile.length()/1024/1024}MB")
+        onProgress("✅ BGV 스트림: ${bgvBodyFile.length()/1024/1024}MB (${bgvGroups.size}그룹)")
 
         // ─ Step 2: WAV concat ──────────────────────────────────────
         onProgress("🎵 TTS 스트림 구성 중...")
