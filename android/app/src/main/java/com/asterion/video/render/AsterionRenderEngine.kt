@@ -16,7 +16,9 @@ import java.util.Locale
 //
 // [변경로그 v3.24] assembleBody 전면 재설계 — BGV WAV 완전 독립 레이어
 //   ■ 근본 수정: BGV를 WAV 길이/씬 경계로 잘라던 구조 완전 폐기
-//   ■ BGV = BGM과 동일한 독립 레이어: 고유 소스 정규화 → totalBodyDur만큼 루프
+//   ■ BGV = BGM과 완전 동일한 독립 레이어
+//       고유 소스 정규화 → totalBodyDur만큼 stream_loop encode → bgvBodyFile
+//       WAV 타이밍 일절 참조하지 않음
 //   ■ 카드/텍스트만 WAV 누적 타임스탬프 기준 enable= 조건
 // [변경로그 v3.23] 빌드 오류 + 면책문구 타이밍 + freeze + BGM
 // [변경로그 v3.22] BGV 씬별 pre-cut 제거 → 연속 동일소스 그룹 단위 cut
@@ -44,8 +46,8 @@ private fun Float.fmtUS(d: Int = 3): String = String.format(Locale.US, "%.${d}f"
 data class ScenePrep(
     val row          : ScriptDataRow,
     val wavFile      : File?,          // TTS WAV (null = 생성 실패)
-    val bgvCutFile   : File?,          // pre-cut BGV (null = 생성 실패 → bgFile 사용)
-    val bgFile       : File,           // 원본 BGV (fallback)
+    val bgvCutFile   : File?,          // 사용 안 함 (v3.24: BGV 독립 레이어)
+    val bgFile       : File,           // 원본 BGV
     val wavDuration  : Float,          // 실제 재생 길이
     val startSecs    : Float,          // body 내 누적 시작 시각
     val cardStyle    : CardStyle,
@@ -151,10 +153,8 @@ class AsterionRenderEngine(
         val silentIdx = numVid
         val hasDisc   = disclaimerWav != null && disclaimerWav.exists()
         if (hasDisc) {
-            // v3.23: 면책문구는 t=1s부터 재생 (이전: ds=introDurationSecs=21s → t=21s 시작 → 1초만 들림)
-            //   수정: ds=1.0 → t=1s부터 TTS 재생 → 전체 면책문구 정상 청취
-            //   apad whole_dur = totalDur+1s → 오디오가 비디오보다 짧아지는 freeze 완전 방지
-            val ds = "1.0"  // 1초 초기 침묵 후 면책문구 시작
+            // v3.23: ds=1.0 → t=1s부터 면책문구 TTS 재생
+            val ds = "1.0"
             fp += "[${silentIdx}:a]atrim=0:${ds},asetpts=PTS-STARTPTS[pre_sil]"
             fp += "[${numVid+1}:a]asetpts=PTS-STARTPTS[disc_a]"
             fp += "[pre_sil][disc_a]concat=n=2:v=0:a=1,apad=whole_dur=${(totalDur + 1.0f).fmtUS(1)}[aout]"
@@ -191,9 +191,9 @@ class AsterionRenderEngine(
         outFile
     }
 
-    // ── Phase 1: 씬 준비 (TTS + BGV pre-cut) ───────────────────────
-    //   MP4 인코딩 없음 — WAV와 BGV 파일만 생성
-    //   BGV pre-cut: libx264로 정확히 WAV 길이만큼 인코딩
+    // ── Phase 1: 씬 준비 (TTS WAV 생성만) ──────────────────────────
+    //   MP4 인코딩 없음, BGV pre-cut 없음
+    //   BGV는 assembleBody에서 독립 레이어로 처리
 
     suspend fun prepareScene(
         row      : ScriptDataRow,
@@ -227,24 +227,19 @@ class AsterionRenderEngine(
                         "-t 3.0 -c:a pcm_s16le ${ttsWavFile.absolutePath}"
                     )
                 }
-                // 캐시에 복사
                 if (wavCache != null && ttsWavFile.exists() && ttsWavFile.length() > 1024L) {
                     try { ttsWavFile.copyTo(wavCache, overwrite = true) } catch (_: Exception) {}
                 }
             }
 
-            // v3.21: WAV 길이 측정 개선 — 이것이 "카드가 항상 BGV와 동기화"되던 근본 원인
-            //   MediaMetadataRetriever: Supertonic WAV에서 0ms 반환 가능
-            //   → 0일 때 wavDuration=1.0f 고정 → BGV pre-cut도 1초 → 카드도 1초 간격
-            //   → BGV와 카드가 릌다 동일한 잘못된 1초 기준으로 돌아감
-            //   Fix: 파일크기 기반 측정으로 fallback (Supertonic = 24kHz mono 16-bit = 48000 bytes/sec)
+            // WAV 길이 측정 (파일크기 fallback)
             val wavDuration = if (ttsWavFile.exists() && ttsWavFile.length() > 1024L) {
                 val mmrDur = getMediaDurationSecs(ttsWavFile)
                 if (mmrDur >= 0.5f) {
                     mmrDur
                 } else {
                     val dataBytes = (ttsWavFile.length() - 44L).coerceAtLeast(0L)
-                    val fileDur   = dataBytes / 48000.0f  // 24000Hz × 1ch × 2bytes
+                    val fileDur   = dataBytes / 48000.0f
                     onProgress("[$sceneId] WAV MMR=0 → 파일크기 기반: ${fileDur.fmtUS(1)}s")
                     fileDur.coerceAtLeast(1.0f)
                 }
@@ -252,17 +247,7 @@ class AsterionRenderEngine(
 
             onProgress("[$sceneId] WAV: ${ttsWavFile.length()/1024}KB → ${wavDuration.fmtUS(1)}s")
 
-            // ── BGV 원본 파일만 설정 (pre-cut은 assembleBody 그룹 단위로 처리) ──
-            // v3.22: 씬별 BGV pre-cut 완전 제거
-            //   기존 문제: 씬마다 BGV를 wavDuration으로 잘라 concat
-            //             → 같은 소스가 연속으로 나올 때 매번 처음부터 재시작
-            //             → BGV가 마치 WAV에 동기화된 듯 중간에 끊기는 증상
-            //   수정: assembleBody에서 연속 동일소스를 그룹화 → 한 번에 pre-cut
-            //         → BGV가 BGM처럼 연속 재생됨
-            val bgFile   = AppConfig.resolveBgv(row.bgFileName)
-            val bgvCutFile: File? = null  // assembleBody 그룹 단위 처리
-
-            // ── 카드 메타 계산 ────────────────────────────────────────
+            val bgFile = AppConfig.resolveBgv(row.bgFileName)
             val pattern       = AnimationPattern.from(row.animation)
             val keyframes     = calcCardKeyframes(pattern, wavDuration)
             val textStartSecs = if (pattern in MOTION_PATTERNS) keyframes.tIn else 0f
@@ -270,7 +255,7 @@ class AsterionRenderEngine(
             ScenePrep(
                 row           = row,
                 wavFile       = ttsWavFile.takeIf { it.exists() && it.length() > 1024L },
-                bgvCutFile    = null,  // v3.23: assembleBody 그룹 단위 처리 — 항상 null
+                bgvCutFile    = null,
                 bgFile        = bgFile,
                 wavDuration   = wavDuration,
                 startSecs     = startSecs,
@@ -287,8 +272,15 @@ class AsterionRenderEngine(
     }
 
     // ── Phase 2: 단일 인코딩 조립 ────────────────────────────────────
-    //   BGV cuts concat + WAV concat → filter_complex_script → body.mp4
-    //   씬별 MP4 없음 → 절대시간 기반 카드/텍스트 → 타이밍 완전 보장
+    //   v3.24: BGV = BGM과 동일한 WAV 완전 독립 레이어
+    //
+    //   레이어 구조:
+    //     [BGV 레이어] 고유 소스 → 정규화 → totalBodyDur만큼 loop → 독립 재생
+    //     [TTS 레이어] 모든 WAV concat → 오디오 트랙
+    //     [카드 레이어] WAV 누적 타임스탬프만 참조 → filter enable=
+    //
+    //   BGV는 WAV 길이/씬 경계와 완전 무관
+    //   카드만 WAV 타임스탬프 기준
 
     suspend fun assembleBody(
         preps      : List<ScenePrep>,
@@ -299,58 +291,70 @@ class AsterionRenderEngine(
 
         sceneTempDir.mkdirs()
 
-        // ─ Step 1: BGV 그룹 pre-cut + concat ──────────────────────
-        // v3.22: 연속 동일 BGV 소스를 그룹화하여 한 번에 pre-cut
-        //   기존: 씬마다 BGV pre-cut → 동일 소스가 연속으로 나올 때 매 씬 처음부터 재시작
-        //   수정: 연속 동일 소스 = 1개 그룹 → 그룹 전체 WAV 합산 시간만큼 한 번에 cut
-        //         → BGV가 BGM처럼 끊기지 않고 연속 재생
-        onProgress("📹 BGV 그룹 분석 중...")
-        // 연속 동일 BGV 소스 그룹화
-        val bgvGroups = mutableListOf<Pair<File, Float>>()
-        for (prep in preps) {
-            val last = bgvGroups.lastOrNull()
-            if (last != null && last.first.absolutePath == prep.bgFile.absolutePath) {
-                bgvGroups[bgvGroups.lastIndex] = last.first to (last.second + prep.wavDuration)
-            } else {
-                bgvGroups.add(prep.bgFile to prep.wavDuration)
-            }
-        }
-        onProgress("📹 BGV 그룹 ${bgvGroups.size}개 pre-cut 중 (씬 ${preps.size}개)...")
+        // 총 재생 시간: WAV 합산 기준 (BGV와 무관)
+        val totalBodyDur = preps.sumOf { it.wavDuration.toDouble() }.toFloat()
+
+        // ─ Step 1: BGV body (WAV 완전 독립 레이어) ─────────────────
+        // BGM과 동일한 방식:
+        //   고유 BGV 소스만 사용 → 1920x1080 정규화 → totalBodyDur만큼 loop encode
+        //   WAV 길이/씬 경계로 BGV를 자르는 것 일절 없음
+        //   단일 소스: stream_loop + 정규화 인코딩
+        //   복수 소스: 각각 정규화 → concat → stream_loop
+        onProgress("📹 BGV 준비 중 (WAV 독립 레이어)...")
+        val uniqueBgvList = preps.map { it.bgFile }.distinctBy { it.absolutePath }
         val vfNorm = "scale=${VIDEO_W}:${VIDEO_H}:force_original_aspect_ratio=decrease," +
             "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p"
-        val groupCutFiles = bgvGroups.mapIndexed { idx, (bgFile, dur) ->
-            val cutFile = File(sceneTempDir, "bgv_grp_${idx}.mp4")
-            val cutCmd = "-y -stream_loop -1 -i ${bgFile.absolutePath} " +
-                "-an -vf $vfNorm " +
-                "-r 30 -c:v libx264 -preset ultrafast -crf 23 " +
-                "-t ${dur.fmtUS()} ${cutFile.absolutePath}"
-            com.arthenica.ffmpegkit.FFmpegKit.execute(cutCmd)
-            if (cutFile.exists() && cutFile.length() > 0L) {
-                onProgress("  그룹$idx: ${bgFile.name} × ${dur.fmtUS(1)}s")
-                cutFile
-            } else {
-                Log.w(TAG, "BGV 그룹${idx} pre-cut 실패 → 원본 사용")
-                bgFile
+        val bgvBodyFile = File(sceneTempDir, "bgv_body.mp4")
+
+        if (uniqueBgvList.size == 1) {
+            // 단일 소스: 정규화 + stream_loop → totalBodyDur
+            onProgress("  BGV 단일소스: ${uniqueBgvList[0].name}")
+            val rc1 = com.arthenica.ffmpegkit.FFmpegKit.execute(
+                "-y -stream_loop -1 -i ${uniqueBgvList[0].absolutePath} " +
+                "-an -vf $vfNorm -r 30 -c:v libx264 -preset ultrafast -crf 23 " +
+                "-t ${totalBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
+            )
+            if (!bgvBodyFile.exists() || bgvBodyFile.length() == 0L) {
+                Log.e(TAG, "BGV 단일소스 실패: ${rc1.logsAsString.takeLast(300)}")
+                onProgress("❌ BGV 준비 실패"); return@withContext null
+            }
+        } else {
+            // 복수 소스: 각 소스 정규화 → 카탈로그 concat → stream_loop
+            val normFiles = uniqueBgvList.mapIndexed { idx, bgFile ->
+                val nf = File(sceneTempDir, "bgv_norm_${idx}.mp4")
+                com.arthenica.ffmpegkit.FFmpegKit.execute(
+                    "-y -i ${bgFile.absolutePath} -an -vf $vfNorm " +
+                    "-r 30 -c:v libx264 -preset ultrafast -crf 23 ${nf.absolutePath}"
+                )
+                if (nf.exists() && nf.length() > 0L) {
+                    onProgress("  BGV소스[$idx]: ${bgFile.name}"); nf
+                } else {
+                    Log.w(TAG, "BGV 정규화 실패[$idx] → 원본"); bgFile
+                }
+            }
+            val catListFile = File(sceneTempDir, "bgv_cat.txt")
+            catListFile.writeText(normFiles.joinToString("\n") { "file '${it.absolutePath}'" })
+            val catFile = File(sceneTempDir, "bgv_cat.mp4")
+            com.arthenica.ffmpegkit.FFmpegKit.execute(
+                "-y -f concat -safe 0 -i ${catListFile.absolutePath} -c copy ${catFile.absolutePath}"
+            )
+            catListFile.delete()
+            normFiles.forEach { if (it.name.startsWith("bgv_norm_")) it.delete() }
+            val rc2 = com.arthenica.ffmpegkit.FFmpegKit.execute(
+                "-y -stream_loop -1 -i ${catFile.absolutePath} " +
+                "-an -r 30 -c:v libx264 -preset ultrafast -crf 23 " +
+                "-t ${totalBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
+            )
+            catFile.delete()
+            if (!bgvBodyFile.exists() || bgvBodyFile.length() == 0L) {
+                Log.e(TAG, "BGV 카탈로그 실패: ${rc2.logsAsString.takeLast(300)}")
+                onProgress("❌ BGV 카탈로그 실패"); return@withContext null
             }
         }
-        val bgvListFile = File(sceneTempDir, "bgv_list.txt")
-        bgvListFile.writeText(groupCutFiles.joinToString("\n") { "file '${it.absolutePath}'" })
-        val bgvBodyFile = File(sceneTempDir, "bgv_body.mp4")
-        val bgvRc = com.arthenica.ffmpegkit.FFmpegKit.execute(
-            "-y -f concat -safe 0 -i ${bgvListFile.absolutePath} -c copy ${bgvBodyFile.absolutePath}"
-        )
-        groupCutFiles.forEach { if (it.absolutePath.contains(TEMP_SUBDIR)) it.delete() }
-        if (!bgvBodyFile.exists() || bgvBodyFile.length() == 0L) {
-            Log.e(TAG, "BGV concat 실패: ${bgvRc.logsAsString.takeLast(400)}")
-            onProgress("❌ BGV 스트림 실패")
-            bgvListFile.delete()
-            return@withContext null
-        }
-        onProgress("✅ BGV 스트림: ${bgvBodyFile.length()/1024/1024}MB (${bgvGroups.size}그룹)")
+        onProgress("✅ BGV 준비: ${bgvBodyFile.length()/1024/1024}MB (${uniqueBgvList.size}소스, WAV독립)")
 
-        // ─ Step 2: WAV concat ──────────────────────────────────────
+        // ─ Step 2: WAV concat (카드 타이밍의 유일한 기준) ──────────
         onProgress("🎵 TTS 스트림 구성 중...")
-        // 묵음 WAV가 필요한 씬 처리
         val wavFiles = preps.map { prep ->
             val f = prep.wavFile?.takeIf { it.exists() && it.length() > 1024L }
             if (f != null) f
@@ -366,8 +370,6 @@ class AsterionRenderEngine(
         val wavListFile = File(sceneTempDir, "wav_list.txt")
         wavListFile.writeText(wavFiles.joinToString("\n") { "file '${it.absolutePath}'" })
         val ttsBodyFile = File(sceneTempDir, "tts_body.wav")
-        // v3.20: 44100Hz 스테레오로 정규화
-        //   intro.mp4 오디오(44100Hz 스테레오)와 포맷 통일 → concat 시 불일치 방지
         val wavRc = com.arthenica.ffmpegkit.FFmpegKit.execute(
             "-y -f concat -safe 0 -i ${wavListFile.absolutePath} -ar 44100 -ac 2 ${ttsBodyFile.absolutePath}"
         )
@@ -379,9 +381,9 @@ class AsterionRenderEngine(
         }
         onProgress("✅ TTS 스트림: ${ttsBodyFile.length()/1024}KB")
 
-        // ─ Step 3: filter_complex_script 생성 ──────────────────────
-        //   절대시간 enable='between(t,start,end)' 으로 각 씬 카드/텍스트 배치
-        //   파일로 저장 → 커맨드라인 길이 제한 없음
+        // ─ Step 3: filter_complex_script (카드만 WAV 타임스탬프) ───
+        //   BGV 타이밍과 완전 무관
+        //   enable='between(t,wavStart,wavEnd)' 절대시간 기준
         val vfParts = mutableListOf<String>()
         vfParts += "[0:v]setpts=PTS-STARTPTS"
 
@@ -393,7 +395,6 @@ class AsterionRenderEngine(
                 val r = (prep.gradient.topColor shr 16) and 0xFF
                 val g = (prep.gradient.topColor shr 8)  and 0xFF
                 val b = prep.gradient.topColor and 0xFF
-                // drawbox — enable= 절대시간
                 vfParts += "drawbox=" +
                     "x=${prep.keyframes.holdX.toInt()}:y=${prep.keyframes.holdY.toInt()}:w=860:h=340:" +
                     "color=0x${String.format(Locale.US, "%02X%02X%02X", r, g, b)}" +
@@ -448,11 +449,12 @@ class AsterionRenderEngine(
         filterScriptFile.writeText(vfParts.joinToString(",\n"))
 
         // ─ Step 4: 단일 FFmpeg 인코딩 ──────────────────────────────
-        val totalBodyDur = preps.sumOf { it.wavDuration.toDouble() }.toFloat()
+        //   Input 0: bgvBodyFile (BGV 독립 레이어, 정확히 totalBodyDur)
+        //   Input 1: ttsBodyFile (TTS 오디오)
+        //   filter_complex_script: 카드는 WAV 타임스탬프 기준 overlay
         val bodyFile = File(AppConfig.OUTPUT_DIR, "${outputName}_body.mp4")
-
-        onProgress("🎬 단일 인코딩 시작 (${totalBodyDur.toInt()}초, ${preps.size}씬)...")
-        Log.i(TAG, "assembleBody filter lines: ${vfParts.size}, dur=${totalBodyDur.fmtUS(1)}s")
+        onProgress("🎬 단일 인코딩 시작 (BGV독립레이어, ${totalBodyDur.toInt()}초, ${preps.size}씬)...")
+        Log.i(TAG, "assembleBody v3.24: BGV독립 ${uniqueBgvList.size}소스, WAV ${totalBodyDur.fmtUS(1)}s, filter ${vfParts.size}줄")
 
         val cmd = "-y " +
             "-i ${bgvBodyFile.absolutePath} " +
@@ -460,7 +462,7 @@ class AsterionRenderEngine(
             "-filter_complex_script ${filterScriptFile.absolutePath} " +
             "-map [vout] -map 1:a " +
             "-c:v libx264 -preset ultrafast -crf 20 " +
-            "-c:a aac -b:a 192k " +  // intro와 동일한 비트레이트
+            "-c:a aac -b:a 192k " +
             "-t ${totalBodyDur.fmtUS()} " +
             "-movflags +faststart " +
             bodyFile.absolutePath
@@ -524,8 +526,6 @@ class AsterionRenderEngine(
 
         if (bgmFile != null) {
             filterParts += "[0:a]volume=0.85[tts]"
-            // BGM: 인트로 구간(0~introDurSecs)은 0.40으로 존재감 있게
-            // 이후 body 구간은 0.02로 매우 작게 (TTS 방해 최소화)
             val bgmFadeStart = (introDurSecs - 2f).fmtUS(1)
             val bgmFadeEnd   = introDurSecs.fmtUS(1)
             filterParts += "[1:a]aformat=sample_rates=44100:channel_layouts=stereo," +
@@ -540,8 +540,6 @@ class AsterionRenderEngine(
             if (filterParts.isNotEmpty()) append("-filter_complex \"${filterParts.joinToString(";")}\" ")
             append("-map \"$videoMapLabel\" -map \"$audioMapLabel\" ")
             append("-c:v libx264 -preset fast -crf 20 ")
-            // v3.20: 항상 오디오 재인코딩 (-c:a copy 제거)
-            //   -c:a copy: intro(44100Hz) + body(24kHz) 포맷 다르면 20MB 불완전 파일 생성
             append("-c:a aac -b:a 192k ")
             append("-movflags +faststart ${outputFile.absolutePath}")
         }
