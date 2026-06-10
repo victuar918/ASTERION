@@ -12,15 +12,13 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.23
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.24
 //
-// [변경로그 v3.23] — 4개 버그 수정
-//   ■ BUG FIX (빌드): bgvCutFile.takeIf{nullable.exists()} → null 직접 대입
-//   ■ BUG FIX (면책문구): ds = introDurationSecs(21s) 묵음 → 1.0s 묵음
-//     이전: 21s 침묵 후 t=21s에 TTS 시작 → totalDur≈22s에서 1초만 들림
-//     수정: t=1s부터 TTS 재생 → 면책문구 전체 정상 청취
-//   ■ BUG FIX (freeze): apad whole_dur = totalDur+1s (오디오<비디오 방지)
-//   ■ BGM 본문 볼륨 0.02 → 0.01 (TTS 방해 최소화)
+// [변경로그 v3.24] assembleBody 전면 재설계 — BGV WAV 완전 독립 레이어
+//   ■ 근본 수정: BGV를 WAV 길이/씬 경계로 잘라던 구조 완전 폐기
+//   ■ BGV = BGM과 동일한 독립 레이어: 고유 소스 정규화 → totalBodyDur만큼 루프
+//   ■ 카드/텍스트만 WAV 누적 타임스탬프 기준 enable= 조건
+// [변경로그 v3.23] 빌드 오류 + 면책문구 타이밍 + freeze + BGM
 // [변경로그 v3.22] BGV 씬별 pre-cut 제거 → 연속 동일소스 그룹 단위 cut
 // [변경로그 v3.21] WAV MMR=0 fallback → 파일크기 기반 길이 계산
 // [변경로그 v3.20] intro/body 오디오 44100Hz 스테레오 통일
@@ -376,7 +374,7 @@ class AsterionRenderEngine(
         if (!ttsBodyFile.exists() || ttsBodyFile.length() == 0L) {
             Log.e(TAG, "WAV concat 실패: ${wavRc.logsAsString.takeLast(400)}")
             onProgress("❌ TTS 스트림 실패")
-            bgvBodyFile.delete(); bgvListFile.delete(); wavListFile.delete()
+            bgvBodyFile.delete(); wavListFile.delete()
             return@withContext null
         }
         onProgress("✅ TTS 스트림: ${ttsBodyFile.length()/1024}KB")
@@ -471,11 +469,10 @@ class AsterionRenderEngine(
 
         // 임시 파일 정리
         bgvBodyFile.delete(); ttsBodyFile.delete()
-        bgvListFile.delete(); wavListFile.delete(); filterScriptFile.delete()
+        wavListFile.delete(); filterScriptFile.delete()
         wavFiles.filter { it.absolutePath.contains("sil_") }.forEach { it.delete() }
         preps.forEach { prep ->
-            prep.bgvCutFile?.let { if (it.absolutePath.contains(TEMP_SUBDIR)) it.delete() }
-            prep.wavFile?.let    { if (it.absolutePath.contains(TEMP_SUBDIR)) it.delete() }
+            prep.wavFile?.let { if (it.absolutePath.contains(TEMP_SUBDIR)) it.delete() }
         }
 
         if (!bodyFile.exists() || bodyFile.length() == 0L) {
