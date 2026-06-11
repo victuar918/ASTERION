@@ -50,8 +50,12 @@ object CardRenderer {
         cardX    : Int = CARD_X_DEFAULT,
         cardY    : Int = CARD_Y_DEFAULT
     ): Boolean {
-        val style    = CardStyle.from(row.cardStyle)
-        val gradient = GradientPreset.from(row.gradientPreset)
+        val style    = CardStyle.from(row.cardStyle.trim())
+        // gradientPreset=DEFAULT 또는 미설정 → cardStyle로 유추 (prepareScene 동일 로직)
+        val gradientKey = row.gradientPreset.trim()
+            .takeIf { it.isNotBlank() && it.uppercase() != "DEFAULT" }
+            ?: row.cardStyle.trim()
+        val gradient = GradientPreset.from(gradientKey)
 
         if (style == CardStyle.MINIMAL || style == CardStyle.NONE) return false
 
