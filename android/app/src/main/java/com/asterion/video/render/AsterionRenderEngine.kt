@@ -332,9 +332,14 @@ class AsterionRenderEngine(
             // CardRenderer (Android Canvas) → ARGB PNG → 마젠타배경 overlay
             // Step4 colorkey=0xFF00FF: 마젠타만 투명화, 카드 패널 색상은 모두 안전
             val pngFile = File(sceneTempDir, "card_${idx}.png")
-            onProgress("[$idx] sty=${prep.row.cardStyle} grad=${prep.row.gradientPreset} " +
-                "x=${prep.keyframes.holdX.toInt()} y=${prep.keyframes.holdY.toInt()} " +
-                "a=${prep.cardStyle.alpha} top=0x${String.format("%08X", prep.gradient.topColor)}")
+            val resolvedGradKey = prep.row.gradientPreset.trim()
+                .takeIf { it.isNotBlank() && it.uppercase() != "DEFAULT" } ?: prep.row.cardStyle.trim()
+            val resolvedGrad = GradientPreset.from(resolvedGradKey)
+            onProgress("[STYLE-$idx] sty=${prep.cardStyle.name} a=${prep.cardStyle.alpha} " +
+                "top=0x${String.format("%06X", resolvedGrad.topColor and 0xFFFFFF)} " +
+                "bot=0x${String.format("%06X", resolvedGrad.bottomColor and 0xFFFFFF)}")
+            onProgress("[POS-$idx] holdX=${prep.keyframes.holdX.toInt()} holdY=${prep.keyframes.holdY.toInt()} " +
+                "finalX=${prep.keyframes.holdX.toInt()} finalY=${prep.keyframes.holdY.toInt()}")
             val hasCard = CardRenderer.render(
                 prep.row, pngFile,
                 cardX = prep.keyframes.holdX.toInt(),
