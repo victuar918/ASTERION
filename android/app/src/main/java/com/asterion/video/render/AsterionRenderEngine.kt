@@ -348,6 +348,16 @@ class AsterionRenderEngine(
                     Log.w(TAG, "카드 인코딩 실패[$idx]: ${rc.logsAsString.takeLast(200)}")
                 }
             }
+            // PNG 진단 로그 (0001·0010·0050)
+            if (idx in setOf("0001","0010","0050") && pngFile.exists()) {
+                val bOpts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeFile(pngFile.absolutePath, bOpts)
+                val ct = try { pngFile.inputStream().use { s -> s.skip(25); s.read() } } catch (_:Exception){-1}
+                val ctStr = when(ct) { 6->"RGBA" 2->"RGB" else->"?" }
+                Log.i(TAG, "[PNG진단-$idx] ${pngFile.length()/1024}KB " +
+                    "${bOpts.outWidth}\u00d7${bOpts.outHeight} " +
+                    "colorType=$ct($ctStr) hasCard=$hasCard")
+            }
             pngFile.delete()
             if (!cardFile.exists() || cardFile.length() == 0L) {
                 // 카드 없음 또는 실패: 마젠타배경 + WAV만
