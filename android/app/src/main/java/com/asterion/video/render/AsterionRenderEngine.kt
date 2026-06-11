@@ -272,7 +272,12 @@ class AsterionRenderEngine(
             ScenePrep(
                 row=row,wavFile=ttsWavFile.takeIf{it.exists()&&it.length()>1024L},
                 bgvCutFile=null,bgFile=bgFile,wavDuration=wavDuration,startSecs=startSecs,
-                cardStyle=CardStyle.from(row.cardStyle),gradient=GradientPreset.from(row.gradientPreset),
+                cardStyle=CardStyle.from(row.cardStyle.trim()),
+                gradient=GradientPreset.from(
+                    row.gradientPreset.trim()
+                        .takeIf { it.isNotBlank() && it.uppercase() != "DEFAULT" }
+                        ?: row.cardStyle.trim()
+                ),
                 keyframes=keyframes,textStartSecs=textStartSecs
             )
         }catch(e:Exception){
