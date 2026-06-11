@@ -400,7 +400,7 @@ class AsterionRenderEngine(
         onProgress("🎬 BGV+카드 블렌딩 (${actualBodyDur.fmtUS(1)}s)...")
         Log.i(TAG, "assembleBody v3.27: src=${uniqueBgvList.size} preps=${preps.size} dur=${actualBodyDur.fmtUS(1)}s")
         // filter_complex: 이스케이프 없이 변수로 분리 (parser 오류 방지)
-        val ckFilter = "[1:v]format=rgb24,colorkey=black:0.05:0.0,format=yuv420p[ck];" +
+        val ckFilter = "[1:v]format=rgb24,colorkey=black:0.05:0.0[ck];" +
             "[0:v][ck]overlay=0:0,format=yuv420p[vout]"
         val bRc = com.arthenica.ffmpegkit.FFmpegKit.execute(
             "-y " +
