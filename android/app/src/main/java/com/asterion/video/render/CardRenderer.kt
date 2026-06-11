@@ -75,8 +75,9 @@ object CardRenderer {
         val botR = (gradient.bottomColor shr 16) and 0xFF
         val botG = (gradient.bottomColor shr  8) and 0xFF
         val botB =  gradient.bottomColor         and 0xFF
-        val effTop = Color.rgb((topR * a).toInt(), (topG * a).toInt(), (topB * a).toInt())
-        val effBot = Color.rgb((botR * a).toInt(), (botG * a).toInt(), (botB * a).toInt())
+        // effRGB 제거: 원본 그라디언트 색상 직접 사용 (alpha 곱은 색상 감산일 뿐)
+        val effTop = Color.rgb(topR, topG, topB)
+        val effBot = Color.rgb(botR, botG, botB)
 
         Log.d(TAG, "[✓ 알파선처리] style=${style.name} alpha=$a " +
             "top=(${topR},${topG},${topB})→eff=(${(topR*a).toInt()},${(topG*a).toInt()},${(topB*a).toInt()}) " +
