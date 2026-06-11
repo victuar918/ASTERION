@@ -111,9 +111,14 @@ class AsterionRenderEngine(
         val r = (prep.gradient.topColor shr 16) and 0xFF
         val g = (prep.gradient.topColor shr 8)  and 0xFF
         val b =  prep.gradient.topColor and 0xFF
+        // colorkey=black:0.05 안전: 순수 검은색 계열은 colorkey에 투명화되므로 최소 밝기 보정
+        val nearBlack = r < 10 && g < 10 && b < 10
+        val rF = if (nearBlack) 15 else r
+        val gF = if (nearBlack) 8  else g
+        val bF = if (nearBlack) 25 else b
         val parts = mutableListOf<String>()
         parts += "drawbox=x=${prep.keyframes.holdX.toInt()}:y=${prep.keyframes.holdY.toInt()}:w=860:h=340:" +
-            "color=0x${String.format(Locale.US,"%02X%02X%02X",r,g,b)}" +
+            "color=0x${String.format(Locale.US,"%02X%02X%02X",rF,gF,bF)}" +
             "@${String.format(Locale.US,"%.2f",prep.cardStyle.alpha)}:t=fill"
         if (pm.isNotBlank() || ps.isNotBlank() || pd.isNotBlank()) {
             val fo2 = if (fontPath.isNotEmpty()) "fontfile='$fontPath':" else ""
@@ -454,7 +459,7 @@ class AsterionRenderEngine(
             fp+="[0:a]volume=0.85[tts]"
             // v3.25: BGM 페이드 13s~15s (면책문구 t=15s 시작점 기준)
             fp+="[1:a]aformat=sample_rates=44100:channel_layouts=stereo," +
-                "volume=volume='if(lt(t\\,13.0)\\,0.40\\,if(lt(t\\,15.0)\\,0.40+(t-13.0)*(-0.195)\\,0.01))':eval=frame[bgm]"
+                "volume=volume='if(lt(t\\,13.0)\\,0.40\\,if(lt(t\\,15.0)\\,0.40+(t-13.0)*(-0.175)\\,0.05))':eval=frame[bgm]"
             fp+="[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"
             aMap="[aout]"
         }
