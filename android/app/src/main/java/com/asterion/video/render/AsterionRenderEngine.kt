@@ -341,6 +341,11 @@ class AsterionRenderEngine(
             onProgress("[GRAD-RAW-$idx] key='$resolvedGradKey' " +
                 "rawTop=0x${Integer.toHexString(resolvedGrad.topColor)} " +
                 "rawBot=0x${Integer.toHexString(resolvedGrad.bottomColor)}")
+            val fR = ((resolvedGrad.topColor shr 16 and 0xFF) * prep.cardStyle.alpha).toInt()
+            val fG = ((resolvedGrad.topColor shr 8  and 0xFF) * prep.cardStyle.alpha).toInt()
+            val fB = ((resolvedGrad.topColor        and 0xFF) * prep.cardStyle.alpha).toInt()
+            onProgress("[COLOR-$idx] rawTop=0x${Integer.toHexString(resolvedGrad.topColor)} " +
+                "finalRGB=($fR,$fG,$fB) finalARGB=(255,$fR,$fG,$fB)")
             onProgress("[POS-$idx] holdX=${prep.keyframes.holdX.toInt()} holdY=${prep.keyframes.holdY.toInt()} " +
                 "finalX=${prep.keyframes.holdX.toInt()} finalY=${prep.keyframes.holdY.toInt()}")
             val hasCard = CardRenderer.render(
@@ -362,6 +367,23 @@ class AsterionRenderEngine(
                 )
                 if (!cardFile.exists() || cardFile.length() == 0L) {
                     Log.w(TAG, "카드 인코딩 실패[$idx]: ${rc.logsAsString.takeLast(200)}")
+                }
+            }
+            // PNG 픽셀 검증 (0001·0003 기준 — 카드/배경 alpha 실측)
+            if (idx in setOf("0001","0003") && pngFile.exists()) {
+                val bmpFull = android.graphics.BitmapFactory.decodeFile(pngFile.absolutePath)
+                if (bmpFull != null) {
+                    val cX = (prep.keyframes.holdX.toInt() + CardRenderer.CARD_W / 2).coerceIn(0, bmpFull.width - 1)
+                    val cY = (prep.keyframes.holdY.toInt() + CardRenderer.CARD_H / 2).coerceIn(0, bmpFull.height - 1)
+                    val cp = bmpFull.getPixel(cX, cY)
+                    val bp = bmpFull.getPixel(10, 10)
+                    onProgress("[PNG-$idx] 카드중심($cX,$cY): " +
+                        "A=${android.graphics.Color.alpha(cp)} R=${android.graphics.Color.red(cp)} " +
+                        "G=${android.graphics.Color.green(cp)} B=${android.graphics.Color.blue(cp)}")
+                    onProgress("[PNG-$idx] 배경(10,10): " +
+                        "A=${android.graphics.Color.alpha(bp)} R=${android.graphics.Color.red(bp)} " +
+                        "G=${android.graphics.Color.green(bp)} B=${android.graphics.Color.blue(bp)}")
+                    bmpFull.recycle()
                 }
             }
             // PNG 진단 로그 (0001·0010·0050)
