@@ -324,15 +324,18 @@ class AsterionRenderEngine(
                 )
                 audioSrc = sil; tempSil = sil
             }
-            // 카드 VF 빌드
-            val vfCard = buildCardVf(prep)
-            if (vfCard != null) {
-                // 카드 있음: 검은배경 + 카드 + WAV
+            // CardRenderer (Android Canvas) → ARGB PNG → 마젠타배경 overlay
+            // Step4 colorkey=0xFF00FF: 마젠타만 투명화, 카드 패널 색상은 모두 안전
+            val pngFile = File(sceneTempDir, "card_${idx}.png")
+            val hasCard = CardRenderer.render(prep.row, pngFile)
+            if (hasCard) {
                 val rc = com.arthenica.ffmpegkit.FFmpegKit.execute(
                     "-y " +
-                    "-f lavfi -i color=c=black:size=${VIDEO_W}x${VIDEO_H}:rate=30 " +
+                    "-f lavfi -i color=c=0xFF00FF:size=${VIDEO_W}x${VIDEO_H}:rate=30 " +
+                    "-r 30 -loop 1 -i ${pngFile.absolutePath} " +
                     "-i ${audioSrc.absolutePath} " +
-                    "-vf \"$vfCard\" " +
+                    "-filter_complex [0:v][1:v]overlay=0:0[cv] " +
+                    "-map [cv] -map 2:a " +
                     "-c:v libx264 -preset ultrafast -crf 23 " +
                     "-c:a aac -b:a 128k " +
                     "-shortest ${cardFile.absolutePath}"
@@ -341,11 +344,12 @@ class AsterionRenderEngine(
                     Log.w(TAG, "카드 인코딩 실패[$idx]: ${rc.logsAsString.takeLast(200)}")
                 }
             }
+            pngFile.delete()
             if (!cardFile.exists() || cardFile.length() == 0L) {
-                // 카드 없음 또는 실패: 검은배경 + WAV만
+                // 카드 없음 또는 실패: 마젠타배경 + WAV만
                 com.arthenica.ffmpegkit.FFmpegKit.execute(
                     "-y " +
-                    "-f lavfi -i color=c=black:size=${VIDEO_W}x${VIDEO_H}:rate=30 " +
+                    "-f lavfi -i color=c=0xFF00FF:size=${VIDEO_W}x${VIDEO_H}:rate=30 " +
                     "-i ${audioSrc.absolutePath} " +
                     "-c:v libx264 -preset ultrafast -crf 23 " +
                     "-c:a aac -b:a 128k " +
@@ -405,7 +409,9 @@ class AsterionRenderEngine(
         onProgress("🎬 BGV+카드 블렌딩 (${actualBodyDur.fmtUS(1)}s)...")
         Log.i(TAG, "assembleBody v3.27: src=${uniqueBgvList.size} preps=${preps.size} dur=${actualBodyDur.fmtUS(1)}s")
         // filter_complex: 이스케이프 없이 변수로 분리 (parser 오류 방지)
-        val ckFilter = "[1:v]format=rgb24,colorkey=black:0.05:0.0[ck];" +
+        // colorkey=0xFF00FF: 마젠타 배경 투명화 → BGV 노출
+        // 카드 패널(그라디언트) 색상은 마젠타와 충분히 달라 threshold=0.1에서도 안전
+        val ckFilter = "[1:v]format=rgb24,colorkey=0xFF00FF:0.1:0.0[ck];" +
             "[0:v][ck]overlay=0:0,format=yuv420p[vout]"
         val bRc = com.arthenica.ffmpegkit.FFmpegKit.execute(
             "-y " +
