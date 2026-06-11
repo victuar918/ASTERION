@@ -327,7 +327,11 @@ class AsterionRenderEngine(
             // CardRenderer (Android Canvas) → ARGB PNG → 마젠타배경 overlay
             // Step4 colorkey=0xFF00FF: 마젠타만 투명화, 카드 패널 색상은 모두 안전
             val pngFile = File(sceneTempDir, "card_${idx}.png")
-            val hasCard = CardRenderer.render(prep.row, pngFile)
+            val hasCard = CardRenderer.render(
+                prep.row, pngFile,
+                cardX = prep.keyframes.holdX.toInt(),
+                cardY = prep.keyframes.holdY.toInt()
+            )
             if (hasCard) {
                 val rc = com.arthenica.ffmpegkit.FFmpegKit.execute(
                     "-y " +
