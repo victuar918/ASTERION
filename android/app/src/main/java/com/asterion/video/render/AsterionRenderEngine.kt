@@ -8,6 +8,7 @@ import com.asterion.video.tts.SupertonicTtsEngine
 import com.asterion.video.tts.VoiceConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
