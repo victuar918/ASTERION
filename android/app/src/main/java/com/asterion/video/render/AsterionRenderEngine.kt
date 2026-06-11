@@ -338,6 +338,9 @@ class AsterionRenderEngine(
             onProgress("[STYLE-$idx] sty=${prep.cardStyle.name} a=${prep.cardStyle.alpha} " +
                 "top=0x${String.format("%06X", resolvedGrad.topColor and 0xFFFFFF)} " +
                 "bot=0x${String.format("%06X", resolvedGrad.bottomColor and 0xFFFFFF)}")
+            onProgress("[GRAD-RAW-$idx] key='$resolvedGradKey' " +
+                "rawTop=0x${Integer.toHexString(resolvedGrad.topColor)} " +
+                "rawBot=0x${Integer.toHexString(resolvedGrad.bottomColor)}")
             onProgress("[POS-$idx] holdX=${prep.keyframes.holdX.toInt()} holdY=${prep.keyframes.holdY.toInt()} " +
                 "finalX=${prep.keyframes.holdX.toInt()} finalY=${prep.keyframes.holdY.toInt()}")
             val hasCard = CardRenderer.render(
