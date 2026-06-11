@@ -11,131 +11,155 @@ import com.asterion.video.model.ScriptDataRow
 import java.io.File
 
 /**
- * Android Canvas → 1920x1080 ARGB PNG 소드 카드 오버레이
+ * Android Canvas → 1920×1080 ARGB PNG 카드 오버레이 (ASTERION 표준 카드 디자인)
  *
- * 구조:
- *   - 상단 62%: 완전 투명 (BGV 영상만 보임)
- *   - 하단 38% (y=670부터): gradientPreset 배경 + 텍스트 레이어
+ * 배경: 마젠타(0xFF00FF) — Step4 colorkey=0xFF00FF 에서 투명화
+ * 카드: holdX/holdY 위치에 860×340 그라디언트 박스 + 중앙정렬 텍스트
  *
- * 스킵 조건: cardStyle == MINIMAL/NONE 또는 텍스트 모두 비어있음
+ * buildCardVf 디자인 매칭:
+ *   위치  : holdX/holdY (AsterionRenderEngine에서 전달)
+ *   크기  : w=860 h=340
+ *   텍스트: main=52px bold 흰, sub=38px 0xCCCCCC, desc=32px 0xAAAAAA
+ *   세노  : argb(180,64,64,64) dx=2 dy=2
+ *   중앙  : center = holdX + 430 (화면 중앙)
+ *   알파 : CardStyle.alpha (SRC 모드로 마젠타 대체)
  */
 object CardRenderer {
 
-    private const val VW = 1920
-    private const val VH = 1080
-    private const val CARD_TOP_RATIO = 0.62f   // 화면 하단 38%에 카드 패널
-    private const val PAD_H = 80               // 좌우 충여(px)
-    private const val PAD_V = 40               // 상하 충여(px)
+    const val VW             = 1920
+    const val VH             = 1080
+    const val CARD_W         = 860
+    const val CARD_H         = 340
+    private const val CARD_X_DEFAULT = (VW - CARD_W) / 2   // 530
+    private const val CARD_Y_DEFAULT = 680
+    private const val PAD_H  = 40   // 카드 내부 좌우 패딩
+    private const val PAD_V  = 28   // 카드 내부 상단 패딩
 
-    /**
-     * 카드 PNG를 렌더링하여 outputPng에 저장.
-     * @return true = PNG 생성 성공, false = 카드 스킵(오버레이 불필요)
-     */
-    fun render(row: ScriptDataRow, outputPng: File): Boolean {
+    fun render(
+        row      : ScriptDataRow,
+        outputPng: File,
+        cardX    : Int = CARD_X_DEFAULT,
+        cardY    : Int = CARD_Y_DEFAULT
+    ): Boolean {
         val style    = CardStyle.from(row.cardStyle)
         val gradient = GradientPreset.from(row.gradientPreset)
 
-        // 카드 표시 안 하는 케이스
         if (style == CardStyle.MINIMAL || style == CardStyle.NONE) return false
-        if (row.cardMain.isBlank() && row.cardSub.isBlank() && row.highlightWord.isBlank()) return false
 
-        val cardTopY = (VH * CARD_TOP_RATIO).toInt()   // y = 670
-        val bitmap   = Bitmap.createBitmap(VW, VH, Bitmap.Config.ARGB_8888)
-        val canvas   = Canvas(bitmap)
+        val pm = row.cardMain.trim()
+        val ps = row.cardSub.trim()
+        val pd = row.cardDesc.trim()
+        if (pm.isBlank() && ps.isBlank() && pd.isBlank()) return false
 
-        // 전체 투명 초기화
-        canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+        val bitmap = Bitmap.createBitmap(VW, VH, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
 
-        // ── 너러지 배경 (gradientPreset 색상은 이미 알파 포함) ─────────
+        // 마젠타 배경 (colorkey=0xFF00FF 에서 투명화)
+        canvas.drawColor(Color.rgb(0xFF, 0x00, 0xFF))
+
+        // 카드 배경: SRC 모드로 마젠타 대체 + style.alpha 반영
+        // buildCardVf 호환: topColor/bottomColor 에서 RGB만 추출 (A순 데이터 무시)
+        val topR = (gradient.topColor shr 16) and 0xFF
+        val topG = (gradient.topColor shr 8)  and 0xFF
+        val topB =  gradient.topColor and 0xFF
+        val botR = (gradient.bottomColor shr 16) and 0xFF
+        val botG = (gradient.bottomColor shr 8)  and 0xFF
+        val botB =  gradient.bottomColor and 0xFF
+        val styleAlpha = (255 * style.alpha).coerceIn(0f, 255f).toInt()
+
+        val cL = cardX.toFloat()
+        val cT = cardY.toFloat()
+        val cR = (cardX + CARD_W).toFloat()
+        val cB = (cardY + CARD_H).toFloat()
+
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            // CardStyle.alpha 는 추가 전체 투명도 조절
-            alpha = (255 * style.alpha).coerceIn(0f, 255f).toInt()
-            shader = LinearGradient(
-                0f, cardTopY.toFloat(), 0f, VH.toFloat(),
-                gradient.topColor, gradient.bottomColor,
+            xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC)
+            shader   = LinearGradient(
+                cL, cT, cL, cB,
+                Color.argb(styleAlpha, topR, topG, topB),
+                Color.argb(styleAlpha, botR, botG, botB),
                 Shader.TileMode.CLAMP
             )
         }
-        canvas.drawRect(0f, cardTopY.toFloat(), VW.toFloat(), VH.toFloat(), bgPaint)
+        canvas.drawRect(cL, cT, cR, cB, bgPaint)
+        // 이후 텍스트는 SRC_OVER(기본값)으로 자동 취리
 
-        // ── 텍스트 레이어 ──────────────────────────────────────
-        val maxW = VW - PAD_H * 2
-        var curY = cardTopY + PAD_V
+        // 텍스트 영역 (center = cardX + 430 = 화면 중앙 when cardX=530)
+        val textLeft = cardX + PAD_H
+        val maxW     = CARD_W - PAD_H * 2   // 780px
+        var curY     = cardY + PAD_V
 
-        // 1. highlightWord — 금색 라벨
-        if (row.highlightWord.isNotBlank() && curY < VH - PAD_V) {
+        // highlightWord — 금색 소형 레이블
+        if (row.highlightWord.isNotBlank()) {
             val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#FFD700")
-                textSize = 30f
-                typeface = Typeface.DEFAULT_BOLD
+                color         = Color.parseColor("#FFD700")
+                textSize      = 28f
+                typeface      = Typeface.DEFAULT_BOLD
                 letterSpacing = 0.06f
             }
-            val labelY = curY + tp.textSize.toInt()
-            canvas.drawText("◆ ${row.highlightWord}", PAD_H.toFloat(), labelY.toFloat(), tp)
-            curY += (tp.textSize * 1.5f).toInt()
+            canvas.drawText(
+                "◆ ${row.highlightWord}",
+                textLeft.toFloat(),
+                (curY + tp.textSize.toInt()).toFloat(),
+                tp
+            )
+            curY += (tp.textSize * 1.6f).toInt()
         }
 
-        // 2. cardMain — 대형 볼드 제목
-        if (row.cardMain.isNotBlank() && curY < VH - PAD_V) {
+        // cardMain — fontsize=52, white bold, 중앙정렬
+        if (pm.isNotBlank() && curY < cardY + CARD_H - PAD_V) {
             val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.WHITE
-                textSize = 68f
+                color    = Color.WHITE
+                textSize = 52f
                 typeface = Typeface.DEFAULT_BOLD
-                setShadowLayer(6f, 2f, 3f, Color.argb(140, 0, 0, 0))
+                setShadowLayer(5f, 2f, 2f, Color.argb(180, 64, 64, 64))
             }
-            val sl = StaticLayout.Builder.obtain(row.cardMain, 0, row.cardMain.length, tp, maxW)
-                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            val sl = StaticLayout.Builder.obtain(pm, 0, pm.length, tp, maxW)
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
                 .setLineSpacing(4f, 1.0f)
                 .setMaxLines(2)
                 .setEllipsize(TextUtils.TruncateAt.END)
                 .build()
-            canvas.save()
-            canvas.translate(PAD_H.toFloat(), curY.toFloat())
-            sl.draw(canvas)
-            canvas.restore()
-            curY += sl.height + 14
+            canvas.save(); canvas.translate(textLeft.toFloat(), curY.toFloat())
+            sl.draw(canvas); canvas.restore()
+            curY += sl.height + 12
         }
 
-        // 3. cardSub — 서브타이틀
-        if (row.cardSub.isNotBlank() && curY < VH - PAD_V) {
+        // cardSub — fontsize=38, 0xCCCCCC, 중앙정렬
+        if (ps.isNotBlank() && curY < cardY + CARD_H - PAD_V) {
             val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.argb(220, 255, 255, 255)
-                textSize = 40f
-                typeface = Typeface.DEFAULT
+                color    = Color.argb(220, 204, 204, 204)
+                textSize = 38f
+                setShadowLayer(4f, 2f, 2f, Color.argb(160, 64, 64, 64))
             }
-            val sl = StaticLayout.Builder.obtain(row.cardSub, 0, row.cardSub.length, tp, maxW)
-                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            val sl = StaticLayout.Builder.obtain(ps, 0, ps.length, tp, maxW)
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
                 .setLineSpacing(2f, 1.0f)
                 .setMaxLines(2)
                 .setEllipsize(TextUtils.TruncateAt.END)
                 .build()
-            canvas.save()
-            canvas.translate(PAD_H.toFloat(), curY.toFloat())
-            sl.draw(canvas)
-            canvas.restore()
-            curY += sl.height + 10
+            canvas.save(); canvas.translate(textLeft.toFloat(), curY.toFloat())
+            sl.draw(canvas); canvas.restore()
+            curY += sl.height + 8
         }
 
-        // 4. cardDesc — 설명 (각조 여백 있을 때만)
-        if (row.cardDesc.isNotBlank() && curY < VH - PAD_V - 40) {
+        // cardDesc — fontsize=32, 0xAAAAAA, 중앙정렬
+        if (pd.isNotBlank() && curY < cardY + CARD_H - PAD_V) {
             val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.argb(180, 210, 210, 210)
-                textSize = 30f
-                typeface = Typeface.DEFAULT
+                color    = Color.argb(180, 170, 170, 170)
+                textSize = 32f
+                setShadowLayer(3f, 1f, 1f, Color.argb(140, 64, 64, 64))
             }
-            val sl = StaticLayout.Builder.obtain(row.cardDesc, 0, row.cardDesc.length, tp, maxW)
-                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            val sl = StaticLayout.Builder.obtain(pd, 0, pd.length, tp, maxW)
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
                 .setLineSpacing(2f, 1.0f)
                 .setMaxLines(2)
                 .setEllipsize(TextUtils.TruncateAt.END)
                 .build()
-            canvas.save()
-            canvas.translate(PAD_H.toFloat(), curY.toFloat())
-            sl.draw(canvas)
-            canvas.restore()
+            canvas.save(); canvas.translate(textLeft.toFloat(), curY.toFloat())
+            sl.draw(canvas); canvas.restore()
         }
 
-        // ── PNG 저장 ────────────────────────────────────────────────
         return try {
             outputPng.outputStream().buffered().use {
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
@@ -144,7 +168,7 @@ object CardRenderer {
         } catch (e: Exception) {
             false
         } finally {
-            bitmap.recycle()  // OOM 방지 — 항상 해제
+            bitmap.recycle()
         }
     }
 }
