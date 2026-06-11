@@ -20,6 +20,7 @@ import com.asterion.video.auth.ServiceAccountAuth
 import com.asterion.video.render.AsterionRenderEngine
 import com.asterion.video.render.ScenePrep
 import com.asterion.video.service.RenderForegroundService
+import com.asterion.video.service.YouTubeUploader
 import com.asterion.video.sheets.SheetsVideoReader
 import com.asterion.video.sheets.VIDEO_SS_ID
 import com.asterion.video.tts.SpeakerConfig
@@ -48,7 +49,8 @@ class AsterionVideoActivity : AppCompatActivity() {
     private val speakerNumStepsBars   = mutableMapOf<Int, SeekBar>()
     private val speakerNumStepsLabels = mutableMapOf<Int, TextView>()
 
-    private val auth by lazy { ServiceAccountAuth(this) }
+    private val auth            by lazy { ServiceAccountAuth(this) }
+    private val youtubeUploader  by lazy { YouTubeUploader(this) }
     private var reader     : SheetsVideoReader? = null
     private var engine     : AsterionRenderEngine? = null
     private var ttsEngine  : SupertonicTtsEngine? = null
@@ -441,6 +443,14 @@ class AsterionVideoActivity : AppCompatActivity() {
 
                 if (finalFile != null && finalFile.exists()) {
                     updateStatus("🎬 완료: ${finalFile.name} (${finalFile.length()/1024/1024}MB)")
+                    // YouTube 자동 업로드 (youtube_credentials.json 없으면 건너뜀)
+                    youtubeUploader.upload(
+                        videoFile     = finalFile,
+                        title         = buildYouTubeTitle(sheet, isXrp),
+                        description   = buildYouTubeDescription(isXrp),
+                        tags          = buildYouTubeTags(isXrp),
+                        privacyStatus = "private"
+                    ) { msg -> appendLog(msg); updateStatus(msg) }
                 } else {
                     updateStatus("❌ 최종 합치기 실패 — output 폴더 확인")
                 }
@@ -460,6 +470,42 @@ class AsterionVideoActivity : AppCompatActivity() {
         isRendering = false
         stopService(Intent(this, RenderForegroundService::class.java))
         updateStatus("⏹ 중지")
+    }
+
+    // ── YouTube 메타데이터 빌더 ───────────────────────────────
+
+    private fun buildYouTubeTitle(sheet: String, isXrp: Boolean): String {
+        val datePart = Regex("(\\d{8})").find(sheet)?.groupValues?.get(1)?.let {
+            "${it.substring(0,4)}.${it.substring(4,6)}.${it.substring(6,8)}"
+        } ?: ""
+        val typePart = when {
+            sheet.contains("weekly", ignoreCase = true) -> " 위클리"
+            sheet.contains("daily",  ignoreCase = true) -> " 데일리"
+            else -> ""
+        }
+        val base = if (isXrp) "베다점성술로 예측하는 XRP 전망"
+                   else       "베다점성술로 둘러보는 크립토 갤러리"
+        return if (datePart.isNotBlank()) "$base | $datePart$typePart" else "$base$typePart"
+    }
+
+    private fun buildYouTubeDescription(isXrp: Boolean): String = buildString {
+        append("🌟 ASTERION | 베다점성술 기반 암호화폐 분석\n\n")
+        if (isXrp) {
+            append("베다점성술의 행성 에너지를 통해 XRP(리플)의 흐름을 분석합니다.\n")
+            append("나브암샤 차트, 다샤 주기, 트랜짓을 종합한 에너지 예측입니다.\n\n")
+        } else {
+            append("베다점성술의 행성 에너지로 다양한 암호화폐의 흐름을 탐구합니다.\n\n")
+        }
+        append("⚠️ 본 영상은 투자 권유 또는 투자 조언이 아닙니다.\n")
+        append("모든 투자 결정은 시청자 본인의 판단과 책임 하에 이루어져야 합니다.\n\n")
+        append("#ASTERION #베다점성술 #암호화폐 ")
+        if (isXrp) append("#XRP #리플") else append("#크립토")
+    }
+
+    private fun buildYouTubeTags(isXrp: Boolean): List<String> = buildList {
+        addAll(listOf("ASTERION", "베다점성술", "암호화폐", "코인전망", "점성술"))
+        if (isXrp) addAll(listOf("XRP", "리플", "XRP전망", "리플전망", "리플점성술"))
+        else       addAll(listOf("크립토갤러리", "비트코인", "이더리움", "알트코인"))
     }
 
     private fun updateStatus(msg: String) = lifecycleScope.launch(Dispatchers.Main) { tvStatus.text = msg }
