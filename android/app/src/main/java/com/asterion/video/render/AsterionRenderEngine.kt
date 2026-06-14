@@ -17,8 +17,13 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.28
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.29
 //
+// [변경로그 v3.29]
+//   ■ BGV 씬별 개별 적용: 연속 동일 BGV 그룹화 → 세그먼트 병렬 인코딩 → concat
+//   ■ 단일 BGV 시 기존 동작 유지 (하위 호환)
+//   ■ GPU(h264_mediacodec) / libx264 폴백 세그먼트에도 동일 적용
+//   ■ 세그먼트 일부 실패 시 assembleBody 중단 (안전 처리)
 // [변경로그 v3.28]
 //   ■ 병렬 카드 인코딩: Semaphore(3) — 최대 3개 동시 FFmpeg
 //   ■ h264_mediacodec GPU 인코더 우선, 실패 시 libx264 자동 폴백
@@ -297,6 +302,7 @@ class AsterionRenderEngine(
     //
     // v3.27 영상 재설계: WAV+카드 씨별 인코딩 → concat → BGV overlay
     // v3.28 병렬 인코딩 + h264_mediacodec GPU 추가
+    // v3.29 BGV 씬별 개별 적용: 연속 동일 BGV 그룹화 → 세그먼트 병렬 인코딩 → concat
 
     suspend fun assembleBody(
         preps      : List<ScenePrep>,
@@ -308,7 +314,7 @@ class AsterionRenderEngine(
 
         // ─ Step 1: 씨별 카드+WAV 인코딩 (병렬 Semaphore(3)) ───
         onProgress("🂳 씨별 카드+WAV 인코딩 (${preps.size}샐) [병렬 ${if(useHwEnc)"GPU" else "CPU"}]...")
-        val cardSemaphore = Semaphore(3)  // 디바이스 하드웨어 인코더 사용량 고려
+        val cardSemaphore = Semaphore(3)
 
         val cardFileResults: List<File?> = coroutineScope {
             preps.map { prep ->
@@ -339,26 +345,82 @@ class AsterionRenderEngine(
         val actualBodyDur = measureDuration(bodyCardsFile, "body_cards", onProgress)
         onProgress("✅ body_cards: ${bodyCardsFile.length()/1024/1024}MB, ${actualBodyDur.fmtUS(1)}s")
 
-        // ─ Step 3: BGV body ─────────────────────────────
-        onProgress("📹 BGV 준비 (${actualBodyDur.fmtUS(1)}s)...")
-        val uniqueBgvList = preps.map { it.bgFile }.distinctBy { it.absolutePath }
+        // ─ Step 3: BGV body (씬별 BGV 세그먼트 + 병렬 인코딩) ─────────────────────────────
+        onProgress("📹 BGV 세그먼트 그룹화...")
         val vfNorm = "scale=${VIDEO_W}:${VIDEO_H}:force_original_aspect_ratio=decrease," +
             "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p"
-        val bgvBodyFile = File(sceneTempDir, "bgv_body.mp4")
-        val bgvCmd = "-y -stream_loop -1 -i ${uniqueBgvList[0].absolutePath} " +
-            "-an -vf $vfNorm -r 30 ${vc("4M")} " +
-            "-t ${actualBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
-        com.arthenica.ffmpegkit.FFmpegKit.execute(bgvCmd)
-        if (!bgvBodyFile.exists() || bgvBodyFile.length() == 0L) {
-            // HW 폴백
-            if (useHwEnc) {
-                useHwEnc = false
-                com.arthenica.ffmpegkit.FFmpegKit.execute(
-                    bgvCmd.replace("-c:v h264_mediacodec -b:v 4M","-c:v libx264 -preset ultrafast -crf 23")
-                )
+
+        // 연속 동일 BGV 그룹화 → Pair(bgvFile, groupDurationSecs)
+        val bgvSegments = mutableListOf<Pair<File, Float>>()
+        for (prep in preps) {
+            val last = bgvSegments.lastOrNull()
+            if (last != null && last.first.absolutePath == prep.bgFile.absolutePath) {
+                bgvSegments[bgvSegments.lastIndex] = Pair(last.first, last.second + prep.wavDuration)
+            } else {
+                bgvSegments.add(Pair(prep.bgFile, prep.wavDuration))
             }
+        }
+        onProgress("📹 BGV ${bgvSegments.size}세그먼트: ${bgvSegments.joinToString { "${it.first.name}(${it.second.fmtUS(1)}s)" }}")
+
+        val bgvBodyFile = File(sceneTempDir, "bgv_body.mp4")
+
+        if (bgvSegments.size == 1) {
+            // 단일 BGV — 기존 방식
+            fun runBgv(hw: Boolean): Boolean {
+                val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
+                com.arthenica.ffmpegkit.FFmpegKit.execute(
+                    "-y -stream_loop -1 -i ${bgvSegments[0].first.absolutePath} " +
+                    "-an -vf $vfNorm -r 30 $vc2 " +
+                    "-t ${actualBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
+                )
+                return bgvBodyFile.exists() && bgvBodyFile.length() > 0L
+            }
+            if (!runBgv(useHwEnc) && useHwEnc) { useHwEnc = false; bgvBodyFile.delete(); runBgv(false) }
             if (!bgvBodyFile.exists() || bgvBodyFile.length() == 0L) {
                 onProgress("❌ BGV 실패"); bodyCardsFile.delete(); return@withContext null
+            }
+        } else {
+            // 다중 BGV — 세그먼트 병렬 인코딩 후 concat
+            val bgvSemaphore = Semaphore(3)
+            val segFiles: List<File?> = coroutineScope {
+                bgvSegments.mapIndexed { idx, (bgvFile, segDur) ->
+                    async(Dispatchers.IO) {
+                        bgvSemaphore.withPermit {
+                            val segFile = File(sceneTempDir, "bgv_seg_${idx}.mp4")
+                            fun runSeg(hw: Boolean): Boolean {
+                                val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
+                                com.arthenica.ffmpegkit.FFmpegKit.execute(
+                                    "-y -stream_loop -1 -i ${bgvFile.absolutePath} " +
+                                    "-an -vf $vfNorm -r 30 $vc2 " +
+                                    "-t ${segDur.fmtUS()} ${segFile.absolutePath}"
+                                )
+                                return segFile.exists() && segFile.length() > 0L
+                            }
+                            if (!runSeg(useHwEnc) && useHwEnc) { useHwEnc = false; segFile.delete(); runSeg(false) }
+                            if (segFile.exists() && segFile.length() > 0L) {
+                                onProgress("  BGV[$idx] ${bgvFile.name}: ${segFile.length()/1024}KB (${segDur.fmtUS(1)}s)")
+                                segFile
+                            } else {
+                                Log.e(TAG, "BGV 세그[$idx] 실패: ${bgvFile.name}"); null
+                            }
+                        }
+                    }
+                }.awaitAll()
+            }
+            val validSegs = segFiles.filterNotNull()
+            if (validSegs.size != bgvSegments.size) {
+                // 일부라도 실패 시 중단 (BGV 누락은 타이밍 불일치 유발)
+                onProgress("❌ BGV 세그먼트 실패 (${validSegs.size}/${bgvSegments.size})")
+                bodyCardsFile.delete(); validSegs.forEach { it.delete() }; return@withContext null
+            }
+            val segListFile = File(sceneTempDir, "bgv_seg_list.txt")
+            segListFile.writeText(validSegs.joinToString("\n") { "file '${it.absolutePath}'" })
+            com.arthenica.ffmpegkit.FFmpegKit.execute(
+                "-y -f concat -safe 0 -i ${segListFile.absolutePath} -c copy ${bgvBodyFile.absolutePath}"
+            )
+            segListFile.delete(); validSegs.forEach { it.delete() }
+            if (!bgvBodyFile.exists() || bgvBodyFile.length() == 0L) {
+                onProgress("❌ BGV concat 실패"); bodyCardsFile.delete(); return@withContext null
             }
         }
         onProgress("✅ BGV: ${bgvBodyFile.length()/1024/1024}MB")
