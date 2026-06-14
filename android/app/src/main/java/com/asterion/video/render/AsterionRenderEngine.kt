@@ -21,14 +21,14 @@ import java.util.Locale
 //
 // [변경로그 v3.29]
 //   ■ BGV 씬별 개별 적용: 연속 동일 BGV 그룹화 → 세그먼트 병렬 인코딩 → concat
-//   ■ 단일 BGV 시 기존 동작 유지 (하위 호환)
-//   ■ GPU(h264_mediacodec) / libx264 폴백 세그먼트에도 동일 적용
-//   ■ 세그먼트 일부 실패 시 assembleBody 중단 (안전 처리)
+//   ■ [Fix1] -g 30 코덱 정규화: keyframe 주기 통일 → concat -c copy 안정성 보장
+//   ■ [Fix2] duration 오차 검증: abs(bgvBodyDur - bodyCardsDur) >= 0.1s 시 로그 경고
+//   ■ [Fix3] GPU → CPU 폴백 시 전체 세션 통일: mixed encoder concat 방지
+//   ■ 단일 BGV 시 기존 동작 유지
 // [변경로그 v3.28]
 //   ■ 병렬 카드 인코딩: Semaphore(3) — 최대 3개 동시 FFmpeg
 //   ■ h264_mediacodec GPU 인코더 우선, 실패 시 libx264 자동 폴백
 //   ■ CardRenderer effRGB 제거 — 원본 그라디언트 색상 직접 사용
-//   ■ 진단 로그 정리 (디버깅 완료)
 // [변경로그 v3.27] assembleBody 영상 재설계 (WAV+카드 동기화)
 // [변경로그 v3.26] BGV fade-in 제거 + libx264 직접 사용
 // =================================================================
@@ -229,7 +229,6 @@ class AsterionRenderEngine(
         Log.i(TAG,"renderIntro cmd: $cmd")
         val rc=com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
         if(!outFile.exists()||outFile.length()==0L){
-            // HW 인코더 실패 시 libx264 폴백
             if(useHwEnc){
                 useHwEnc=false
                 val fbCmd=cmd.replace("-c:v h264_mediacodec -b:v 4M","-c:v libx264 -preset ultrafast -crf 23")
@@ -300,9 +299,9 @@ class AsterionRenderEngine(
 
     // ── Phase 2: 조립 ────────────────────────────────────────
     //
-    // v3.27 영상 재설계: WAV+카드 씨별 인코딩 → concat → BGV overlay
-    // v3.28 병렬 인코딩 + h264_mediacodec GPU 추가
-    // v3.29 BGV 씬별 개별 적용: 연속 동일 BGV 그룹화 → 세그먼트 병렬 인코딩 → concat
+    // v3.27: WAV+카드 씨별 인코딩 → concat → BGV overlay
+    // v3.28: 병렬 인코딩 + GPU 추가
+    // v3.29: BGV 씬별 개별 적용 + Fix1/2/3
 
     suspend fun assembleBody(
         preps      : List<ScenePrep>,
@@ -313,7 +312,7 @@ class AsterionRenderEngine(
         sceneTempDir.mkdirs()
 
         // ─ Step 1: 씨별 카드+WAV 인코딩 (병렬 Semaphore(3)) ───
-        onProgress("🂳 씨별 카드+WAV 인코딩 (${preps.size}샐) [병렬 ${if(useHwEnc)"GPU" else "CPU"}]...")
+        onProgress("🂳 씨별 카드+WAV 인코딩 (${preps.size}새) [병렬 ${if(useHwEnc)"GPU" else "CPU"}]...")
         val cardSemaphore = Semaphore(3)
 
         val cardFileResults: List<File?> = coroutineScope {
@@ -330,7 +329,7 @@ class AsterionRenderEngine(
         if (cardFiles.isEmpty()) { onProgress("❌ 카드 없음"); return@withContext null }
 
         // ─ Step 2: 카드 concat → body_cards.mp4 ───────────────
-        onProgress("🔗 카드 concat (${cardFiles.size}샐)...")
+        onProgress("🔗 카드 concat (${cardFiles.size}새)...")
         val cardList = File(sceneTempDir, "card_list.txt")
         cardList.writeText(cardFiles.joinToString("\n") { "file '${it.absolutePath}'" })
         val bodyCardsFile = File(sceneTempDir, "body_cards.mp4")
@@ -345,10 +344,13 @@ class AsterionRenderEngine(
         val actualBodyDur = measureDuration(bodyCardsFile, "body_cards", onProgress)
         onProgress("✅ body_cards: ${bodyCardsFile.length()/1024/1024}MB, ${actualBodyDur.fmtUS(1)}s")
 
-        // ─ Step 3: BGV body (씬별 BGV 세그먼트 + 병렬 인코딩) ─────────────────────────────
+        // ─ Step 3: BGV body (씬별 세그먼트 + 병렬 인코딩) ─────────────────────────────
         onProgress("📹 BGV 세그먼트 그룹화...")
+        // Fix1: vfNorm 에 이미 scale/pad/setsar/format 포함 → 코덱 정규화는 엔코더 옵션에서 보완
         val vfNorm = "scale=${VIDEO_W}:${VIDEO_H}:force_original_aspect_ratio=decrease," +
             "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p"
+        // 코덱 정규화 추가 옵션 (Fix1): keyframe 주기 통일 → concat -c copy 안정성
+        val codecNorm = "-pix_fmt yuv420p -g 30"
 
         // 연속 동일 BGV 그룹화 → Pair(bgvFile, groupDurationSecs)
         val bgvSegments = mutableListOf<Pair<File, Float>>()
@@ -365,12 +367,12 @@ class AsterionRenderEngine(
         val bgvBodyFile = File(sceneTempDir, "bgv_body.mp4")
 
         if (bgvSegments.size == 1) {
-            // 단일 BGV — 기존 방식
+            // 단일 BGV — 기존 방식 (코덱 정규화 옵션 적용)
             fun runBgv(hw: Boolean): Boolean {
                 val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
                 com.arthenica.ffmpegkit.FFmpegKit.execute(
                     "-y -stream_loop -1 -i ${bgvSegments[0].first.absolutePath} " +
-                    "-an -vf $vfNorm -r 30 $vc2 " +
+                    "-an -vf $vfNorm -r 30 $vc2 $codecNorm " +
                     "-t ${actualBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
                 )
                 return bgvBodyFile.exists() && bgvBodyFile.length() > 0L
@@ -381,38 +383,58 @@ class AsterionRenderEngine(
             }
         } else {
             // 다중 BGV — 세그먼트 병렬 인코딩 후 concat
+            //
+            // Fix3: mixed encoder 방지 — 단일 보조함수로 엔코더 통일 (순수 local fun)
+            // GPU 실패 시 기존 GPU 성공분 전체 삭제 후 CPU 전체 재시도
+            fun encodeSeg(idx: Int, bgvFile: File, segDur: Float, hw: Boolean): File? {
+                val segFile = File(sceneTempDir, "bgv_seg_${idx}.mp4")
+                segFile.delete()
+                val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
+                com.arthenica.ffmpegkit.FFmpegKit.execute(
+                    "-y -stream_loop -1 -i ${bgvFile.absolutePath} " +
+                    "-an -vf $vfNorm -r 30 $vc2 $codecNorm " +
+                    "-t ${segDur.fmtUS()} ${segFile.absolutePath}"
+                )
+                return if (segFile.exists() && segFile.length() > 0L) {
+                    onProgress("  BGV[$idx] ${bgvFile.name}: ${segFile.length()/1024}KB (${segDur.fmtUS(1)}s) [${if(hw)"GPU" else "CPU"}]")
+                    segFile
+                } else {
+                    Log.e(TAG, "BGV 세그[$idx] 실패 (hw=$hw): ${bgvFile.name}"); null
+                }
+            }
+
             val bgvSemaphore = Semaphore(3)
-            val segFiles: List<File?> = coroutineScope {
+
+            // 1차 시도 (현재 useHwEnc 기준)
+            var segFiles: List<File?> = coroutineScope {
                 bgvSegments.mapIndexed { idx, (bgvFile, segDur) ->
                     async(Dispatchers.IO) {
-                        bgvSemaphore.withPermit {
-                            val segFile = File(sceneTempDir, "bgv_seg_${idx}.mp4")
-                            fun runSeg(hw: Boolean): Boolean {
-                                val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
-                                com.arthenica.ffmpegkit.FFmpegKit.execute(
-                                    "-y -stream_loop -1 -i ${bgvFile.absolutePath} " +
-                                    "-an -vf $vfNorm -r 30 $vc2 " +
-                                    "-t ${segDur.fmtUS()} ${segFile.absolutePath}"
-                                )
-                                return segFile.exists() && segFile.length() > 0L
-                            }
-                            if (!runSeg(useHwEnc) && useHwEnc) { useHwEnc = false; segFile.delete(); runSeg(false) }
-                            if (segFile.exists() && segFile.length() > 0L) {
-                                onProgress("  BGV[$idx] ${bgvFile.name}: ${segFile.length()/1024}KB (${segDur.fmtUS(1)}s)")
-                                segFile
-                            } else {
-                                Log.e(TAG, "BGV 세그[$idx] 실패: ${bgvFile.name}"); null
-                            }
-                        }
+                        bgvSemaphore.withPermit { encodeSeg(idx, bgvFile, segDur, useHwEnc) }
                     }
                 }.awaitAll()
             }
+
+            // Fix3: GPU 실패 시 전체 CPU 재시도 (성공한 GPU 세그먼트도 삭제 후 재인코딩 → mixed 방지)
+            if (segFiles.any { it == null } && useHwEnc) {
+                segFiles.filterNotNull().forEach { it.delete() }
+                useHwEnc = false
+                onProgress("⚠️ BGV GPU 실패 → CPU 전체 세션 재시도...")
+                segFiles = coroutineScope {
+                    bgvSegments.mapIndexed { idx, (bgvFile, segDur) ->
+                        async(Dispatchers.IO) {
+                            bgvSemaphore.withPermit { encodeSeg(idx, bgvFile, segDur, hw = false) }
+                        }
+                    }.awaitAll()
+                }
+            }
+
             val validSegs = segFiles.filterNotNull()
             if (validSegs.size != bgvSegments.size) {
-                // 일부라도 실패 시 중단 (BGV 누락은 타이밍 불일치 유발)
-                onProgress("❌ BGV 세그먼트 실패 (${validSegs.size}/${bgvSegments.size})")
+                onProgress("❌ BGV 세그먼트 실패 (${validSegs.size}/${bgvSegments.size}) — 타이밍 불일치 방지 중단")
                 bodyCardsFile.delete(); validSegs.forEach { it.delete() }; return@withContext null
             }
+
+            // 세그먼트 concat -c copy (동일 인코더 보장 완료)
             val segListFile = File(sceneTempDir, "bgv_seg_list.txt")
             segListFile.writeText(validSegs.joinToString("\n") { "file '${it.absolutePath}'" })
             com.arthenica.ffmpegkit.FFmpegKit.execute(
@@ -423,7 +445,15 @@ class AsterionRenderEngine(
                 onProgress("❌ BGV concat 실패"); bodyCardsFile.delete(); return@withContext null
             }
         }
-        onProgress("✅ BGV: ${bgvBodyFile.length()/1024/1024}MB")
+
+        // Fix2: duration 오차 검증 — 실제 불일치 로그 (바디 요소에서 -t로 보정되므로 처리 계속)
+        val bgvBodyDur = measureDuration(bgvBodyFile, "bgv_body", onProgress)
+        val durDiff = kotlin.math.abs(bgvBodyDur - actualBodyDur)
+        if (durDiff >= 0.1f) {
+            onProgress("⚠️ BGV duration 오차: bgv=${bgvBodyDur.fmtUS(2)}s / cards=${actualBodyDur.fmtUS(2)}s (Δ${durDiff.fmtUS(3)}s) — blendCmd -t로 보정")
+        } else {
+            onProgress("✅ BGV: ${bgvBodyFile.length()/1024/1024}MB (Δ${durDiff.fmtUS(3)}s OK)")
+        }
 
         // ─ Step 4: colorkey overlay (BGV + 카드 레이어) ────
         val bodyFile = File(AppConfig.OUTPUT_DIR, "${outputName}_body.mp4")
@@ -505,7 +535,6 @@ class AsterionRenderEngine(
             }
             return cardFile.exists() && cardFile.length() > 0L
         }
-        // GPU 우선, 실패 시 libx264 폴백
         if (!runEncode(useHwEnc) && useHwEnc) {
             cardFile.delete(); useHwEnc = false
             runEncode(false)
@@ -560,7 +589,6 @@ class AsterionRenderEngine(
             append("-movflags +faststart ${outputFile.absolutePath}")
         }
         val rc=com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
-        // 쳙 실패 시 libx264 폴백
         if ((!outputFile.exists()||outputFile.length()==0L) && useHwEnc) {
             useHwEnc=false
             val fbCmd=cmd.replace("-c:v h264_mediacodec -b:v 5M","-c:v libx264 -preset fast -crf 20")
