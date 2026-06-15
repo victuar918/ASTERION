@@ -21,10 +21,12 @@ import java.util.Locale
 //
 // [변경로그 v3.29]
 //   ■ BGV 씬별 개별 적용: 연속 동일 BGV 그룹화 → 세그먼트 병렬 인코딩 → concat
-//   ■ [Fix1] -pix_fmt yuv420p -g 30 코덱 정규화: keyframe 주기 통일
-//   ■ [Fix2] duration 오차 단계 처리: 0.1~0.5s 경고 / ≥0.5s fatal 반환
-//   ■ [Fix3] GPU→CPU 폴백 시 전체 세션 통일 (mixed encoder concat 방지)
-//   ■ [ffprobe] concat 전 세그먼트 코덱/해상도/FPS 메타 동일성 검증
+//   ■ [Fix1] -pix_fmt yuv420p -g 30 코덱 정규화
+//   ■ [Fix2] duration 오차 단계 처리: 0.1~0.5s 경고 / ≥0.5s fatal
+//   ■ [Fix3] per-segment CPU fallback + 진단 로그 (returnCode + FFmpeg 로그)
+//   ■ [Fix3] GPU 실패 시 whole-session CPU 전환, 1.5s 대기 후 재시도
+//   ■ [ffprobe] concat 전 코덱/해상도/FPS 메타 검증
+//   ■ probeVideoMeta: return null 제거 (빌드 오류 해결)
 // [변경로그 v3.28]
 //   ■ 병렬 카드 인코딩: Semaphore(3) / GPU 우선 + libx264 폴백
 //   ■ CardRenderer effRGB 제거
@@ -106,20 +108,14 @@ class AsterionRenderEngine(
         .replace(Regex("[\\u2B00-\\u2BFF]"), "")
         .replace(Regex("  +"), " ").trim()
 
-    // ── ffprobe 비디오 스트림 메타 조회 ───────────────────────────
-    // 리턴: Triple(codec, "너비x높이", fps) 또는 null
+    // Fix: expression body에서 return null 불가 → ?.let{} 사용
     private fun probeVideoMeta(file: File): Triple<String, String, String>? = try {
         val info = com.arthenica.ffmpegkit.FFprobeKit
-            .getMediaInformation(file.absolutePath)?.mediaInformation ?: return null
-        val vs = info.streams?.firstOrNull { it.type == "video" } ?: return null
-        Triple(
-            vs.codec ?: "?",
-            "${vs.width ?: 0}x${vs.height ?: 0}",
-            vs.averageFrameRate ?: "?"
-        )
+            .getMediaInformation(file.absolutePath)?.mediaInformation
+        val vs = info?.streams?.firstOrNull { it.type == "video" }
+        vs?.let { Triple(it.codec ?: "?", "${it.width ?: 0}x${it.height ?: 0}", it.averageFrameRate ?: "?") }
     } catch (_: Exception) { null }
 
-    // ── 카드 VF 빌더 (사용 안 함, CardRenderer로 대체됨) ────────────
     private fun buildCardVf(prep: ScenePrep): String? {
         if (prep.cardStyle == CardStyle.NONE || prep.cardStyle == CardStyle.MINIMAL) return null
         val pm = prep.row.cardMain.trim().stripEmoji()
@@ -155,17 +151,12 @@ class AsterionRenderEngine(
         return parts.joinToString(",")
     }
 
-    // ── 인트로 렌더링 ──────────────────────────────────
-
     suspend fun renderIntro(
         videoMeta    : VideoMeta,
         disclaimerWav: File? = null,
         onProgress   : (String) -> Unit = {}
     ): File? = withContext(Dispatchers.IO) {
-        if (videoMeta.introBgv1.isBlank()) {
-            onProgress("인트로 BGV 미설정 — 생략")
-            return@withContext null
-        }
+        if (videoMeta.introBgv1.isBlank()) { onProgress("인트로 BGV 미설정 — 생략"); return@withContext null }
         AppConfig.ensureDirs(); sceneTempDir.mkdirs()
         val bgv1    = AppConfig.resolveBgv(videoMeta.introBgv1)
         val hasBgv2 = videoMeta.introBgv2.isNotBlank()
@@ -175,8 +166,7 @@ class AsterionRenderEngine(
         val xfadeDur = if (hasBgv2) 1.0f else 0f
         val totalDur = if (hasBgv2) bgv1Dur + bgv2Dur - xfadeDur else bgv1Dur
         onProgress("인트로: bgv1=${bgv1Dur.fmtUS(1)}s bgv2=${bgv2Dur.fmtUS(1)}s total=${totalDur.fmtUS(1)}s")
-        val p1Start = 2.0f
-        val p1End   = (bgv1Dur-xfadeDur-0.3f).coerceAtLeast(p1Start+1f)
+        val p1Start = 2.0f; val p1End = (bgv1Dur-xfadeDur-0.3f).coerceAtLeast(p1Start+1f)
         val p2Base  = bgv1Dur-xfadeDur
         val t1=p2Base+2f; val t2=p2Base+4f; val t3=p2Base+6f; val t4=p2Base+8f
         val tAllEnd = (t4+6f).coerceAtMost(totalDur-0.5f)
@@ -185,12 +175,11 @@ class AsterionRenderEngine(
         val rotWord   = if (isXrp) "예측하는" else "둘러보는"
         fun esc(s:String)=s.replace("\\","\\\\").replace("'","\\'").replace(":","\\:").replace(",","\\,")
         fun alpha(ts:Float,te:Float):String{
-            val fi=(ts+0.5f).fmtUS(2);val fo=(te-0.5f).coerceAtLeast(ts+0.6f).fmtUS(2)
+            val fi=(ts+0.5f).fmtUS(2); val fo=(te-0.5f).coerceAtLeast(ts+0.6f).fmtUS(2)
             return "if(lt(t,$fi),(t-${ts.fmtUS(2)})/0.5,if(gt(t,$fo),(${te.fmtUS(2)}-t)/0.5,1))"
         }
         fun en(ts:Float,te:Float)="between(t,${ts.fmtUS(2)},${te.fmtUS(2)})"
-        val fp   = mutableListOf<String>()
-        val fOpt = if (fontPath.isNotEmpty()) "fontfile='$fontPath':" else ""
+        val fp = mutableListOf<String>(); val fOpt = if (fontPath.isNotEmpty()) "fontfile='$fontPath':" else ""
         if(hasBgv2&&bgv2!=null){
             val xOff=(bgv1Dur-xfadeDur).coerceAtLeast(0.5f)
             fp+="[0:v]setpts=PTS-STARTPTS[v0]"; fp+="[1:v]setpts=PTS-STARTPTS[v1]"
@@ -202,23 +191,21 @@ class AsterionRenderEngine(
             cur="[p1]"
         }
         if(hasBgv2){
-            val px100=160;val px70=112;val px40=64
-            fp+="${cur}drawtext=${fOpt}text='베다점성술로':fontsize=$px70:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.15-th/2:alpha='${alpha(t1,tAllEnd)}':enable='${en(t1,tAllEnd)}'[t1]";cur="[t1]"
-            fp+="${cur}drawtext=${fOpt}text='${esc(rotWord)}':fontsize=$px40:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.37-th/2:alpha='${alpha(t2,tAllEnd)}':enable='${en(t2,tAllEnd)}'[t2]";cur="[t2]"
-            fp+="${cur}drawtext=${fOpt}text='${esc(titleWord)}':fontsize=$px100:fontcolor=white:borderw=3:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.57-th/2:alpha='${alpha(t3,tAllEnd)}':enable='${en(t3,tAllEnd)}'[t3]";cur="[t3]"
-            fp+="${cur}drawtext=${fOpt}text='by ASTERION':fontsize=$px40:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.77-th/2:alpha='${alpha(t4,tAllEnd)}':enable='${en(t4,tAllEnd)}'[t4]";cur="[t4]"
+            val px100=160; val px70=112; val px40=64
+            fp+="${cur}drawtext=${fOpt}text='베다점성술로':fontsize=$px70:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.15-th/2:alpha='${alpha(t1,tAllEnd)}':enable='${en(t1,tAllEnd)}'[t1]"; cur="[t1]"
+            fp+="${cur}drawtext=${fOpt}text='${esc(rotWord)}':fontsize=$px40:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.37-th/2:alpha='${alpha(t2,tAllEnd)}':enable='${en(t2,tAllEnd)}'[t2]"; cur="[t2]"
+            fp+="${cur}drawtext=${fOpt}text='${esc(titleWord)}':fontsize=$px100:fontcolor=white:borderw=3:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.57-th/2:alpha='${alpha(t3,tAllEnd)}':enable='${en(t3,tAllEnd)}'[t3]"; cur="[t3]"
+            fp+="${cur}drawtext=${fOpt}text='by ASTERION':fontsize=$px40:fontcolor=white:borderw=2:bordercolor=black@0.8:x=(W-tw)/2:y=H*0.77-th/2:alpha='${alpha(t4,tAllEnd)}':enable='${en(t4,tAllEnd)}'[t4]"; cur="[t4]"
         }
         fp+="${cur}format=yuv420p[vfinal]"
         val numVid=if(hasBgv2)2 else 1; val silentIdx=numVid
         val hasDisc=disclaimerWav!=null&&disclaimerWav.exists()
         if(hasDisc){
-            val ds="15.0"
-            fp+="[${silentIdx}:a]atrim=0:${ds},asetpts=PTS-STARTPTS[pre_sil]"
+            fp+="[${silentIdx}:a]atrim=0:15.0,asetpts=PTS-STARTPTS[pre_sil]"
             fp+="[${numVid+1}:a]asetpts=PTS-STARTPTS[disc_a]"
             fp+="[pre_sil][disc_a]concat=n=2:v=0:a=1,apad=whole_dur=${(totalDur+1.0f).fmtUS(1)}[aout]"
         }
-        val outFile=File(sceneTempDir,"scene_intro.mp4")
-        val introVc = vc("4M", 23)
+        val outFile=File(sceneTempDir,"scene_intro.mp4"); val introVc=vc("4M",23)
         val cmd=buildString{
             append("-y ")
             append("-stream_loop -1 -i ${bgv1.absolutePath} ")
@@ -229,30 +216,17 @@ class AsterionRenderEngine(
             append("-map \"[vfinal]\" ")
             if(hasDisc)append("-map \"[aout]\" -c:a aac -b:a 128k ")
             else       append("-map ${silentIdx}:a ")
-            append("-t ${totalDur.fmtUS()} -r 30 $introVc ")
-            append("-movflags +faststart ${outFile.absolutePath}")
+            append("-t ${totalDur.fmtUS()} -r 30 $introVc -movflags +faststart ${outFile.absolutePath}")
         }
-        onProgress("🎬 인트로 (${totalDur.toInt()}초, 멌책=15s)...")
-        Log.i(TAG,"renderIntro cmd: $cmd")
+        onProgress("🎬 인트로 (${totalDur.toInt()}초)..."); Log.i(TAG,"renderIntro cmd: $cmd")
         val rc=com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
         if(!outFile.exists()||outFile.length()==0L){
-            if(useHwEnc){
-                useHwEnc=false
-                val fbCmd=cmd.replace("-c:v h264_mediacodec -b:v 4M","-c:v libx264 -preset ultrafast -crf 23")
-                com.arthenica.ffmpegkit.FFmpegKit.execute(fbCmd)
-            }
-            if(!outFile.exists()||outFile.length()==0L){
-                Log.e(TAG,"인트로 실패: ${rc.logsAsString.takeLast(600)}")
-                onProgress("⚠ 인트로 실패"); return@withContext null
-            }
+            if(useHwEnc){ useHwEnc=false; com.arthenica.ffmpegkit.FFmpegKit.execute(cmd.replace("-c:v h264_mediacodec -b:v 4M","-c:v libx264 -preset ultrafast -crf 23")) }
+            if(!outFile.exists()||outFile.length()==0L){ Log.e(TAG,"인트로 실패: ${rc.logsAsString.takeLast(600)}"); onProgress("⚠ 인트로 실패"); return@withContext null }
         }
-        subclipFiles.add(0,outFile); totalDurationSecs+=totalDur
-        actualIntroDurationSecs=totalDur
-        onProgress("✅ 인트로 완료 (${totalDur.toInt()}초)")
-        outFile
+        subclipFiles.add(0,outFile); totalDurationSecs+=totalDur; actualIntroDurationSecs=totalDur
+        onProgress("✅ 인트로 완료 (${totalDur.toInt()}초)"); outFile
     }
-
-    // ── Phase 1: WAV 생성 ──────────────────────────────────
 
     suspend fun prepareScene(
         row        : ScriptDataRow,
@@ -270,44 +244,25 @@ class AsterionRenderEngine(
             if(useCache){ttsWavFile=wavCache!!; onProgress("[$sceneId] WAV 쾐시")}
             else{
                 ttsWavFile=File(sceneTempDir,"${sceneId}_tts.wav")
-                if(hasTts){
-                    val cfg=voiceConfig.forSpeaker(row.speaker)
-                    onProgress("[$sceneId] TTS: ${cfg.label}(${cfg.sid},${cfg.numSteps}step)")
-                    synthesizeChunked(row.script,cfg.sid,cfg.speed,ttsWavFile,cfg.numSteps,sceneId,onProgress)
-                }else{
-                    com.arthenica.ffmpegkit.FFmpegKit.execute("-y -f lavfi -i anullsrc=r=24000:cl=mono -t 3.0 -c:a pcm_s16le ${ttsWavFile.absolutePath}")
-                }
-                if(wavCache!=null&&ttsWavFile.exists()&&ttsWavFile.length()>1024L)
-                    try{ttsWavFile.copyTo(wavCache,overwrite=true)}catch(_:Exception){}
+                if(hasTts){ val cfg=voiceConfig.forSpeaker(row.speaker); onProgress("[$sceneId] TTS: ${cfg.label}(${cfg.sid})"); synthesizeChunked(row.script,cfg.sid,cfg.speed,ttsWavFile,cfg.numSteps,sceneId,onProgress) }
+                else com.arthenica.ffmpegkit.FFmpegKit.execute("-y -f lavfi -i anullsrc=r=24000:cl=mono -t 3.0 -c:a pcm_s16le ${ttsWavFile.absolutePath}")
+                if(wavCache!=null&&ttsWavFile.exists()&&ttsWavFile.length()>1024L) try{ttsWavFile.copyTo(wavCache,overwrite=true)}catch(_:Exception){}
             }
-            val wavDuration=if(ttsWavFile.exists()&&ttsWavFile.length()>1024L)
-                measureDuration(ttsWavFile,sceneId,onProgress)
-            else 3.0f.also{if(hasTts)onProgress("[$sceneId] ⚠️ WAV실패")}
+            val wavDuration=if(ttsWavFile.exists()&&ttsWavFile.length()>1024L) measureDuration(ttsWavFile,sceneId,onProgress)
+                           else 3.0f.also{if(hasTts)onProgress("[$sceneId] ⚠️ WAV실패")}
             onProgress("[$sceneId] WAV: ${ttsWavFile.length()/1024}KB ${wavDuration.fmtUS(1)}s")
             val bgFile=AppConfig.resolveBgv(row.bgFileName)
             val pattern=AnimationPattern.from(row.animation)
             val keyframes=calcCardKeyframes(pattern,wavDuration)
-            val textStartSecs=if(pattern in MOTION_PATTERNS)keyframes.tIn else 0f
             ScenePrep(
-                row=row,wavFile=ttsWavFile.takeIf{it.exists()&&it.length()>1024L},
-                bgvCutFile=null,bgFile=bgFile,wavDuration=wavDuration,startSecs=startSecs,
+                row=row, wavFile=ttsWavFile.takeIf{it.exists()&&it.length()>1024L},
+                bgvCutFile=null, bgFile=bgFile, wavDuration=wavDuration, startSecs=startSecs,
                 cardStyle=CardStyle.from(row.cardStyle.trim()),
-                gradient=GradientPreset.from(
-                    row.gradientPreset.trim()
-                        .takeIf { it.isNotBlank() && it.uppercase() != "DEFAULT" }
-                        ?: row.cardStyle.trim()
-                ),
-                keyframes=keyframes,textStartSecs=textStartSecs
+                gradient=GradientPreset.from(row.gradientPreset.trim().takeIf{it.isNotBlank()&&it.uppercase()!="DEFAULT"}?:row.cardStyle.trim()),
+                keyframes=keyframes, textStartSecs=if(pattern in MOTION_PATTERNS)keyframes.tIn else 0f
             )
-        }catch(e:Exception){
-            Log.e(TAG,"prepareScene [$sceneId]: $e"); onProgress("[$sceneId] ❌ ${e.message}"); null
-        }
+        }catch(e:Exception){ Log.e(TAG,"prepareScene [$sceneId]: $e"); onProgress("[$sceneId] ❌ ${e.message}"); null }
     }
-
-    // ── Phase 2: 조립 ────────────────────────────────────────
-    // v3.27: WAV+카드 았별 인코딩 → concat → BGV overlay
-    // v3.28: 병렬 + GPU
-    // v3.29: BGV 씬별 + Fix1/2/3 + ffprobe 검증
 
     suspend fun assembleBody(
         preps      : List<ScenePrep>,
@@ -318,60 +273,50 @@ class AsterionRenderEngine(
         sceneTempDir.mkdirs()
 
         // ─ Step 1: 씨별 카드+WAV 인코딩 (병렬 Semaphore(3)) ───
-        onProgress("🂳 씨별 카드+WAV 인코딩 (${preps.size}새) [병렬 ${if(useHwEnc)"GPU" else "CPU"}]...")
+        onProgress("🂳 인코딩 (${preps.size}새) [${if(useHwEnc)"GPU" else "CPU"}]...")
         val cardSemaphore = Semaphore(3)
         val cardFileResults: List<File?> = coroutineScope {
-            preps.map { prep ->
-                async(Dispatchers.IO) { cardSemaphore.withPermit { encodeOneCard(prep, onProgress) } }
-            }.awaitAll()
+            preps.map { prep -> async(Dispatchers.IO) { cardSemaphore.withPermit { encodeOneCard(prep, onProgress) } } }.awaitAll()
         }
         val cardFiles = cardFileResults.filterNotNull().toMutableList()
         if (cardFiles.isEmpty()) { onProgress("❌ 카드 없음"); return@withContext null }
 
-        // ─ Step 2: 카드 concat → body_cards.mp4 ───────────────
+        // ─ Step 2: 카드 concat → body_cards.mp4 ───
         onProgress("🔗 카드 concat (${cardFiles.size}새)...")
         val cardList = File(sceneTempDir, "card_list.txt")
         cardList.writeText(cardFiles.joinToString("\n") { "file '${it.absolutePath}'" })
         val bodyCardsFile = File(sceneTempDir, "body_cards.mp4")
-        val cRc = com.arthenica.ffmpegkit.FFmpegKit.execute(
-            "-y -f concat -safe 0 -i ${cardList.absolutePath} -c copy ${bodyCardsFile.absolutePath}"
-        )
+        val cRc = com.arthenica.ffmpegkit.FFmpegKit.execute("-y -f concat -safe 0 -i ${cardList.absolutePath} -c copy ${bodyCardsFile.absolutePath}")
         cardList.delete(); cardFiles.forEach { it.delete() }
         if (!bodyCardsFile.exists() || bodyCardsFile.length() == 0L) {
-            Log.e(TAG, "body_cards concat 실패: ${cRc.logsAsString.takeLast(400)}")
-            onProgress("❌ 카드 concat 실패"); return@withContext null
+            Log.e(TAG, "body_cards 실패: ${cRc.logsAsString.takeLast(400)}"); onProgress("❌ 카드 concat 실패"); return@withContext null
         }
         val actualBodyDur = measureDuration(bodyCardsFile, "body_cards", onProgress)
         onProgress("✅ body_cards: ${bodyCardsFile.length()/1024/1024}MB, ${actualBodyDur.fmtUS(1)}s")
 
-        // ─ Step 3: BGV body (씬별 세그먼트 + 병렬 인코딩) ─────────────────────────────
+        // ─ Step 3: BGV body (씬별 세그먼트 + 병렬 인코딩) ───
         onProgress("📹 BGV 세그먼트 그룹화...")
-        val vfNorm   = "scale=${VIDEO_W}:${VIDEO_H}:force_original_aspect_ratio=decrease," +
+        val vfNorm    = "scale=${VIDEO_W}:${VIDEO_H}:force_original_aspect_ratio=decrease," +
             "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p"
-        val codecNorm = "-pix_fmt yuv420p -g 30"  // Fix1: keyframe 주기 통일
+        val codecNorm = "-pix_fmt yuv420p -g 30"
 
-        // 연속 동일 BGV 그룹화 → Pair(bgvFile, groupDurationSecs)
         val bgvSegments = mutableListOf<Pair<File, Float>>()
         for (prep in preps) {
             val last = bgvSegments.lastOrNull()
-            if (last != null && last.first.absolutePath == prep.bgFile.absolutePath) {
+            if (last != null && last.first.absolutePath == prep.bgFile.absolutePath)
                 bgvSegments[bgvSegments.lastIndex] = Pair(last.first, last.second + prep.wavDuration)
-            } else {
-                bgvSegments.add(Pair(prep.bgFile, prep.wavDuration))
-            }
+            else bgvSegments.add(Pair(prep.bgFile, prep.wavDuration))
         }
         onProgress("📹 BGV ${bgvSegments.size}세그먼트: ${bgvSegments.joinToString { "${it.first.name}(${it.second.fmtUS(1)}s)" }}")
 
         val bgvBodyFile = File(sceneTempDir, "bgv_body.mp4")
 
         if (bgvSegments.size == 1) {
-            // 단일 BGV — 기존 방식
             fun runBgv(hw: Boolean): Boolean {
                 val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
                 com.arthenica.ffmpegkit.FFmpegKit.execute(
                     "-y -stream_loop -1 -i ${bgvSegments[0].first.absolutePath} " +
-                    "-an -vf $vfNorm -r 30 $vc2 $codecNorm " +
-                    "-t ${actualBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
+                    "-an -vf $vfNorm -r 30 $vc2 $codecNorm -t ${actualBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
                 )
                 return bgvBodyFile.exists() && bgvBodyFile.length() > 0L
             }
@@ -380,46 +325,52 @@ class AsterionRenderEngine(
                 onProgress("❌ BGV 실패"); bodyCardsFile.delete(); return@withContext null
             }
         } else {
-            // 다중 BGV — Fix3: encodeSeg local fun 으로 세션 단위 인코더 통일
-            fun encodeSeg(idx: Int, bgvFile: File, segDur: Float, hw: Boolean): File? {
+            // 다중 BGV — Fix3: per-segment fallback + 진단 로그
+            // GPU 실패 시: useHwEnc=false 전환 + 1.5s 대기 + 동일 세그먼트 CPU 재시도
+            // whole-session 재시도 제거: per-segment이 더 효율적 (24/25 성공 시 전체 충버리 )
+            fun encodeSeg(idx: Int, bgvFile: File, segDur: Float): File? {
+                val hw = useHwEnc
                 val segFile = File(sceneTempDir, "bgv_seg_${idx}.mp4")
-                segFile.delete()
-                val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
-                com.arthenica.ffmpegkit.FFmpegKit.execute(
-                    "-y -stream_loop -1 -i ${bgvFile.absolutePath} " +
-                    "-an -vf $vfNorm -r 30 $vc2 $codecNorm " +
-                    "-t ${segDur.fmtUS()} ${segFile.absolutePath}"
-                )
-                return if (segFile.exists() && segFile.length() > 0L) {
-                    onProgress("  BGV[$idx] ${bgvFile.name}: ${segFile.length()/1024}KB (${segDur.fmtUS(1)}s) [${if(hw)"GPU" else "CPU"}]")
-                    segFile
-                } else {
-                    Log.e(TAG, "BGV 세그[$idx] 실패 (hw=$hw): ${bgvFile.name}"); null
+
+                fun runEnc(useHw: Boolean): Boolean {
+                    segFile.delete()
+                    val vc2 = if (useHw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
+                    val sess = com.arthenica.ffmpegkit.FFmpegKit.execute(
+                        "-y -stream_loop -1 -i ${bgvFile.absolutePath} " +
+                        "-an -vf $vfNorm -r 30 $vc2 $codecNorm " +
+                        "-t ${segDur.fmtUS()} ${segFile.absolutePath}"
+                    )
+                    if (segFile.exists() && segFile.length() > 0L) return true
+                    // 실패 진단: returnCode + FFmpeg 로그 마지막 400자
+                    val rc = sess.returnCode?.value ?: -1
+                    val errSnip = sess.logsAsString?.takeLast(400) ?: "log unavailable"
+                    Log.e(TAG, "BGV[$idx] 실패 rc=$rc hw=$useHw dur=${segDur.fmtUS(1)}s:\n$errSnip")
+                    onProgress("  ❌ BGV[$idx] rc=$rc [${if(useHw)"GPU" else "CPU"}] ${segDur.fmtUS(1)}s")
+                    return false
                 }
+
+                // 1차 시도
+                if (runEnc(hw)) {
+                    onProgress("  BGV[$idx] ${bgvFile.name}: ${segFile.length()/1024}KB (${segDur.fmtUS(1)}s) [${if(hw)"GPU" else "CPU"}]")
+                    return segFile
+                }
+                // CPU 시도도 실패 → 포기
+                if (!hw) return null
+                // GPU 실패 → 세션 CPU 전환 + 1.5s 대기 + 재시도
+                useHwEnc = false
+                try { Thread.sleep(1500) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+                if (runEnc(false)) {
+                    onProgress("  ✅ BGV[$idx] CPU 재시도 성공 (세션 CPU 전환)")
+                    return segFile
+                }
+                return null
             }
 
             val bgvSemaphore = Semaphore(3)
-
-            // 1차 시도
-            var segFiles: List<File?> = coroutineScope {
+            val segFiles: List<File?> = coroutineScope {
                 bgvSegments.mapIndexed { idx, (bgvFile, segDur) ->
-                    async(Dispatchers.IO) {
-                        bgvSemaphore.withPermit { encodeSeg(idx, bgvFile, segDur, useHwEnc) }
-                    }
+                    async(Dispatchers.IO) { bgvSemaphore.withPermit { encodeSeg(idx, bgvFile, segDur) } }
                 }.awaitAll()
-            }
-            // GPU 실패 시 전체 CPU 재시도 (mixed encoder 방지)
-            if (segFiles.any { it == null } && useHwEnc) {
-                segFiles.filterNotNull().forEach { it.delete() }
-                useHwEnc = false
-                onProgress("⚠️ BGV GPU 실패 → CPU 전체 세션 재시도...")
-                segFiles = coroutineScope {
-                    bgvSegments.mapIndexed { idx, (bgvFile, segDur) ->
-                        async(Dispatchers.IO) {
-                            bgvSemaphore.withPermit { encodeSeg(idx, bgvFile, segDur, hw = false) }
-                        }
-                    }.awaitAll()
-                }
             }
 
             val validSegs = segFiles.filterNotNull()
@@ -428,142 +379,95 @@ class AsterionRenderEngine(
                 bodyCardsFile.delete(); validSegs.forEach { it.delete() }; return@withContext null
             }
 
-            // ffprobe 메타 검증: concat -c copy 전 codec/해상도/FPS 동일성 확인
+            // ffprobe 메타 검증 (concat 전)
             val refMeta = probeVideoMeta(validSegs[0])
             if (refMeta != null) {
                 validSegs.drop(1).forEachIndexed { i, seg ->
                     val meta = probeVideoMeta(seg)
                     if (meta != null && meta != refMeta) {
-                        val msg = "BGV 세그[${i+1}] 메타 불일치 — " +
-                            "codec:${meta.first}/${refMeta.first} " +
-                            "res:${meta.second}/${refMeta.second} " +
-                            "fps:${meta.third}/${refMeta.third}"
-                        onProgress("⚠️ $msg")
-                        Log.w(TAG, msg)
+                        val msg = "BGV 세그[${i+1}] 메타 불일치 — codec:${meta.first}/${refMeta.first} res:${meta.second}/${refMeta.second} fps:${meta.third}/${refMeta.third}"
+                        onProgress("⚠️ $msg"); Log.w(TAG, msg)
                     }
                 }
             }
 
-            // 세그먼트 concat -c copy
             val segListFile = File(sceneTempDir, "bgv_seg_list.txt")
             segListFile.writeText(validSegs.joinToString("\n") { "file '${it.absolutePath}'" })
-            com.arthenica.ffmpegkit.FFmpegKit.execute(
-                "-y -f concat -safe 0 -i ${segListFile.absolutePath} -c copy ${bgvBodyFile.absolutePath}"
-            )
+            com.arthenica.ffmpegkit.FFmpegKit.execute("-y -f concat -safe 0 -i ${segListFile.absolutePath} -c copy ${bgvBodyFile.absolutePath}")
             segListFile.delete(); validSegs.forEach { it.delete() }
             if (!bgvBodyFile.exists() || bgvBodyFile.length() == 0L) {
                 onProgress("❌ BGV concat 실패"); bodyCardsFile.delete(); return@withContext null
             }
         }
 
-        // Fix2: duration 오차 단계 처리
-        // 0.1미만 → OK / 0.1~0.5 → 경고 / 0.5이상 → 로직 버그로 판단, fatal
+        // Fix2: duration 단계 처리
         val bgvBodyDur = measureDuration(bgvBodyFile, "bgv_body", onProgress)
         val durDiff    = kotlin.math.abs(bgvBodyDur - actualBodyDur)
         when {
             durDiff >= 0.5f -> {
-                Log.e(TAG, "BGV duration 오차 fatal: bgv=${bgvBodyDur.fmtUS(2)}s cards=${actualBodyDur.fmtUS(2)}s Δ${durDiff.fmtUS(3)}s")
-                onProgress("❌ BGV duration 오차 치명 (Δ${durDiff.fmtUS(3)}s ≥0.5s) — 세그먼트 로직 확인 필요")
+                Log.e(TAG, "BGV duration fatal: bgv=${bgvBodyDur.fmtUS(2)} cards=${actualBodyDur.fmtUS(2)} Δ${durDiff.fmtUS(3)}")
+                onProgress("❌ BGV duration 오차 치명 (Δ${durDiff.fmtUS(3)}s ≥0.5s)")
                 bgvBodyFile.delete(); bodyCardsFile.delete(); return@withContext null
             }
-            durDiff >= 0.1f -> {
-                onProgress("⚠️ BGV duration 경고: bgv=${bgvBodyDur.fmtUS(2)}s / cards=${actualBodyDur.fmtUS(2)}s (Δ${durDiff.fmtUS(3)}s) — blendCmd -t 보정")
-            }
-            else -> {
-                onProgress("✅ BGV: ${bgvBodyFile.length()/1024/1024}MB (Δ${durDiff.fmtUS(3)}s OK)")
-            }
+            durDiff >= 0.1f -> onProgress("⚠️ BGV duration 경고: bgv=${bgvBodyDur.fmtUS(2)}s / cards=${actualBodyDur.fmtUS(2)}s (Δ${durDiff.fmtUS(3)}s)")
+            else            -> onProgress("✅ BGV: ${bgvBodyFile.length()/1024/1024}MB (Δ${durDiff.fmtUS(3)}s OK)")
         }
 
-        // ─ Step 4: colorkey overlay (BGV + 카드 레이어) ────
+        // ─ Step 4: colorkey overlay ───
         val bodyFile = File(AppConfig.OUTPUT_DIR, "${outputName}_body.mp4")
-        onProgress("🎬 BGV+카드 블렌딩 (${actualBodyDur.fmtUS(1)}s)...")
-        val ckFilter = "[1:v]format=rgb24,colorkey=0xFF00FF:0.1:0.0[ck];" +
-            "[0:v][ck]overlay=0:0,format=yuv420p[vout]"
-        val blendCmd = "-y " +
-            "-i ${bgvBodyFile.absolutePath} " +
-            "-i ${bodyCardsFile.absolutePath} " +
-            "-filter_complex $ckFilter " +
-            "-map [vout] -map 1:a " +
-            "${vc("5M", 20)} " +
-            "-c:a aac -b:a 192k " +
-            "-t ${actualBodyDur.fmtUS()} " +
-            "-movflags +faststart " +
-            bodyFile.absolutePath
+        onProgress("🎬 블렌딩 (${actualBodyDur.fmtUS(1)}s)...")
+        val ckFilter = "[1:v]format=rgb24,colorkey=0xFF00FF:0.1:0.0[ck];[0:v][ck]overlay=0:0,format=yuv420p[vout]"
+        val blendCmd = "-y -i ${bgvBodyFile.absolutePath} -i ${bodyCardsFile.absolutePath} " +
+            "-filter_complex $ckFilter -map [vout] -map 1:a ${vc("5M",20)} -c:a aac -b:a 192k " +
+            "-t ${actualBodyDur.fmtUS()} -movflags +faststart ${bodyFile.absolutePath}"
         com.arthenica.ffmpegkit.FFmpegKit.execute(blendCmd)
         if (!bodyFile.exists() || bodyFile.length() == 0L) {
-            if (useHwEnc) {
-                useHwEnc = false
-                com.arthenica.ffmpegkit.FFmpegKit.execute(
-                    blendCmd.replace("-c:v h264_mediacodec -b:v 5M","-c:v libx264 -preset ultrafast -crf 20")
-                )
-            }
+            if (useHwEnc) { useHwEnc=false; com.arthenica.ffmpegkit.FFmpegKit.execute(blendCmd.replace("-c:v h264_mediacodec -b:v 5M","-c:v libx264 -preset ultrafast -crf 20")) }
             if (!bodyFile.exists() || bodyFile.length() == 0L) {
-                onProgress("❌ body 블렌딩 실패"); bgvBodyFile.delete(); bodyCardsFile.delete(); return@withContext null
+                onProgress("❌ 블렌딩 실패"); bgvBodyFile.delete(); bodyCardsFile.delete(); return@withContext null
             }
         }
         bgvBodyFile.delete(); bodyCardsFile.delete()
         preps.forEach { it.wavFile?.let { f -> if (f.absolutePath.contains(TEMP_SUBDIR)) f.delete() } }
-        totalDurationSecs += actualBodyDur
-        subclipFiles.add(bodyFile)
+        totalDurationSecs += actualBodyDur; subclipFiles.add(bodyFile)
         onProgress("✅ body: ${bodyFile.length()/1024/1024}MB (${actualBodyDur.fmtUS(1)}s)")
         bodyFile
     }
 
-    /** 씨 하나 인코딩 — 병렬 스레드에서 안전하게 호출 */
     private fun encodeOneCard(prep: ScenePrep, onProgress: (String) -> Unit): File? {
         val idx = prep.row.rowIndex.toString().padStart(4,'0')
         val cardFile = File(sceneTempDir, "card_${idx}.mp4")
         val wavSrc = prep.wavFile?.takeIf { it.exists() && it.length() > 1024L }
-        val audioSrc: File
-        var tempSil: File? = null
-        if (wavSrc != null) {
-            audioSrc = wavSrc
-        } else {
+        val audioSrc: File; var tempSil: File? = null
+        if (wavSrc != null) { audioSrc = wavSrc }
+        else {
             val sil = File(sceneTempDir, "sil_${idx}.wav")
-            com.arthenica.ffmpegkit.FFmpegKit.execute(
-                "-y -f lavfi -i anullsrc=r=24000:cl=mono " +
-                "-t ${prep.wavDuration.fmtUS()} -c:a pcm_s16le ${sil.absolutePath}"
-            )
+            com.arthenica.ffmpegkit.FFmpegKit.execute("-y -f lavfi -i anullsrc=r=24000:cl=mono -t ${prep.wavDuration.fmtUS()} -c:a pcm_s16le ${sil.absolutePath}")
             audioSrc = sil; tempSil = sil
         }
         val pngFile = File(sceneTempDir, "card_${idx}.png")
-        val hasCard = CardRenderer.render(
-            prep.row, pngFile,
-            cardX = prep.keyframes.holdX.toInt(),
-            cardY = prep.keyframes.holdY.toInt()
-        )
+        val hasCard = CardRenderer.render(prep.row, pngFile, cardX=prep.keyframes.holdX.toInt(), cardY=prep.keyframes.holdY.toInt())
         fun runEncode(hw: Boolean): Boolean {
             val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
             if (hasCard) {
                 com.arthenica.ffmpegkit.FFmpegKit.execute(
-                    "-y " +
-                    "-f lavfi -i color=c=0xFF00FF:size=${VIDEO_W}x${VIDEO_H}:rate=30 " +
-                    "-r 30 -loop 1 -i ${pngFile.absolutePath} " +
-                    "-i ${audioSrc.absolutePath} " +
-                    "-filter_complex [0:v][1:v]overlay=0:0[cv] " +
-                    "-map [cv] -map 2:a $vc2 -c:a aac -b:a 128k " +
-                    "-shortest ${cardFile.absolutePath}"
+                    "-y -f lavfi -i color=c=0xFF00FF:size=${VIDEO_W}x${VIDEO_H}:rate=30 " +
+                    "-r 30 -loop 1 -i ${pngFile.absolutePath} -i ${audioSrc.absolutePath} " +
+                    "-filter_complex [0:v][1:v]overlay=0:0[cv] -map [cv] -map 2:a $vc2 -c:a aac -b:a 128k -shortest ${cardFile.absolutePath}"
                 )
             } else {
                 com.arthenica.ffmpegkit.FFmpegKit.execute(
-                    "-y " +
-                    "-f lavfi -i color=c=0xFF00FF:size=${VIDEO_W}x${VIDEO_H}:rate=30 " +
-                    "-i ${audioSrc.absolutePath} $vc2 -c:a aac -b:a 128k " +
-                    "-shortest ${cardFile.absolutePath}"
+                    "-y -f lavfi -i color=c=0xFF00FF:size=${VIDEO_W}x${VIDEO_H}:rate=30 " +
+                    "-i ${audioSrc.absolutePath} $vc2 -c:a aac -b:a 128k -shortest ${cardFile.absolutePath}"
                 )
             }
             return cardFile.exists() && cardFile.length() > 0L
         }
-        if (!runEncode(useHwEnc) && useHwEnc) { cardFile.delete(); useHwEnc = false; runEncode(false) }
+        if (!runEncode(useHwEnc) && useHwEnc) { cardFile.delete(); useHwEnc=false; runEncode(false) }
         pngFile.delete(); tempSil?.delete()
-        return if (cardFile.exists() && cardFile.length() > 0L) {
-            onProgress("  새[$idx]: ${cardFile.length()/1024}KB"); cardFile
-        } else {
-            Log.e(TAG, "연[$idx] 카드 생성 실패"); null
-        }
+        return if (cardFile.exists() && cardFile.length() > 0L) { onProgress("  새[$idx]: ${cardFile.length()/1024}KB"); cardFile }
+               else { Log.e(TAG, "연[$idx] 실패"); null }
     }
-
-    // ── 합치기 + BGM + 워터마크 ─────────────────────────
 
     suspend fun concatSubclips(
         outputName   : String,
@@ -582,40 +486,31 @@ class AsterionRenderEngine(
         onProgress("합치기: ${subclipFiles.size}개 / ${duration.toInt()}초")
         val fp = mutableListOf<String>(); var vMap="0:v"; var aMap="0:a"
         if (watermarkText.isNotBlank()) {
-            val esc = escapeDrawtext(watermarkText)
-            val fo  = if (fontPath.isNotEmpty()) "fontfile='${fontPath}':" else ""
+            val esc=escapeDrawtext(watermarkText); val fo=if(fontPath.isNotEmpty())"fontfile='${fontPath}':" else ""
             fp+="[0:v]drawtext=${fo}text='$esc':fontsize=34:fontcolor=white@0.65:shadowcolor=black@0.75:shadowx=2:shadowy=2:x=30:y=40:enable='between(t\\,${introDurSecs.fmtUS(1)}\\,${wmEnd.fmtUS(1)})'[wm]"
             fp+="[wm]format=yuv420p[vout]"; vMap="[vout]"
         }
         if (bgmFile != null) {
             fp+="[0:a]volume=0.85[tts]"
-            fp+="[1:a]aformat=sample_rates=44100:channel_layouts=stereo," +
-                "volume=volume='if(lt(t\\,13.0)\\,0.40\\,if(lt(t\\,15.0)\\,0.40+(t-13.0)*(-0.175)\\,0.05))':eval=frame[bgm]"
-            fp+="[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"
-            aMap="[aout]"
+            fp+="[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=volume='if(lt(t\\,13.0)\\,0.40\\,if(lt(t\\,15.0)\\,0.40+(t-13.0)*(-0.175)\\,0.05))':eval=frame[bgm]"
+            fp+="[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"; aMap="[aout]"
         }
         val cmd=buildString{
             append("-y -f concat -safe 0 -i ${listFile.absolutePath} ")
             if(bgmFile!=null)append("-stream_loop -1 -i ${bgmFile.absolutePath} ")
             if(fp.isNotEmpty())append("-filter_complex \"${fp.joinToString(";")}\" ")
-            append("-map \"$vMap\" -map \"$aMap\" ")
-            append("${vc("5M", 20)} -c:a aac -b:a 192k ")
-            append("-movflags +faststart ${outputFile.absolutePath}")
+            append("-map \"$vMap\" -map \"$aMap\" ${vc("5M",20)} -c:a aac -b:a 192k -movflags +faststart ${outputFile.absolutePath}")
         }
         val rc=com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
-        if ((!outputFile.exists()||outputFile.length()==0L) && useHwEnc) {
-            useHwEnc=false
-            val fbCmd=cmd.replace("-c:v h264_mediacodec -b:v 5M","-c:v libx264 -preset fast -crf 20")
-            com.arthenica.ffmpegkit.FFmpegKit.execute(fbCmd)
+        if((!outputFile.exists()||outputFile.length()==0L)&&useHwEnc){
+            useHwEnc=false; com.arthenica.ffmpegkit.FFmpegKit.execute(cmd.replace("-c:v h264_mediacodec -b:v 5M","-c:v libx264 -preset fast -crf 20"))
         }
         listFile.delete()
         subclipFiles.filter{it.name.endsWith("_body.mp4")}.forEach{it.delete()}
         runCatching{sceneTempDir.listFiles()?.forEach{it.delete()}}
         return@withContext if(outputFile.exists()&&outputFile.length()>0){
             onProgress("✅ 완성: ${outputFile.name} (${outputFile.length()/1024/1024}MB)"); outputFile
-        }else{
-            Log.e(TAG,"concat 실패: ${rc.logsAsString.takeLast(400)}"); onProgress("❌ concat 실패"); null
-        }
+        }else{ Log.e(TAG,"concat 실패: ${rc.logsAsString.takeLast(400)}"); onProgress("❌ concat 실패"); null }
     }
 
     fun release() {
@@ -626,17 +521,16 @@ class AsterionRenderEngine(
     fun getMediaDurationSecs(file: File): Float {
         if (!file.exists()) return 0f
         return try {
-            val mmr=android.media.MediaMetadataRetriever()
-            mmr.setDataSource(file.absolutePath)
+            val mmr=android.media.MediaMetadataRetriever(); mmr.setDataSource(file.absolutePath)
             val ms=mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?:0L
             mmr.release(); ms/1000.0f
-        }catch(e:Exception){Log.w(TAG,"재생길이 [${file.name}]: ${e.message}");0f}
+        }catch(e:Exception){Log.w(TAG,"duration [${file.name}]: ${e.message}");0f}
     }
     private fun synthesizeChunked(text:String,speakerId:Int,speed:Float,outputFile:File,numSteps:Int,sceneId:String,onProgress:(String)->Unit){
         ttsEngine.synthesize(text,speakerId,speed,outputFile,numSteps)
     }
     private fun calcCardKeyframes(pattern:AnimationPattern,tTotal:Float):CardKeyframes{
-        val tOut=(tTotal-1f).coerceAtLeast(1.1f);val cx=VIDEO_W/2f-430f;val cy=VIDEO_H/2f-170f
+        val tOut=(tTotal-1f).coerceAtLeast(1.1f); val cx=VIDEO_W/2f-430f; val cy=VIDEO_H/2f-170f
         return when(pattern){
             AnimationPattern.A->CardKeyframes(-860f,VIDEO_H*.18f,VIDEO_W*.05f,VIDEO_H*.18f,CardOutType.TOP,1f,tOut,tTotal)
             AnimationPattern.B->CardKeyframes(VIDEO_W.toFloat(),VIDEO_H*.18f,VIDEO_W/2f-430f,VIDEO_H*.18f,CardOutType.BOTTOM,1f,tOut,tTotal)
@@ -649,10 +543,9 @@ class AsterionRenderEngine(
         }
     }
     private fun escapeDrawtext(text:String):String=text.replace("\\","\\\\").replace("'","\\'").replace(":","\\:").replace(",","\\,")
-    private fun splitToLines(text: String, max: Int): List<String> =
-        text.replace("\\N", "\n").replace("\\n", "\n").split("\n")
-            .flatMap { line -> if (line.length > max) line.chunked(max) else listOf(line) }
-            .filter { line -> line.isNotBlank() }
+    private fun splitToLines(text:String,max:Int):List<String>=
+        text.replace("\\N","\n").replace("\\n","\n").split("\n")
+            .flatMap{if(it.length>max)it.chunked(max) else listOf(it)}.filter{it.isNotBlank()}
 }
 
 data class CardKeyframes(
