@@ -14,36 +14,39 @@ import java.io.File
 /**
  * Android Canvas → 1920×1080 ARGB PNG 카드 오버레이 (ASTERION 표준 카드 디자인)
  *
- * 배경: 마젠타(0xFF00FF) — Step4 colorkey=0xFF00FF 에서 투명화
- * 카드: holdX/holdY 위치에 860×340 그라디언트 박스 + 중앙정렬 텍스트
- *
  * [v3.29.1 수정]
- *   ■ 2단계 줄바꿈 수정:
- *     Stage 1) 리터럴 \n 정규화 — 시트에 저장된 텍스트는 백슬래시+n(2글자) 관례.
- *              splitToLines()와 동일한 변환: replace("\\N","\n") + replace("\\n","\n")
- *     Stage 2) StaticLayout 강제 라우팅 — drawText()는 실제 \n도 무시하므로
- *              '\n' in text 이면 무조건 StaticLayout 경로
+ *   ■ normalizeCardText() 도입:
+ *       \N / \n (2글자 리터럴) → 실제 \n (0x0A)
+ *       \r\n → \n
+ *       splitToLines() 증명된 ASTERION \n 리터럴 관례와 동일한 변환
+ *   ■ 4개 필드 전체 (main / sub / desc / highlight) 에 적용
+ *   ■ drawField() 헬퍼: \n 있으면 measureText 결과와 무관하게 StaticLayout 강제
  *   ■ maxLines 2→3
- *   ■ 디버그 로그: 정규화 전/후 비교 출력
+ *   ■ 정규화 전/후 비교 로그 (↵ = 실제 개행)
  */
 object CardRenderer {
 
-    private const val TAG     = "CardRenderer"
-    const  val VW             = 1920
-    const  val VH             = 1080
-    const  val CARD_W         = 860
-    const  val CARD_H         = 340
+    private const val TAG          = "CardRenderer"
+    const  val VW                  = 1920
+    const  val VH                  = 1080
+    const  val CARD_W              = 860
+    const  val CARD_H              = 340
     private const val CARD_X_DEFAULT = (VW - CARD_W) / 2   // 530
     private const val CARD_Y_DEFAULT = 680
-    private const val PAD_H   = 40
-    private const val PAD_V   = 28
+    private const val PAD_H        = 40
+    private const val PAD_V        = 28
 
     /**
-     * splitToLines()와 동일한 관례: 리터럴 \N / \n → 실제 개행문자
-     * 이미 실제 \n(Alt+Enter 셀)이면 replace가 영향 없으므로 양쪽 모두 안전.
+     * ASTERION \n 리터럴 관례 정규화.
+     * splitToLines() 와 동일한 변환을 CardRenderer도 적용.
+     *   "\\ N" / "\\ n" (2글자) → \n (0x0A)
+     *   \r\n                          → \n
+     * 이미 실제 \n이 저장된 셀은 replace가 해당 없으므로 모두 안전.
      */
-    private fun normalizeNewlines(text: String): String =
-        text.replace("\\N", "\n").replace("\\n", "\n")
+    private fun normalizeCardText(raw: String): String =
+        raw.replace("\r\n", "\n")
+           .replace("\\N",  "\n")
+           .replace("\\n",  "\n")
 
     fun render(
         row      : ScriptDataRow,
@@ -51,6 +54,7 @@ object CardRenderer {
         cardX    : Int = CARD_X_DEFAULT,
         cardY    : Int = CARD_Y_DEFAULT
     ): Boolean {
+
         val style = CardStyle.from(row.cardStyle.trim())
         val gradientKey = row.gradientPreset.trim()
             .takeIf { it.isNotBlank() && it.uppercase() != "DEFAULT" }
@@ -59,21 +63,25 @@ object CardRenderer {
 
         if (style == CardStyle.MINIMAL || style == CardStyle.NONE) return false
 
-        // Stage 1: 리터럴 \n 정규화
+        // 정규화 전 raw 값 (before)
+        val rawHl   = row.highlightWord.trim()
         val rawMain = row.cardMain.trim()
         val rawSub  = row.cardSub.trim()
         val rawDesc = row.cardDesc.trim()
-        val pm = normalizeNewlines(rawMain)
-        val ps = normalizeNewlines(rawSub)
-        val pd = normalizeNewlines(rawDesc)
 
-        if (pm.isBlank() && ps.isBlank() && pd.isBlank()) return false
+        // Stage 1: 리터럴 \n → 실제 \n 정규화 (4개 필드 전체)
+        val hl = normalizeCardText(rawHl)
+        val pm = normalizeCardText(rawMain)
+        val ps = normalizeCardText(rawSub)
+        val pd = normalizeCardText(rawDesc)
 
-        // 정규화 전/후 비교 로그 — 리터럴 \n이 실제 개행으로 바뀌었는지 확인
-        Log.d(TAG, "[정규화 전] main=${rawMain.replace("\n","↵")} | sub=${rawSub.replace("\n","↵")} | desc=${rawDesc.replace("\n","↵")}")
-        Log.d(TAG, "[정규화 후] main=${pm.replace("\n","↵")} | sub=${ps.replace("\n","↵")} | desc=${pd.replace("\n","↵")}")
+        if (pm.isBlank() && ps.isBlank() && pd.isBlank() && hl.isBlank()) return false
 
-        // 알파 선처리 (pre-multiply on black)
+        // 정규화 전/후 비교 로그 (↵ = 실제 개행문자)
+        Log.d(TAG, "[정규화 전] hl=${rawHl.replace("\n","↵")} main=${rawMain.replace("\n","↵")} sub=${rawSub.replace("\n","↵")} desc=${rawDesc.replace("\n","↵")}")
+        Log.d(TAG, "[정규화 후] hl=${hl.replace("\n","↵")} main=${pm.replace("\n","↵")} sub=${ps.replace("\n","↵")} desc=${pd.replace("\n","↵")}")
+
+        // 알파 선처리
         val a    = style.alpha
         val topR = (gradient.topColor shr 16) and 0xFF
         val topG = (gradient.topColor shr  8) and 0xFF
@@ -84,7 +92,7 @@ object CardRenderer {
         val effTop = Color.rgb(topR, topG, topB)
         val effBot = Color.rgb(botR, botG, botB)
 
-        Log.d(TAG, "[✓ 알파선처리] style=${style.name} alpha=$a cardX=$cardX cardY=$cardY")
+        Log.d(TAG, "style=${style.name} alpha=$a top=(${(topR*a).toInt()},${(topG*a).toInt()},${(topB*a).toInt()}) cardX=$cardX cardY=$cardY")
 
         val bitmap = Bitmap.createBitmap(VW, VH, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -106,36 +114,25 @@ object CardRenderer {
         val maxW       = CARD_W - PAD_H * 2   // 780px
         var curY       = cardY + PAD_V
 
-        // highlightWord — 금색 레이블 (개행 없는 단어 필드, drawText 유지)
-        if (row.highlightWord.isNotBlank()) {
-            val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#FFD700"); textSize = 28f
-                typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.06f
-                textAlign = Paint.Align.CENTER
-            }
-            canvas.drawText("◆ ${row.highlightWord}", boxCenterX, curY + tp.textSize, tp)
-            curY += (tp.textSize * 1.6f).toInt()
-        }
-
         // ── 공통 렌더 헬퍼 ─────────────────────────────────────────────────────
-        // Stage 2: measureText <= maxW 라도 실제 \n 있으면 StaticLayout 강제
+        // Stage 2: measureText <= maxW 라도 \n 있으면 StaticLayout 강제
         fun drawField(
-            text     : String,
-            tp       : TextPaint,
-            maxLines : Int,
+            text       : String,
+            tp         : TextPaint,
+            maxLines   : Int,
             lineSpacing: Float,
-            gapBelow : Int
-        ): Int {   // 반환값: 소비한 높이 (gapBelow 포함)
+            gapBelow   : Int
+        ): Int {
             if (text.isBlank() || curY >= cardY + CARD_H - PAD_V) return 0
             return if (tp.measureText(text) <= maxW && '\n' !in text) {
-                // 한 줄 확실 + 개행 없음 → drawText (FFmpeg cx-tw/2 동일 수식)
+                // 한 줄 + 개행 없음 → drawText
                 canvas.drawText(text, boxCenterX, curY + tp.fontMetrics.let { -it.ascent }, tp)
-                val h = tp.fontMetrics.let { (-it.ascent + it.descent).toInt() } + gapBelow
-                h
+                tp.fontMetrics.let { (-it.ascent + it.descent).toInt() } + gapBelow
             } else {
-                // 개행 포함 또는 긴 텍스트 → StaticLayout
-                Log.d(TAG, "[StaticLayout] hasNewline=${'\n' in text} len=${text.length} maxLines=$maxLines")
-                val sl = StaticLayout.Builder.obtain(text, 0, text.length, tp, maxW)
+                // \n 포함 또는 긴 텍스트 → StaticLayout
+                Log.d(TAG, "[StaticLayout] hasNL=${'\n' in text} len=${text.length} maxLines=$maxLines")
+                val sl = StaticLayout.Builder
+                    .obtain(text, 0, text.length, tp, maxW)
                     .setAlignment(Layout.Alignment.ALIGN_CENTER)
                     .setLineSpacing(lineSpacing, 1.0f)
                     .setMaxLines(maxLines)
@@ -147,6 +144,18 @@ object CardRenderer {
                 canvas.restore()
                 sl.height + gapBelow
             }
+        }
+
+        // highlightWord — 금색 레이블 (\n 정규화 후 동일 노리로 렌더)
+        // "XRP\n2026" 등 미래 용례 대비를 위해 highlight도 drawField 적용
+        if (hl.isNotBlank() && curY < cardY + CARD_H - PAD_V) {
+            val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor("#FFD700"); textSize = 28f
+                typeface = Typeface.DEFAULT_BOLD; letterSpacing = 0.06f
+                textAlign = Paint.Align.CENTER
+            }
+            val displayHl = "◆ $hl"  // ◆ 프리픽스는 여기서 붙임
+            curY += drawField(displayHl, tp, maxLines = 2, lineSpacing = 2f, gapBelow = (tp.textSize * 0.6f).toInt())
         }
 
         // cardMain — 52px bold white
@@ -183,7 +192,7 @@ object CardRenderer {
             outputPng.outputStream().buffered().use {
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
             }
-            Log.d(TAG, "[✓ PNG저장] ${outputPng.name} (${outputPng.length()/1024}KB)")
+            Log.d(TAG, "[✓ PNG저장] ${outputPng.name} (${outputPng.length() / 1024}KB)")
             true
         } catch (e: Exception) {
             Log.e(TAG, "PNG 저장 실패: ${e.message}"); false
