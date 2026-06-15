@@ -18,23 +18,13 @@ import java.io.File
  * 카드: holdX/holdY 위치에 860×340 그라디언트 박스 + 중앙정렬 텍스트
  *
  * [v3.29.1 수정]
- *   ■ drawText()는 '\n'을 무시함 → 측정폭이 maxW 이하라도 '\n' 포함 시 StaticLayout 경로로 강제 라우팅
- *   ■ maxLines 2→3 (main/sub/desc 모두) — 명시적 줄바꿈 3행까지 허용
- *
- * buildCardVf 정확 매칭:
- *
- *  [1] 알파 선처리 (pre-multiply on black):
- *      원본 drawbox color=0xRRGGBB@alpha 효과
- *      = gradient_RGB * style.alpha  (검은배경=0 이므로)
- *      → 완전 불투명으로 그려서 마젠타 혼합 방지
- *
- *  [2] 중앙정렬:
- *      single-line → measureText 기반 cx - tw/2  (FFmpeg 동일 수식)
- *      multi-line  → StaticLayout ALIGN_CENTER (center = cardX+430 동일)
- *
- *  [3] 카드 크기/위치: 860×340, holdX/holdY (AsterionRenderEngine 에서 전달)
- *  [4] 폰트: main=52px bold, sub=38px, desc=32px
- *  [5] 그림자: argb(180,64,64,64) dx=2 dy=2
+ *   ■ 2단계 줄바꿈 수정:
+ *     Stage 1) 리터럴 \n 정규화 — 시트에 저장된 텍스트는 백슬래시+n(2글자) 관례.
+ *              splitToLines()와 동일한 변환: replace("\\N","\n") + replace("\\n","\n")
+ *     Stage 2) StaticLayout 강제 라우팅 — drawText()는 실제 \n도 무시하므로
+ *              '\n' in text 이면 무조건 StaticLayout 경로
+ *   ■ maxLines 2→3
+ *   ■ 디버그 로그: 정규화 전/후 비교 출력
  */
 object CardRenderer {
 
@@ -45,8 +35,15 @@ object CardRenderer {
     const  val CARD_H         = 340
     private const val CARD_X_DEFAULT = (VW - CARD_W) / 2   // 530
     private const val CARD_Y_DEFAULT = 680
-    private const val PAD_H   = 40    // 카드 내부 좌우 패딩
-    private const val PAD_V   = 28    // 카드 내부 상단 패딩
+    private const val PAD_H   = 40
+    private const val PAD_V   = 28
+
+    /**
+     * splitToLines()와 동일한 관례: 리터럴 \N / \n → 실제 개행문자
+     * 이미 실제 \n(Alt+Enter 셀)이면 replace가 영향 없으므로 양쪽 모두 안전.
+     */
+    private fun normalizeNewlines(text: String): String =
+        text.replace("\\N", "\n").replace("\\n", "\n")
 
     fun render(
         row      : ScriptDataRow,
@@ -54,8 +51,7 @@ object CardRenderer {
         cardX    : Int = CARD_X_DEFAULT,
         cardY    : Int = CARD_Y_DEFAULT
     ): Boolean {
-        val style    = CardStyle.from(row.cardStyle.trim())
-        // gradientPreset=DEFAULT 또는 미설정 → cardStyle로 유추 (prepareScene 동일 로직)
+        val style = CardStyle.from(row.cardStyle.trim())
         val gradientKey = row.gradientPreset.trim()
             .takeIf { it.isNotBlank() && it.uppercase() != "DEFAULT" }
             ?: row.cardStyle.trim()
@@ -63,18 +59,21 @@ object CardRenderer {
 
         if (style == CardStyle.MINIMAL || style == CardStyle.NONE) return false
 
-        val pm = row.cardMain.trim()
-        val ps = row.cardSub.trim()
-        val pd = row.cardDesc.trim()
+        // Stage 1: 리터럴 \n 정규화
+        val rawMain = row.cardMain.trim()
+        val rawSub  = row.cardSub.trim()
+        val rawDesc = row.cardDesc.trim()
+        val pm = normalizeNewlines(rawMain)
+        val ps = normalizeNewlines(rawSub)
+        val pd = normalizeNewlines(rawDesc)
+
         if (pm.isBlank() && ps.isBlank() && pd.isBlank()) return false
 
-        // ── 디버그 로그: 줄바꿈 포함 여부 확인 ─────────────────────
-        Log.d(TAG, "[텍스트 진입] " +
-            "main=${pm.replace("\n","\\n")} " +
-            "sub=${ps.replace("\n","\\n")} " +
-            "desc=${pd.replace("\n","\\n")}")
+        // 정규화 전/후 비교 로그 — 리터럴 \n이 실제 개행으로 바뀌었는지 확인
+        Log.d(TAG, "[정규화 전] main=${rawMain.replace("\n","↵")} | sub=${rawSub.replace("\n","↵")} | desc=${rawDesc.replace("\n","↵")}")
+        Log.d(TAG, "[정규화 후] main=${pm.replace("\n","↵")} | sub=${ps.replace("\n","↵")} | desc=${pd.replace("\n","↵")}")
 
-        // ── [1] 알파 선처리 ───────────────────────────────────
+        // 알파 선처리 (pre-multiply on black)
         val a    = style.alpha
         val topR = (gradient.topColor shr 16) and 0xFF
         val topG = (gradient.topColor shr  8) and 0xFF
@@ -85,9 +84,7 @@ object CardRenderer {
         val effTop = Color.rgb(topR, topG, topB)
         val effBot = Color.rgb(botR, botG, botB)
 
-        Log.d(TAG, "[✓ 알파선처리] style=${style.name} alpha=$a " +
-            "top=(${topR},${topG},${topB})→eff=(${(topR*a).toInt()},${(topG*a).toInt()},${(topB*a).toInt()}) " +
-            "cardX=$cardX cardY=$cardY")
+        Log.d(TAG, "[✓ 알파선처리] style=${style.name} alpha=$a cardX=$cardX cardY=$cardY")
 
         val bitmap = Bitmap.createBitmap(VW, VH, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -95,7 +92,7 @@ object CardRenderer {
         // 마젠타 배경
         canvas.drawColor(Color.rgb(0xFF, 0x00, 0xFF))
 
-        // 카드 배경 (선처리된 효과색, 완전 불투명)
+        // 카드 배경 그라디언트
         val cL = cardX.toFloat()
         val cT = cardY.toFloat()
         val cR = (cardX + CARD_W).toFloat()
@@ -104,13 +101,12 @@ object CardRenderer {
             shader = LinearGradient(cL, cT, cL, cB, effTop, effBot, Shader.TileMode.CLAMP)
         })
 
-        // ── [2] 텍스트 ────────────────────────────────────────
-        val boxCenterX = cardX + CARD_W / 2f   // = cardX + 430
+        val boxCenterX = cardX + CARD_W / 2f
         val textLeft   = cardX + PAD_H
-        val maxW       = CARD_W - PAD_H * 2     // 780px
+        val maxW       = CARD_W - PAD_H * 2   // 780px
         var curY       = cardY + PAD_V
 
-        // highlightWord — 금색 레이블 (개행 없는 단어 필드이므로 drawText 유지)
+        // highlightWord — 금색 레이블 (개행 없는 단어 필드, drawText 유지)
         if (row.highlightWord.isNotBlank()) {
             val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.parseColor("#FFD700"); textSize = 28f
@@ -121,83 +117,72 @@ object CardRenderer {
             curY += (tp.textSize * 1.6f).toInt()
         }
 
+        // ── 공통 렌더 헬퍼 ─────────────────────────────────────────────────────
+        // Stage 2: measureText <= maxW 라도 실제 \n 있으면 StaticLayout 강제
+        fun drawField(
+            text     : String,
+            tp       : TextPaint,
+            maxLines : Int,
+            lineSpacing: Float,
+            gapBelow : Int
+        ): Int {   // 반환값: 소비한 높이 (gapBelow 포함)
+            if (text.isBlank() || curY >= cardY + CARD_H - PAD_V) return 0
+            return if (tp.measureText(text) <= maxW && '\n' !in text) {
+                // 한 줄 확실 + 개행 없음 → drawText (FFmpeg cx-tw/2 동일 수식)
+                canvas.drawText(text, boxCenterX, curY + tp.fontMetrics.let { -it.ascent }, tp)
+                val h = tp.fontMetrics.let { (-it.ascent + it.descent).toInt() } + gapBelow
+                h
+            } else {
+                // 개행 포함 또는 긴 텍스트 → StaticLayout
+                Log.d(TAG, "[StaticLayout] hasNewline=${'\n' in text} len=${text.length} maxLines=$maxLines")
+                val sl = StaticLayout.Builder.obtain(text, 0, text.length, tp, maxW)
+                    .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                    .setLineSpacing(lineSpacing, 1.0f)
+                    .setMaxLines(maxLines)
+                    .setEllipsize(TextUtils.TruncateAt.END)
+                    .build()
+                canvas.save()
+                canvas.translate(textLeft.toFloat(), curY.toFloat())
+                sl.draw(canvas)
+                canvas.restore()
+                sl.height + gapBelow
+            }
+        }
+
         // cardMain — 52px bold white
-        // [Fix v3.29.1] measureText는 \n을 폭 0으로 취급 → 짧은 텍스트도 \n 포함이면 StaticLayout 강제
         if (pm.isNotBlank() && curY < cardY + CARD_H - PAD_V) {
             val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.WHITE; textSize = 52f; typeface = Typeface.DEFAULT_BOLD
                 textAlign = Paint.Align.CENTER
                 setShadowLayer(5f, 2f, 2f, Color.argb(180, 64, 64, 64))
             }
-            if (tp.measureText(pm) <= maxW && '\n' !in pm) {
-                // \n 없고 한 줄에 들어오는 경우만 drawText (FFmpeg cx-tw/2 동일 수식)
-                canvas.drawText(pm, boxCenterX, curY + tp.fontMetrics.let { -it.ascent }, tp)
-                curY += tp.fontMetrics.let { (-it.ascent + it.descent).toInt() } + 12
-            } else {
-                // \n 포함 또는 긴 텍스트 → StaticLayout (maxLines=3)
-                Log.d(TAG, "[main→StaticLayout] hasNewline=${pm.contains('\n')} len=${pm.length}")
-                val sl = StaticLayout.Builder.obtain(pm, 0, pm.length, tp, maxW)
-                    .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                    .setLineSpacing(4f, 1.0f)
-                    .setMaxLines(3)
-                    .setEllipsize(TextUtils.TruncateAt.END)
-                    .build()
-                canvas.save(); canvas.translate(textLeft.toFloat(), curY.toFloat())
-                sl.draw(canvas); canvas.restore()
-                curY += sl.height + 12
-            }
+            curY += drawField(pm, tp, maxLines = 3, lineSpacing = 4f, gapBelow = 12)
         }
 
         // cardSub — 38px, 0xCCCCCC
-        // [Fix v3.29.1] 동일: \n 포함 시 StaticLayout 강제
         if (ps.isNotBlank() && curY < cardY + CARD_H - PAD_V) {
             val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.argb(220, 204, 204, 204); textSize = 38f
                 textAlign = Paint.Align.CENTER
                 setShadowLayer(4f, 2f, 2f, Color.argb(160, 64, 64, 64))
             }
-            if (tp.measureText(ps) <= maxW && '\n' !in ps) {
-                canvas.drawText(ps, boxCenterX, curY + tp.fontMetrics.let { -it.ascent }, tp)
-                curY += tp.fontMetrics.let { (-it.ascent + it.descent).toInt() } + 8
-            } else {
-                Log.d(TAG, "[sub→StaticLayout] hasNewline=${ps.contains('\n')} len=${ps.length}")
-                val sl = StaticLayout.Builder.obtain(ps, 0, ps.length, tp, maxW)
-                    .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                    .setLineSpacing(2f, 1.0f)
-                    .setMaxLines(3)
-                    .setEllipsize(TextUtils.TruncateAt.END)
-                    .build()
-                canvas.save(); canvas.translate(textLeft.toFloat(), curY.toFloat())
-                sl.draw(canvas); canvas.restore()
-                curY += sl.height + 8
-            }
+            curY += drawField(ps, tp, maxLines = 3, lineSpacing = 2f, gapBelow = 8)
         }
 
         // cardDesc — 32px, 0xAAAAAA
-        // [Fix v3.29.1] 동일: \n 포함 시 StaticLayout 강제
         if (pd.isNotBlank() && curY < cardY + CARD_H - PAD_V) {
             val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.argb(180, 170, 170, 170); textSize = 32f
                 textAlign = Paint.Align.CENTER
                 setShadowLayer(3f, 1f, 1f, Color.argb(140, 64, 64, 64))
             }
-            if (tp.measureText(pd) <= maxW && '\n' !in pd) {
-                canvas.drawText(pd, boxCenterX, curY + tp.fontMetrics.let { -it.ascent }, tp)
-            } else {
-                Log.d(TAG, "[desc→StaticLayout] hasNewline=${pd.contains('\n')} len=${pd.length}")
-                val sl = StaticLayout.Builder.obtain(pd, 0, pd.length, tp, maxW)
-                    .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                    .setLineSpacing(2f, 1.0f)
-                    .setMaxLines(3)
-                    .setEllipsize(TextUtils.TruncateAt.END)
-                    .build()
-                canvas.save(); canvas.translate(textLeft.toFloat(), curY.toFloat())
-                sl.draw(canvas); canvas.restore()
-            }
+            drawField(pd, tp, maxLines = 3, lineSpacing = 2f, gapBelow = 0)
         }
 
         return try {
-            outputPng.outputStream().buffered().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            outputPng.outputStream().buffered().use {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
             Log.d(TAG, "[✓ PNG저장] ${outputPng.name} (${outputPng.length()/1024}KB)")
             true
         } catch (e: Exception) {
