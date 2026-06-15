@@ -23,10 +23,10 @@ import java.util.Locale
 //   ■ BGV 씬별 개별 적용: 연속 동일 BGV 그룹화 → 세그먼트 병렬 인코딩 → concat
 //   ■ [Fix1] -pix_fmt yuv420p -g 30 코덱 정규화
 //   ■ [Fix2] duration 오차 단계 처리: 0.1~0.5s 경고 / ≥0.5s fatal
-//   ■ [Fix3] per-segment CPU fallback + 진단 로그 (returnCode + FFmpeg 로그)
-//   ■ [Fix3] GPU 실패 시 whole-session CPU 전환, 1.5s 대기 후 재시도
-//   ■ [ffprobe] concat 전 코덱/해상도/FPS 메타 검증
-//   ■ probeVideoMeta: return null 제거 (빌드 오류 해결)
+//   ■ [Fix3] per-segment CPU fallback + 진단 로그
+//   ■ [Fix4] encodeSeg 사전 검증: 파일 존재 + duration 유효성
+//   ■ [Fix4] 실패 시 FFmpeg 명령어 전체 + 전체 로그 2000자 출력
+//   ■ splitToLines: 명시적 람다 파라미터 (빌드 오류 해결)
 // [변경로그 v3.28]
 //   ■ 병렬 카드 인코딩: Semaphore(3) / GPU 우선 + libx264 폴백
 //   ■ CardRenderer effRGB 제거
@@ -108,7 +108,6 @@ class AsterionRenderEngine(
         .replace(Regex("[\\u2B00-\\u2BFF]"), "")
         .replace(Regex("  +"), " ").trim()
 
-    // Fix: expression body에서 return null 불가 → ?.let{} 사용
     private fun probeVideoMeta(file: File): Triple<String, String, String>? = try {
         val info = com.arthenica.ffmpegkit.FFprobeKit
             .getMediaInformation(file.absolutePath)?.mediaInformation
@@ -325,42 +324,51 @@ class AsterionRenderEngine(
                 onProgress("❌ BGV 실패"); bodyCardsFile.delete(); return@withContext null
             }
         } else {
-            // 다중 BGV — Fix3: per-segment fallback + 진단 로그
-            // GPU 실패 시: useHwEnc=false 전환 + 1.5s 대기 + 동일 세그먼트 CPU 재시도
-            // whole-session 재시도 제거: per-segment이 더 효율적 (24/25 성공 시 전체 충버리 )
+            // Fix4: encodeSeg 사전 검증(파일 존재 + duration) + 명령어 로그 + 2000자 FFmpeg 로그
             fun encodeSeg(idx: Int, bgvFile: File, segDur: Float): File? {
                 val hw = useHwEnc
                 val segFile = File(sceneTempDir, "bgv_seg_${idx}.mp4")
 
+                // 사전 검증 1: BGV 파일 존재
+                if (!bgvFile.exists()) {
+                    Log.e(TAG, "BGV[$idx] 파일 없음: ${bgvFile.absolutePath}")
+                    onProgress("  ❌ BGV[$idx] 파일 없음: ${bgvFile.name}")
+                    return null
+                }
+                // 사전 검증 2: duration 유효성
+                if (segDur < 0.5f) {
+                    Log.e(TAG, "BGV[$idx] duration 비정상: ${segDur.fmtUS(3)}s file=${bgvFile.name}")
+                    onProgress("  ❌ BGV[$idx] duration 비정상(${segDur.fmtUS(3)}s): ${bgvFile.name}")
+                    return null
+                }
+
                 fun runEnc(useHw: Boolean): Boolean {
                     segFile.delete()
                     val vc2 = if (useHw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
-                    val sess = com.arthenica.ffmpegkit.FFmpegKit.execute(
-                        "-y -stream_loop -1 -i ${bgvFile.absolutePath} " +
+                    val ffCmd = "-y -stream_loop -1 -i ${bgvFile.absolutePath} " +
                         "-an -vf $vfNorm -r 30 $vc2 $codecNorm " +
                         "-t ${segDur.fmtUS()} ${segFile.absolutePath}"
-                    )
+                    Log.d(TAG, "BGV[$idx] cmd: $ffCmd")
+                    val sess = com.arthenica.ffmpegkit.FFmpegKit.execute(ffCmd)
                     if (segFile.exists() && segFile.length() > 0L) return true
-                    // 실패 진단: returnCode + FFmpeg 로그 마지막 400자
+                    // 실패 진단: 명령어 + returnCode + FFmpeg 전체 로그 2000자
                     val rc = sess.returnCode?.value ?: -1
-                    val errSnip = sess.logsAsString?.takeLast(400) ?: "log unavailable"
-                    Log.e(TAG, "BGV[$idx] 실패 rc=$rc hw=$useHw dur=${segDur.fmtUS(1)}s:\n$errSnip")
-                    onProgress("  ❌ BGV[$idx] rc=$rc [${if(useHw)"GPU" else "CPU"}] ${segDur.fmtUS(1)}s")
+                    val errLog = sess.logsAsString?.takeLast(2000) ?: "log unavailable"
+                    Log.e(TAG, "BGV[$idx] 실패 rc=$rc hw=$useHw\nfile=${bgvFile.absolutePath}\ncmd=$ffCmd\n$errLog")
+                    onProgress("  ❌ BGV[$idx] rc=$rc [${if(useHw)"GPU" else "CPU"}] ${segDur.fmtUS(1)}s file=${bgvFile.name}")
                     return false
                 }
 
-                // 1차 시도
                 if (runEnc(hw)) {
                     onProgress("  BGV[$idx] ${bgvFile.name}: ${segFile.length()/1024}KB (${segDur.fmtUS(1)}s) [${if(hw)"GPU" else "CPU"}]")
                     return segFile
                 }
-                // CPU 시도도 실패 → 포기
                 if (!hw) return null
                 // GPU 실패 → 세션 CPU 전환 + 1.5s 대기 + 재시도
                 useHwEnc = false
                 try { Thread.sleep(1500) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
                 if (runEnc(false)) {
-                    onProgress("  ✅ BGV[$idx] CPU 재시도 성공 (세션 CPU 전환)")
+                    onProgress("  ✅ BGV[$idx] CPU 재시도 성공")
                     return segFile
                 }
                 return null
