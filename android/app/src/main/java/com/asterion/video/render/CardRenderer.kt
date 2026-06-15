@@ -17,6 +17,10 @@ import java.io.File
  * 배경: 마젠타(0xFF00FF) — Step4 colorkey=0xFF00FF 에서 투명화
  * 카드: holdX/holdY 위치에 860×340 그라디언트 박스 + 중앙정렬 텍스트
  *
+ * [v3.29.1 수정]
+ *   ■ drawText()는 '\n'을 무시함 → 측정폭이 maxW 이하라도 '\n' 포함 시 StaticLayout 경로로 강제 라우팅
+ *   ■ maxLines 2→3 (main/sub/desc 모두) — 명시적 줄바꿈 3행까지 허용
+ *
  * buildCardVf 정확 매칭:
  *
  *  [1] 알파 선처리 (pre-multiply on black):
@@ -64,10 +68,13 @@ object CardRenderer {
         val pd = row.cardDesc.trim()
         if (pm.isBlank() && ps.isBlank() && pd.isBlank()) return false
 
+        // ── 디버그 로그: 줄바꿈 포함 여부 확인 ─────────────────────
+        Log.d(TAG, "[텍스트 진입] " +
+            "main=${pm.replace("\n","\\n")} " +
+            "sub=${ps.replace("\n","\\n")} " +
+            "desc=${pd.replace("\n","\\n")}")
+
         // ── [1] 알파 선처리 ───────────────────────────────────
-        // 원본: drawbox color=0xRRGGBB@alpha → 검은배경 위에 alpha 합성
-        // 결과: R_eff = R * alpha + 0 * (1-alpha) = R * alpha
-        // 마젠타 배경과 혼합되는 문제 방지: 완전 불투명(alpha=255)으로 정확히 그림
         val a    = style.alpha
         val topR = (gradient.topColor shr 16) and 0xFF
         val topG = (gradient.topColor shr  8) and 0xFF
@@ -75,7 +82,6 @@ object CardRenderer {
         val botR = (gradient.bottomColor shr 16) and 0xFF
         val botG = (gradient.bottomColor shr  8) and 0xFF
         val botB =  gradient.bottomColor         and 0xFF
-        // effRGB 제거: 원본 그라디언트 색상 직접 사용 (alpha 곱은 색상 감산일 뿐)
         val effTop = Color.rgb(topR, topG, topB)
         val effBot = Color.rgb(botR, botG, botB)
 
@@ -99,14 +105,12 @@ object CardRenderer {
         })
 
         // ── [2] 텍스트 ────────────────────────────────────────
-        // boxCenterX = cardX + CARD_W/2 = cardX + 430
-        // FFmpeg: cx = holdX + 430, x = cx - tw/2  ⇔  drawText(text, boxCenterX, y, paint[CENTER])
         val boxCenterX = cardX + CARD_W / 2f   // = cardX + 430
         val textLeft   = cardX + PAD_H
         val maxW       = CARD_W - PAD_H * 2     // 780px
         var curY       = cardY + PAD_V
 
-        // highlightWord — 금색 레이블
+        // highlightWord — 금색 레이블 (개행 없는 단어 필드이므로 drawText 유지)
         if (row.highlightWord.isNotBlank()) {
             val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.parseColor("#FFD700"); textSize = 28f
@@ -118,60 +122,75 @@ object CardRenderer {
         }
 
         // cardMain — 52px bold white
+        // [Fix v3.29.1] measureText는 \n을 폭 0으로 취급 → 짧은 텍스트도 \n 포함이면 StaticLayout 강제
         if (pm.isNotBlank() && curY < cardY + CARD_H - PAD_V) {
             val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.WHITE; textSize = 52f; typeface = Typeface.DEFAULT_BOLD
                 textAlign = Paint.Align.CENTER
                 setShadowLayer(5f, 2f, 2f, Color.argb(180, 64, 64, 64))
             }
-            if (tp.measureText(pm) <= maxW) {
-                // single-line: FFmpeg cx-tw/2 동일 수식
+            if (tp.measureText(pm) <= maxW && '\n' !in pm) {
+                // \n 없고 한 줄에 들어오는 경우만 drawText (FFmpeg cx-tw/2 동일 수식)
                 canvas.drawText(pm, boxCenterX, curY + tp.fontMetrics.let { -it.ascent }, tp)
                 curY += tp.fontMetrics.let { (-it.ascent + it.descent).toInt() } + 12
             } else {
+                // \n 포함 또는 긴 텍스트 → StaticLayout (maxLines=3)
+                Log.d(TAG, "[main→StaticLayout] hasNewline=${pm.contains('\n')} len=${pm.length}")
                 val sl = StaticLayout.Builder.obtain(pm, 0, pm.length, tp, maxW)
                     .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                    .setLineSpacing(4f, 1.0f).setMaxLines(2)
-                    .setEllipsize(TextUtils.TruncateAt.END).build()
+                    .setLineSpacing(4f, 1.0f)
+                    .setMaxLines(3)
+                    .setEllipsize(TextUtils.TruncateAt.END)
+                    .build()
                 canvas.save(); canvas.translate(textLeft.toFloat(), curY.toFloat())
-                sl.draw(canvas); canvas.restore(); curY += sl.height + 12
+                sl.draw(canvas); canvas.restore()
+                curY += sl.height + 12
             }
         }
 
         // cardSub — 38px, 0xCCCCCC
+        // [Fix v3.29.1] 동일: \n 포함 시 StaticLayout 강제
         if (ps.isNotBlank() && curY < cardY + CARD_H - PAD_V) {
             val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.argb(220, 204, 204, 204); textSize = 38f
                 textAlign = Paint.Align.CENTER
                 setShadowLayer(4f, 2f, 2f, Color.argb(160, 64, 64, 64))
             }
-            if (tp.measureText(ps) <= maxW) {
+            if (tp.measureText(ps) <= maxW && '\n' !in ps) {
                 canvas.drawText(ps, boxCenterX, curY + tp.fontMetrics.let { -it.ascent }, tp)
                 curY += tp.fontMetrics.let { (-it.ascent + it.descent).toInt() } + 8
             } else {
+                Log.d(TAG, "[sub→StaticLayout] hasNewline=${ps.contains('\n')} len=${ps.length}")
                 val sl = StaticLayout.Builder.obtain(ps, 0, ps.length, tp, maxW)
                     .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                    .setLineSpacing(2f, 1.0f).setMaxLines(2)
-                    .setEllipsize(TextUtils.TruncateAt.END).build()
+                    .setLineSpacing(2f, 1.0f)
+                    .setMaxLines(3)
+                    .setEllipsize(TextUtils.TruncateAt.END)
+                    .build()
                 canvas.save(); canvas.translate(textLeft.toFloat(), curY.toFloat())
-                sl.draw(canvas); canvas.restore(); curY += sl.height + 8
+                sl.draw(canvas); canvas.restore()
+                curY += sl.height + 8
             }
         }
 
         // cardDesc — 32px, 0xAAAAAA
+        // [Fix v3.29.1] 동일: \n 포함 시 StaticLayout 강제
         if (pd.isNotBlank() && curY < cardY + CARD_H - PAD_V) {
             val tp = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.argb(180, 170, 170, 170); textSize = 32f
                 textAlign = Paint.Align.CENTER
                 setShadowLayer(3f, 1f, 1f, Color.argb(140, 64, 64, 64))
             }
-            if (tp.measureText(pd) <= maxW) {
+            if (tp.measureText(pd) <= maxW && '\n' !in pd) {
                 canvas.drawText(pd, boxCenterX, curY + tp.fontMetrics.let { -it.ascent }, tp)
             } else {
+                Log.d(TAG, "[desc→StaticLayout] hasNewline=${pd.contains('\n')} len=${pd.length}")
                 val sl = StaticLayout.Builder.obtain(pd, 0, pd.length, tp, maxW)
                     .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                    .setLineSpacing(2f, 1.0f).setMaxLines(2)
-                    .setEllipsize(TextUtils.TruncateAt.END).build()
+                    .setLineSpacing(2f, 1.0f)
+                    .setMaxLines(3)
+                    .setEllipsize(TextUtils.TruncateAt.END)
+                    .build()
                 canvas.save(); canvas.translate(textLeft.toFloat(), curY.toFloat())
                 sl.draw(canvas); canvas.restore()
             }
