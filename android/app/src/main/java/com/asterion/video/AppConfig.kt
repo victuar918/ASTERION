@@ -51,12 +51,21 @@ object AppConfig {
         listOf(BGV_DIR, BGM_DIR, OUTPUT_DIR, TEMP_SCENES_DIR).forEach { it.mkdirs() }
     }
 
-    fun resolveBgv(bgFileName: String): File {
+    fun resolveBgv(bgFileName: String): File = resolveBgvChecked(bgFileName).first
+
+    /**
+     * [Fix6] resolveBgv()와 동일하지만 fallback 발생 여부를 함께 반환.
+     * 호출측(prepareScene)에서 onProgress로 가시화 → "BG_File='F' → fallback" 같은
+     * 시트 데이터 오류를 Logcat이 아니라 진행 로그에서 즉시 확인 가능하게 함.
+     * (VS_XRP_20260622에서 BG_File/Animation 값이 뒤바뀌어 74개 행이 전부
+     *  조용히 DEFAULT_BGV로 합쳐진 사고의 재발 방지)
+     */
+    fun resolveBgvChecked(bgFileName: String): Pair<File, Boolean> {
         val name = bgFileName.split("|").firstOrNull()?.trim() ?: DEFAULT_BGV
         val file = File(BGV_DIR, name)
-        return if (file.exists()) file else {
+        return if (file.exists()) file to false else {
             android.util.Log.w("AppConfig", "BGV 없음: $name → fallback 사용")
-            File(BGV_DIR, DEFAULT_BGV)
+            File(BGV_DIR, DEFAULT_BGV) to true
         }
     }
 

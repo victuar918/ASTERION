@@ -17,8 +17,14 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.29
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.29.1
 //
+// [변경로그 v3.29.1]
+//   ■ [Fix6] resolveBgv() fallback 발생 시 onProgress로 즉시 가시화 + 누적 카운터
+//          - VS_XRP_20260622에서 BG_File/Animation 값이 뒤바뀌어("F","G" 등 letter code가
+//            BG_File에 잘못 들어감) 74개 행 전부가 조용히 DEFAULT_BGV로 fallback,
+//            거대한 단일 BGV 세그먼트로 합쳐진 사고 재발 방지
+//          - 이전: Log.w()만 찍혀 Logcat에만 보이고 진행로그(onProgress)에는 안 보였음
 // [변경로그 v3.29]
 //   ■ BGV 씬별 개별 적용: 연속 동일 BGV 그룹화 → 세그먼트 병렬 인코딩 → concat
 //   ■ [Fix5] BGV 그룹화 시 BUFFER/빈BG_File 행 안정 처리
@@ -64,6 +70,7 @@ class AsterionRenderEngine(
     private val subclipFiles          = mutableListOf<File>()
     private var totalDurationSecs     = 0f
     var actualIntroDurationSecs: Float = 21f
+    private var bgvFallbackCount      = 0
 
     @Volatile private var useHwEnc: Boolean = android.os.Build.VERSION.SDK_INT >= 21
 
@@ -247,7 +254,11 @@ class AsterionRenderEngine(
             val wavDuration=if(ttsWavFile.exists()&&ttsWavFile.length()>1024L) measureDuration(ttsWavFile,sceneId,onProgress)
                            else 3.0f.also{if(hasTts)onProgress("[$sceneId] ⚠️ WAV실패")}
             onProgress("[$sceneId] WAV: ${ttsWavFile.length()/1024}KB ${wavDuration.fmtUS(1)}s")
-            val bgFile=AppConfig.resolveBgv(row.bgFileName)
+            val (bgFile, isBgvFallback) = AppConfig.resolveBgvChecked(row.bgFileName)
+            if (isBgvFallback) {
+                bgvFallbackCount++
+                onProgress("  ⚠️ [$sceneId] BG_File='${row.bgFileName}' 해석 실패 → DEFAULT_BGV fallback (시트 데이터 확인 필요)")
+            }
             val pattern=AnimationPattern.from(row.animation)
             val keyframes=calcCardKeyframes(pattern,wavDuration)
             ScenePrep(
@@ -325,6 +336,9 @@ class AsterionRenderEngine(
             }
         }
         onProgress("📹 BGV ${bgvSegments.size}세그먼트: ${bgvSegments.joinToString { "${it.first.name}(${it.second.fmtUS(1)}s)" }}")
+        if (bgvFallbackCount > 0) {
+            onProgress("⚠️⚠️ BGV fallback 발생: ${bgvFallbackCount}건 / ${preps.size}씬 — BG_File 시트 값 확인 필요 (잘못된 값은 모두 DEFAULT_BGV로 묶임)")
+        }
 
         val bgvBodyFile = File(sceneTempDir, "bgv_body.mp4")
 
@@ -525,7 +539,7 @@ class AsterionRenderEngine(
     }
 
     fun release() {
-        subclipFiles.clear(); totalDurationSecs=0f; actualIntroDurationSecs=21f
+        subclipFiles.clear(); totalDurationSecs=0f; actualIntroDurationSecs=21f; bgvFallbackCount=0
         runCatching{sceneTempDir.listFiles()?.forEach{it.delete()}}
     }
 
