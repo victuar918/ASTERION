@@ -17,22 +17,24 @@ import java.io.File
 import java.util.Locale
 
 // =================================================================
-// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.29.1
+// ASTERION 영상 자동화 — 씬 렌더링 엔진 v3.30
 //
+// [변경로그 v3.30]
+//   ■ BG_Effect 구현: 시트 M열(BG_Effect) 효과 코드를 BGV 세그먼트별로 적용
+//        - VIGNETTE:x    → 가장자리 어둡게 (시선 집중)
+//        - EDGE_GLOW:x   → 윤곽 선명/발광 느낌
+//        - MOTION_BLUR:x → 배경 부드럽게 (가벼운 가우시안 블러, 모바일 효율 우선)
+//        - 그룹화 키를 (BGV파일 + 효과)로 변경 → 같은 파일이라도 효과 다르면 분리
+//        - 효과 없음(NONE/빈값)은 기존과 100% 동일 동작 → 시트 호환성 보장
+//   ■ 메타불일치 경고를 codec/해상도만 비교하도록 수정 (프레임레이트 문자열 오탐 제거)
 // [변경로그 v3.29.1]
 //   ■ [Fix6] resolveBgv() fallback 발생 시 onProgress로 즉시 가시화 + 누적 카운터
-//          - VS_XRP_20260622에서 BG_File/Animation 값이 뒤바뀌어("F","G" 등 letter code가
-//            BG_File에 잘못 들어감) 74개 행 전부가 조용히 DEFAULT_BGV로 fallback,
-//            거대한 단일 BGV 세그먼트로 합쳐진 사고 재발 방지
-//          - 이전: Log.w()만 찍혀 Logcat에만 보이고 진행로그(onProgress)에는 안 보였음
+//          - BG_File에 letter code가 잘못 들어가 전 행이 DEFAULT_BGV로 묶이는 사고 가시화
 // [변경로그 v3.29]
 //   ■ BGV 씬별 개별 적용: 연속 동일 BGV 그룹화 → 세그먼트 병렬 인코딩 → concat
-//   ■ [Fix5] BGV 그룹화 시 BUFFER/빈BG_File 행 안정 처리
-//          - BG_File 빈문자열 또는 디렉토리일 경우 이전 유효 BGV 재사용
-//          - TPL-BUF 행의 wavDuration이 이전 BGV 세그먼트에 병합되어 body_cards 일치 보장
+//   ■ [Fix5] BGV 그룹화 시 BUFFER/빈BG_File 행 안정 처리 (이전 유효 BGV 재사용)
 //   ■ [Fix4] isDirectory 체크 + absolutePath 전체 출력
-// [변경로그 v3.28]
-//   ■ 병렬 카드 인코딩: Semaphore(3) / GPU 우선 + libx264 폴백
+// [변경로그 v3.28] 병렬 카드 인코딩: Semaphore(3) / GPU 우선 + libx264 폴백
 // [변경로그 v3.27] assembleBody 영상 재설계
 // =================================================================
 
@@ -118,6 +120,28 @@ class AsterionRenderEngine(
         val vs = info?.streams?.firstOrNull { it.type == "video" }
         vs?.let { Triple(it.codec ?: "?", "${it.width ?: 0}x${it.height ?: 0}", it.averageFrameRate ?: "?") }
     } catch (_: Exception) { null }
+
+    // v3.30: BG_Effect — 시트 M열 효과 코드 → FFmpeg 필터 문자열 (없으면 빈 문자열)
+    private fun parseBgEffect(raw: String?): String {
+        val s = raw?.trim().orEmpty()
+        if (s.isBlank() || s.equals("NONE", ignoreCase = true)) return ""
+        val parts = s.split(":")
+        val name  = parts[0].trim().uppercase(Locale.US)
+        val mag   = parts.getOrNull(1)?.trim()?.toFloatOrNull()?.coerceIn(0f, 1f) ?: 0.5f
+        return when (name) {
+            "VIGNETTE"    -> { val ang = Math.PI / 6.0 + mag * (Math.PI / 6.0); ",vignette=angle=${String.format(Locale.US, "%.4f", ang)}" }
+            "EDGE_GLOW"   -> ",unsharp=5:5:${(mag * 2f).fmtUS(2)}:5:5:0.0"
+            "MOTION_BLUR" -> ",gblur=sigma=${(mag * 5f).coerceAtLeast(0.5f).fmtUS(2)}"
+            else          -> ""
+        }
+    }
+
+    // v3.30: 세그먼트별 BGV 비디오 필터(scale/pad + 효과) 빌더
+    private fun buildBgvVf(effectCode: String?): String {
+        val base = "scale=${VIDEO_W}:${VIDEO_H}:force_original_aspect_ratio=decrease," +
+            "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
+        return "$base${parseBgEffect(effectCode)},format=yuv420p"
+    }
 
     private fun buildCardVf(prep: ScenePrep): String? {
         if (prep.cardStyle == CardStyle.NONE || prep.cardStyle == CardStyle.MINIMAL) return null
@@ -244,7 +268,7 @@ class AsterionRenderEngine(
             val wavCache=cacheDir?.let{File(it,"${sceneId}.wav")}
             val useCache=wavCache!=null&&wavCache.exists()&&wavCache.length()>1024L
             val ttsWavFile: File
-            if(useCache){ttsWavFile=wavCache!!; onProgress("[$sceneId] WAV 쾐시")}
+            if(useCache){ttsWavFile=wavCache!!; onProgress("[$sceneId] WAV 캐시")}
             else{
                 ttsWavFile=File(sceneTempDir,"${sceneId}_tts.wav")
                 if(hasTts){ val cfg=voiceConfig.forSpeaker(row.speaker); onProgress("[$sceneId] TTS: ${cfg.label}(${cfg.sid})"); synthesizeChunked(row.script,cfg.sid,cfg.speed,ttsWavFile,cfg.numSteps,sceneId,onProgress) }
@@ -252,7 +276,7 @@ class AsterionRenderEngine(
                 if(wavCache!=null&&ttsWavFile.exists()&&ttsWavFile.length()>1024L) try{ttsWavFile.copyTo(wavCache,overwrite=true)}catch(_:Exception){}
             }
             val wavDuration=if(ttsWavFile.exists()&&ttsWavFile.length()>1024L) measureDuration(ttsWavFile,sceneId,onProgress)
-                           else 3.0f.also{if(hasTts)onProgress("[$sceneId] ⚠️ WAV실패")}
+                           else 3.0f.also{if(hasTts)onProgress("[$sceneId] ⚠️ WAV 실패")}
             onProgress("[$sceneId] WAV: ${ttsWavFile.length()/1024}KB ${wavDuration.fmtUS(1)}s")
             val (bgFile, isBgvFallback) = AppConfig.resolveBgvChecked(row.bgFileName)
             if (isBgvFallback) {
@@ -276,11 +300,11 @@ class AsterionRenderEngine(
         outputName : String,
         onProgress : (String) -> Unit = {}
     ): File? = withContext(Dispatchers.IO) {
-        if (preps.isEmpty()) { onProgress("⚠️ 씨 없음"); return@withContext null }
+        if (preps.isEmpty()) { onProgress("⚠️ 씬 없음"); return@withContext null }
         sceneTempDir.mkdirs()
 
-        // ─ Step 1: 씨별 카드+WAV 인코딩 ───
-        onProgress("🂳 인코딩 (${preps.size}새) [${if(useHwEnc)"GPU" else "CPU"}]...")
+        // ─ Step 1: 씬별 카드+WAV 인코딩 ───
+        onProgress("🎬 인코딩 (${preps.size}씬) [${if(useHwEnc)"GPU" else "CPU"}]...")
         val cardSemaphore = Semaphore(3)
         val cardFileResults: List<File?> = coroutineScope {
             preps.map { prep -> async(Dispatchers.IO) { cardSemaphore.withPermit { encodeOneCard(prep, onProgress) } } }.awaitAll()
@@ -289,7 +313,7 @@ class AsterionRenderEngine(
         if (cardFiles.isEmpty()) { onProgress("❌ 카드 없음"); return@withContext null }
 
         // ─ Step 2: 카드 concat → body_cards.mp4 ───
-        onProgress("🔗 카드 concat (${cardFiles.size}새)...")
+        onProgress("🔗 카드 concat (${cardFiles.size}개)...")
         val cardList = File(sceneTempDir, "card_list.txt")
         cardList.writeText(cardFiles.joinToString("\n") { "file '${it.absolutePath}'" })
         val bodyCardsFile = File(sceneTempDir, "body_cards.mp4")
@@ -302,18 +326,17 @@ class AsterionRenderEngine(
         onProgress("✅ body_cards: ${bodyCardsFile.length()/1024/1024}MB, ${actualBodyDur.fmtUS(1)}s")
 
         // ─ Step 3: BGV body (씬별 세그먼트) ───
+        // v3.30: 그룹화 키 = (BGV파일 + BG_Effect). 같은 파일이라도 효과가 다르면 분리.
         onProgress("📹 BGV 세그먼트 그룹화...")
-        val vfNorm    = "scale=${VIDEO_W}:${VIDEO_H}:force_original_aspect_ratio=decrease," +
-            "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p"
         val codecNorm = "-pix_fmt yuv420p -g 30"
 
-        // Fix5: BGV 그룹화 시 BUFFER/빈BG_File 행 안정 처리
-        // BG_File이 비어있거나 디렉토리일 경우 이전 유효 BGV를 재사용→ wavDuration 포함
-        // 이를 통해 body_cards duration과 bgv_body duration 일치 보장
-        val bgvSegments = mutableListOf<Pair<File, Float>>()
+        // Fix5: BGV 그룹화 시 BUFFER/빈BG_File 행 안정 처리 (이전 유효 BGV 재사용)
+        // v3.30: 세그먼트 = Triple(파일, 효과코드, 길이)
+        val bgvSegments = mutableListOf<Triple<File, String, Float>>()
         var lastValidBgv: File? = null
         for (prep in preps) {
             val bgvFile = prep.bgFile
+            val fx      = prep.row.bgEffect.trim().ifBlank { "NONE" }
             val isValid = bgvFile.exists() && !bgvFile.isDirectory
             val effectiveBgv = if (isValid) {
                 lastValidBgv = bgvFile
@@ -321,21 +344,21 @@ class AsterionRenderEngine(
             } else {
                 // BUFFER 또는 빈 BG_File: 이전 유효 BGV 재사용
                 if (lastValidBgv == null) {
-                    Log.w(TAG, "BGV 유효하지 않은 prep 건너맜 (lastValid눈림): ${bgvFile.absolutePath}")
-                    continue  // 첫 단락에 유효한 BGV가 아직 없는 경우만 skip
+                    Log.w(TAG, "BGV 유효하지 않은 prep 건너뜀 (lastValid 없음): ${bgvFile.absolutePath}")
+                    continue  // 첫 구간에 유효한 BGV가 아직 없는 경우만 skip
                 }
                 Log.d(TAG, "BGV BUFFER/빈BG: ${bgvFile.name} → lastValid=${lastValidBgv!!.name}")
                 onProgress("  🔄 BGV 결측(${bgvFile.name}) → 이전BGV 재사용: ${lastValidBgv!!.name}")
                 lastValidBgv!!
             }
             val last = bgvSegments.lastOrNull()
-            if (last != null && last.first.absolutePath == effectiveBgv.absolutePath) {
-                bgvSegments[bgvSegments.lastIndex] = Pair(last.first, last.second + prep.wavDuration)
+            if (last != null && last.first.absolutePath == effectiveBgv.absolutePath && last.second == fx) {
+                bgvSegments[bgvSegments.lastIndex] = Triple(last.first, last.second, last.third + prep.wavDuration)
             } else {
-                bgvSegments.add(Pair(effectiveBgv, prep.wavDuration))
+                bgvSegments.add(Triple(effectiveBgv, fx, prep.wavDuration))
             }
         }
-        onProgress("📹 BGV ${bgvSegments.size}세그먼트: ${bgvSegments.joinToString { "${it.first.name}(${it.second.fmtUS(1)}s)" }}")
+        onProgress("📹 BGV ${bgvSegments.size}세그먼트: ${bgvSegments.joinToString { "${it.first.name}+${it.second}(${it.third.fmtUS(1)}s)" }}")
         if (bgvFallbackCount > 0) {
             onProgress("⚠️⚠️ BGV fallback 발생: ${bgvFallbackCount}건 / ${preps.size}씬 — BG_File 시트 값 확인 필요 (잘못된 값은 모두 DEFAULT_BGV로 묶임)")
         }
@@ -343,11 +366,12 @@ class AsterionRenderEngine(
         val bgvBodyFile = File(sceneTempDir, "bgv_body.mp4")
 
         if (bgvSegments.size == 1) {
+            val seg0Vf = buildBgvVf(bgvSegments[0].second)
             fun runBgv(hw: Boolean): Boolean {
                 val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
                 com.arthenica.ffmpegkit.FFmpegKit.execute(
                     "-y -stream_loop -1 -i ${bgvSegments[0].first.absolutePath} " +
-                    "-an -vf $vfNorm -r 30 $vc2 $codecNorm -t ${actualBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
+                    "-an -vf $seg0Vf -r 30 $vc2 $codecNorm -t ${actualBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
                 )
                 return bgvBodyFile.exists() && bgvBodyFile.length() > 0L
             }
@@ -356,10 +380,11 @@ class AsterionRenderEngine(
                 onProgress("❌ BGV 실패"); bodyCardsFile.delete(); return@withContext null
             }
         } else {
-            // Fix4: isDirectory 체크 + 진단 로그
-            fun encodeSeg(idx: Int, bgvFile: File, segDur: Float): File? {
+            // Fix4: isDirectory 체크 + 진단 로그 / v3.30: 세그먼트별 효과 vf 적용
+            fun encodeSeg(idx: Int, bgvFile: File, fx: String, segDur: Float): File? {
                 val hw = useHwEnc
                 val segFile = File(sceneTempDir, "bgv_seg_${idx}.mp4")
+                val segVf   = buildBgvVf(fx)
                 if (!bgvFile.exists() || bgvFile.isDirectory) {
                     val reason = if (bgvFile.isDirectory) "DIR" else "NOT_FOUND"
                     Log.e(TAG, "BGV[$idx] 입력비정상($reason): ${bgvFile.absolutePath}")
@@ -375,7 +400,7 @@ class AsterionRenderEngine(
                     segFile.delete()
                     val vc2 = if (useHw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
                     val ffCmd = "-y -stream_loop -1 -i ${bgvFile.absolutePath} " +
-                        "-an -vf $vfNorm -r 30 $vc2 $codecNorm " +
+                        "-an -vf $segVf -r 30 $vc2 $codecNorm " +
                         "-t ${segDur.fmtUS()} ${segFile.absolutePath}"
                     Log.d(TAG, "BGV[$idx] cmd: $ffCmd")
                     val sess = com.arthenica.ffmpegkit.FFmpegKit.execute(ffCmd)
@@ -387,7 +412,7 @@ class AsterionRenderEngine(
                     return false
                 }
                 if (runEnc(hw)) {
-                    onProgress("  BGV[$idx] ${bgvFile.name}: ${segFile.length()/1024}KB (${segDur.fmtUS(1)}s) [${if(hw)"GPU" else "CPU"}]")
+                    onProgress("  BGV[$idx] ${bgvFile.name}+${fx}: ${segFile.length()/1024}KB (${segDur.fmtUS(1)}s) [${if(hw)"GPU" else "CPU"}]")
                     return segFile
                 }
                 if (!hw) return null
@@ -399,8 +424,8 @@ class AsterionRenderEngine(
 
             val bgvSemaphore = Semaphore(3)
             val segFiles: List<File?> = coroutineScope {
-                bgvSegments.mapIndexed { idx, (bgvFile, segDur) ->
-                    async(Dispatchers.IO) { bgvSemaphore.withPermit { encodeSeg(idx, bgvFile, segDur) } }
+                bgvSegments.mapIndexed { idx, (bgvFile, fx, segDur) ->
+                    async(Dispatchers.IO) { bgvSemaphore.withPermit { encodeSeg(idx, bgvFile, fx, segDur) } }
                 }.awaitAll()
             }
             val validSegs = segFiles.filterNotNull()
@@ -408,11 +433,12 @@ class AsterionRenderEngine(
                 onProgress("❌ BGV 세그먼트 실패 (${validSegs.size}/${bgvSegments.size})")
                 bodyCardsFile.delete(); validSegs.forEach { it.delete() }; return@withContext null
             }
+            // v3.30: codec/해상도만 비교 (프레임레이트 문자열 차이로 인한 오탐 제거)
             val refMeta = probeVideoMeta(validSegs[0])
             if (refMeta != null) {
                 validSegs.drop(1).forEachIndexed { i, seg ->
                     val meta = probeVideoMeta(seg)
-                    if (meta != null && meta != refMeta) {
+                    if (meta != null && (meta.first != refMeta.first || meta.second != refMeta.second)) {
                         val msg = "BGV 세그[${i+1}] 메타불일치 codec:${meta.first}/${refMeta.first} res:${meta.second}/${refMeta.second}"
                         onProgress("⚠️ $msg"); Log.w(TAG, msg)
                     }
@@ -490,8 +516,8 @@ class AsterionRenderEngine(
         }
         if (!runEncode(useHwEnc) && useHwEnc) { cardFile.delete(); useHwEnc=false; runEncode(false) }
         pngFile.delete(); tempSil?.delete()
-        return if (cardFile.exists() && cardFile.length() > 0L) { onProgress("  새[$idx]: ${cardFile.length()/1024}KB"); cardFile }
-               else { Log.e(TAG, "연[$idx] 실패"); null }
+        return if (cardFile.exists() && cardFile.length() > 0L) { onProgress("  카드[$idx]: ${cardFile.length()/1024}KB"); cardFile }
+               else { Log.e(TAG, "카드[$idx] 실패"); null }
     }
 
     suspend fun concatSubclips(
