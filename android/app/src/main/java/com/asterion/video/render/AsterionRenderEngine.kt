@@ -543,7 +543,7 @@ class AsterionRenderEngine(
         }
         if (bgmFile != null) {
             fp+="[0:a]volume=0.85[tts]"
-            fp+="[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=volume='if(lt(t\\,13.0)\\,0.40\\,if(lt(t\\,15.0)\\,0.40+(t-13.0)*(-0.175)\\,0.05))':eval=frame[bgm]"
+            fp+="[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=volume='if(lt(t\\,13.0)\\,0.40\\,if(lt(t\\,15.0)\\,0.40+(t-13.0)*(-0.18)\\,0.04))':eval=frame[bgm]"
             fp+="[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"; aMap="[aout]"
         }
         val cmd=buildString{
@@ -581,11 +581,11 @@ class AsterionRenderEngine(
         ttsEngine.synthesize(text,speakerId,speed,outputFile,numSteps)
     }
     private fun calcCardKeyframes(pattern:AnimationPattern,tTotal:Float):CardKeyframes{
-        val tOut=(tTotal-1f).coerceAtLeast(1.1f); val cx=VIDEO_W/2f-430f; val cy=VIDEO_H/2f-170f
+        val tOut=(tTotal-1f).coerceAtLeast(1.1f); val cx=VIDEO_W/2f-430f; val cy=VIDEO_H/2f-230f
         return when(pattern){
             AnimationPattern.A->CardKeyframes(-860f,VIDEO_H*.18f,VIDEO_W*.05f,VIDEO_H*.18f,CardOutType.TOP,1f,tOut,tTotal)
             AnimationPattern.B->CardKeyframes(VIDEO_W.toFloat(),VIDEO_H*.18f,VIDEO_W/2f-430f,VIDEO_H*.18f,CardOutType.BOTTOM,1f,tOut,tTotal)
-            AnimationPattern.C->CardKeyframes(cx,-340f,cx,cy,CardOutType.BOTTOM,1f,tOut,tTotal)
+            AnimationPattern.C->CardKeyframes(cx,-460f,cx,cy,CardOutType.BOTTOM,1f,tOut,tTotal)
             AnimationPattern.D->CardKeyframes(cx,cy,cx,cy,CardOutType.FADE,1f,tOut,tTotal)
             AnimationPattern.E->CardKeyframes(VIDEO_W*.05f,VIDEO_H*.68f,cx,cy,CardOutType.FADE,1f,tOut,tTotal)
             AnimationPattern.F->CardKeyframes(cx,cy,cx,cy,CardOutType.SCALE,0.5f,tOut,tTotal)
