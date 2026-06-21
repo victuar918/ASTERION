@@ -11,31 +11,28 @@ import com.asterion.video.model.GradientPreset
 import com.asterion.video.model.ScriptDataRow
 import java.io.File
 
-/**
- * Android Canvas → 1920×1080 ARGB PNG 카드 오버레이 (ASTERION 표준 카드 디자인)
- *
- * [v3.31 수정]
- *   ■ 줄바쫚(StaticLayout) 경로 중앙정렬 버그 수정:
- *       StaticLayout은 paint가 Align.LEFT라고 가정함. paint가 Align.CENTER면
- *       Layout이 계산한 줄 시작 x를 Canvas가 "중앙 x"로 재해석 → 각 줄이 우측으로 밀림.
- *       해결: StaticLayout 분기에서 tp.textAlign = Align.LEFT 로 전환 후 ALIGN_CENTER 사용.
- *       (한 줄 drawText 경로는 기존대로 Align.CENTER 유지 — 두 분기는 필드별 상호배타)
- *   ■ CARD_H 340 → 460: 4개 항목 중 3개가 2줄이 되어 누적 높이가 카드를 넘는 문제 해결
- *   ■ 텍스트 블록 세로 중앙정렬: 콘텐츠 총 높이를 먼저 측정해 카드 안에서 수직 가운데 배치.
- *       (카드를 키워도 짧은 카드가 위로 쓸리지 않고 균형 유지)
- *   ■ 카드 외곽 크기는 고정(동적 아님) — 키프레임/합성 파이프라인 불변 → 안정성 우선
- *
- * [v3.29.1]
- *   ■ normalizeCardText(): \N / \n (2글자) → 실제 \n, \r\n → \n (4개 필드 전체)
- *   ■ drawField(): \n 있으면 StaticLayout 강제, maxLines 2→3
- */
+// ============================================================
+// CardRenderer — Android Canvas → 1920x1080 ARGB PNG 카드 오버레이
+//
+// v3.31 수정:
+//   - 줄바쫚(StaticLayout) 경로 중앙정렬 버그 수정:
+//       StaticLayout은 paint가 Align.LEFT라고 가정. paint가 Align.CENTER면
+//       Layout이 계산한 줄 시작 x를 Canvas가 '중앙 x'로 재해석 → 각 줄이 우측으로 밀림.
+//       해결: StaticLayout 분기에서 tp.textAlign = Align.LEFT 전환 후 ALIGN_CENTER 사용.
+//       (한 줄 drawText 경로는 Align.CENTER 유지 — 두 분기는 필드별 상호배타)
+//   - CARD_H 340 → 460: 4개 항목 중 3개가 2줄이 되어 누적 높이가 카드를 넘는 문제 해결
+//   - 텍스트 블록 세로 중앙정렬: 콘텐츠 총 높이를 먼저 측정해 카드 안에서 수직 가운데 배치
+//   - 카드 외곽 크기는 고정(동적 아님) — 키프레임/합성 파이프라인 불변 → 안정성 우선
+//
+// v3.29.1: normalizeCardText로 \N, \n, \r\n 처리 / drawField maxLines 2→3
+// ============================================================
 object CardRenderer {
 
     private const val TAG          = "CardRenderer"
     const  val VW                  = 1920
     const  val VH                  = 1080
     const  val CARD_W              = 860
-    const  val CARD_H              = 460          // v3.31: 340 → 460 (다중 2줄 항목 누적 높이 수용)
+    const  val CARD_H              = 460          // v3.31: 340 -> 460 (다중 2줄 항목 누적 높이 수용)
     private const val CARD_X_DEFAULT = (VW - CARD_W) / 2   // 530
     private const val CARD_Y_DEFAULT = 680
     private const val PAD_H        = 40
