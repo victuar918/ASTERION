@@ -316,7 +316,7 @@ class AsterionRenderEngine(
         onProgress("🔗 카드 concat (${cardFiles.size}개)...")
         val cardList = File(sceneTempDir, "card_list.txt")
         cardList.writeText(cardFiles.joinToString("\n") { "file '${it.absolutePath}'" })
-        val bodyCardsFile = File(sceneTempDir, "body_cards.mp4")
+        val bodyCardsFile = File(sceneTempDir, "body_cards.mov")
         val cRc = com.arthenica.ffmpegkit.FFmpegKit.execute("-y -f concat -safe 0 -i ${cardList.absolutePath} -c copy ${bodyCardsFile.absolutePath}")
         cardList.delete(); cardFiles.forEach { it.delete() }
         if (!bodyCardsFile.exists() || bodyCardsFile.length() == 0L) {
@@ -467,7 +467,7 @@ class AsterionRenderEngine(
 
         val bodyFile = File(AppConfig.OUTPUT_DIR, "${outputName}_body.mp4")
         onProgress("🎬 블렌딩 (${actualBodyDur.fmtUS(1)}s)...")
-        val ckFilter = "[1:v]format=rgb24,colorkey=0xFF00FF:0.1:0.0[ck];[0:v][ck]overlay=0:0,format=yuv420p[vout]"
+        val ckFilter = "[1:v]format=rgba[ov];[0:v][ov]overlay=0:0,format=yuv420p[vout]"
         val blendCmd = "-y -i ${bgvBodyFile.absolutePath} -i ${bodyCardsFile.absolutePath} " +
             "-filter_complex $ckFilter -map [vout] -map 1:a ${vc("5M",20)} -c:a aac -b:a 192k " +
             "-t ${actualBodyDur.fmtUS()} -movflags +faststart ${bodyFile.absolutePath}"
@@ -487,7 +487,7 @@ class AsterionRenderEngine(
 
     private fun encodeOneCard(prep: ScenePrep, onProgress: (String) -> Unit): File? {
         val idx = prep.row.rowIndex.toString().padStart(4,'0')
-        val cardFile = File(sceneTempDir, "card_${idx}.mp4")
+        val cardFile = File(sceneTempDir, "card_${idx}.mov")
         val wavSrc = prep.wavFile?.takeIf { it.exists() && it.length() > 1024L }
         val audioSrc: File; var tempSil: File? = null
         if (wavSrc != null) { audioSrc = wavSrc }
@@ -498,23 +498,21 @@ class AsterionRenderEngine(
         }
         val pngFile = File(sceneTempDir, "card_${idx}.png")
         val hasCard = CardRenderer.render(prep.row, pngFile, cardX=prep.keyframes.holdX.toInt(), cardY=prep.keyframes.holdY.toInt())
-        fun runEncode(hw: Boolean): Boolean {
-            val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
-            if (hasCard) {
-                com.arthenica.ffmpegkit.FFmpegKit.execute(
-                    "-y -f lavfi -i color=c=0xFF00FF:size=${VIDEO_W}x${VIDEO_H}:rate=30 " +
-                    "-r 30 -loop 1 -i ${pngFile.absolutePath} -i ${audioSrc.absolutePath} " +
-                    "-filter_complex [0:v][1:v]overlay=0:0[cv] -map [cv] -map 2:a $vc2 -c:a aac -b:a 128k -shortest ${cardFile.absolutePath}"
-                )
-            } else {
-                com.arthenica.ffmpegkit.FFmpegKit.execute(
-                    "-y -f lavfi -i color=c=0xFF00FF:size=${VIDEO_W}x${VIDEO_H}:rate=30 " +
-                    "-i ${audioSrc.absolutePath} $vc2 -c:a aac -b:a 128k -shortest ${cardFile.absolutePath}"
-                )
-            }
-            return cardFile.exists() && cardFile.length() > 0L
+        // v3.32: alpha-preserving codec (qtrle/.mov). magenta + colorkey workaround removed.
+        if (hasCard) {
+            // RGBA PNG -> qtrle: keep alpha (static loop, bounded by audio via -shortest)
+            com.arthenica.ffmpegkit.FFmpegKit.execute(
+                "-y -r 30 -loop 1 -i ${pngFile.absolutePath} -i ${audioSrc.absolutePath} " +
+                "-vf format=argb -c:v qtrle -c:a aac -b:a 128k -shortest ${cardFile.absolutePath}"
+            )
+        } else {
+            // No card: fully transparent clip -> BGV 100% visible after overlay
+            com.arthenica.ffmpegkit.FFmpegKit.execute(
+                "-y -f lavfi -i color=c=black:size=${VIDEO_W}x${VIDEO_H}:rate=30 -i ${audioSrc.absolutePath} " +
+                "-filter_complex [0:v]format=rgba,colorchannelmixer=aa=0,format=argb[cv] " +
+                "-map [cv] -map 1:a -c:v qtrle -c:a aac -b:a 128k -shortest ${cardFile.absolutePath}"
+            )
         }
-        if (!runEncode(useHwEnc) && useHwEnc) { cardFile.delete(); useHwEnc=false; runEncode(false) }
         pngFile.delete(); tempSil?.delete()
         return if (cardFile.exists() && cardFile.length() > 0L) { onProgress("  카드[$idx]: ${cardFile.length()/1024}KB"); cardFile }
                else { Log.e(TAG, "카드[$idx] 실패"); null }
