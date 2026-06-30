@@ -67,7 +67,8 @@ enum class CardExtraEffect { NONE,HEARTBEAT,VIBRATE;
 }
 data class GradientPreset(val topColor: Int, val bottomColor: Int) {
     companion object {
-        val DEFAULT = GradientPreset(0xD9000000.toInt(), 0x990A051E.toInt())
+        // v3.32: DEFAULT 상단 검정(000000) → 어두운 남색(00051E). 상위 바이트(0xD9/0x99)는 알파.
+        val DEFAULT = GradientPreset(0xD900051E.toInt(), 0x990A051E.toInt())
         val TITLE   = GradientPreset(0xD91E0032.toInt(), 0xE6000000.toInt())
         val CONCLUSION = GradientPreset(0xE600051E.toInt(), 0xE6000000.toInt())
         val NOTICE  = GradientPreset(0xD9320505.toInt(), 0xE6000000.toInt())

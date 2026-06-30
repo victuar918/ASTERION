@@ -14,6 +14,15 @@ import java.io.File
 // ============================================================
 // CardRenderer — Android Canvas → 1920x1080 ARGB PNG 카드 오버레이
 //
+// v3.32 수정 (반투명 카드 / 알파 합성 복원):
+//   - 마젠타 배경(canvas.drawColor) 제거 → 비트맵은 ARGB_8888 기본값(완전 투명)으로 시작.
+//     기존 마젠타 + 후단 colorkey 방식은 h264가 알파를 못 싣는 한계의 우회였고,
+//     그 과정에서 의도된 카드 반투명이 불투명으로 뭉개졌음. 이제 알파 코덱(qtrle)으로
+//     실제 알파를 끝까지 운반 → 마젠타/colorkey 불필요.
+//   - 그라디언트 색을 Color.rgb(불투명 강제)에서 ARGB 원본 그대로 사용으로 변경.
+//     GradientPreset 색상 Int 상위 바이트(예: 0xD9/0x99/0xE6)에 설계된 알파를 보존 →
+//     카드 너머로 BGV가 비치는 반투명. 텍스트는 불투명 유지(가독성).
+//
 // v3.31 수정:
 //   - 줄바쫚(StaticLayout) 경로 중앙정렬 버그 수정:
 //       StaticLayout은 paint가 Align.LEFT라고 가정. paint가 Align.CENTER면
@@ -73,24 +82,19 @@ object CardRenderer {
         Log.d(TAG, "[정규화 전] hl=${rawHl.replace("\n","↵")} main=${rawMain.replace("\n","↵")} sub=${rawSub.replace("\n","↵")} desc=${rawDesc.replace("\n","↵")}")
         Log.d(TAG, "[정규화 후] hl=${hl.replace("\n","↵")} main=${pm.replace("\n","↵")} sub=${ps.replace("\n","↵")} desc=${pd.replace("\n","↵")}")
 
-        val topR = (gradient.topColor shr 16) and 0xFF
-        val topG = (gradient.topColor shr  8) and 0xFF
-        val topB =  gradient.topColor         and 0xFF
-        val botR = (gradient.bottomColor shr 16) and 0xFF
-        val botG = (gradient.bottomColor shr  8) and 0xFF
-        val botB =  gradient.bottomColor         and 0xFF
-        val effTop = Color.rgb(topR, topG, topB)
-        val effBot = Color.rgb(botR, botG, botB)
+        // 그라디언트 색상: ARGB 원본 그대로 사용 (상위 바이트 알파 보존 → 카드 반투명)
+        val effTop = gradient.topColor
+        val effBot = gradient.bottomColor
 
         Log.d(TAG, "style=${style.name} alpha=${style.alpha} cardX=$cardX cardY=$cardY CARD_H=$CARD_H")
 
         val bitmap = Bitmap.createBitmap(VW, VH, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // 마젠타 배경 (후단 colorkey=0xFF00FF 제거용 — 파이프라인 불변)
-        canvas.drawColor(Color.rgb(0xFF, 0x00, 0xFF))
+        // 투명 배경: drawColor 제거 (ARGB_8888 createBitmap 기본값 = 완전 투명).
+        // 카드 영역만 그라디언트로 채우고 나머지는 투명 → 후단 알파 오버레이로 BGV와 합성.
 
-        // 카드 배경 그라디언트 (외곽 고정 크기 CARD_H)
+        // 카드 배경 그라디언트 (외곽 고정 크기 CARD_H, 알파 포함)
         val cL = cardX.toFloat()
         val cT = cardY.toFloat()
         val cR = (cardX + CARD_W).toFloat()
