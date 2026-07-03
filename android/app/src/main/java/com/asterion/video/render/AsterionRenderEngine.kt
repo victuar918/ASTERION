@@ -333,6 +333,7 @@ class AsterionRenderEngine(
         // Fix5: BGV 그룹화 시 BUFFER/빈BG_File 행 안정 처리 (이전 유효 BGV 재사용)
         // v3.30: 세그먼트 = Triple(파일, 효과코드, 길이)
         val bgvSegments = mutableListOf<Triple<File, String, Float>>()
+        val bgvTransitions = mutableListOf<Pair<BgTransition, Float>>()  // v3.33: 세그먼트별 전환(첫 행 기준), bgvSegments와 index 정합
         var lastValidBgv: File? = null
         for (prep in preps) {
             val bgvFile = prep.bgFile
@@ -356,6 +357,9 @@ class AsterionRenderEngine(
                 bgvSegments[bgvSegments.lastIndex] = Triple(last.first, last.second, last.third + prep.wavDuration)
             } else {
                 bgvSegments.add(Triple(effectiveBgv, fx, prep.wavDuration))
+                val trRaw = prep.row.bgTransition.trim()
+                val tr = if (trRaw.isBlank()) BgTransition.FADE else BgTransition.from(trRaw)  // 빈칸=기본 크로스페이드
+                bgvTransitions.add(tr to prep.row.bgTransitionDuration.coerceIn(0.3f, 2.0f))
             }
         }
         onProgress("📹 BGV ${bgvSegments.size}세그먼트: ${bgvSegments.joinToString { "${it.first.name}+${it.second}(${it.third.fmtUS(1)}s)" }}")
@@ -422,10 +426,22 @@ class AsterionRenderEngine(
                 return null
             }
 
+            // v3.33: 전환 효과용 세그먼트 길이 계산 — 전환 시 나가는 세그먼트를 겹침(d)만큼 연장해 총 길이 보존
+            val transTypes = List(bgvSegments.size) { i -> if (i == 0) BgTransition.NONE else bgvTransitions[i].first }
+            val transDurs  = List(bgvSegments.size) { i ->
+                if (i == 0 || transTypes[i] == BgTransition.NONE) 0f
+                else bgvTransitions[i].second.coerceIn(0.3f, 2.0f).coerceAtMost(bgvSegments[i].third * 0.8f)
+            }
+            val hasAnyTransition = transTypes.any { it != BgTransition.NONE }
+            val encDurs = List(bgvSegments.size) { i ->
+                val outPad = if (i < bgvSegments.size - 1) transDurs[i + 1] else 0f
+                val eps    = if (hasAnyTransition && i == bgvSegments.size - 1) 0.2f else 0f
+                bgvSegments[i].third + outPad + eps
+            }
             val bgvSemaphore = Semaphore(3)
             val segFiles: List<File?> = coroutineScope {
-                bgvSegments.mapIndexed { idx, (bgvFile, fx, segDur) ->
-                    async(Dispatchers.IO) { bgvSemaphore.withPermit { encodeSeg(idx, bgvFile, fx, segDur) } }
+                bgvSegments.mapIndexed { idx, seg ->
+                    async(Dispatchers.IO) { bgvSemaphore.withPermit { encodeSeg(idx, seg.first, seg.second, encDurs[idx]) } }
                 }.awaitAll()
             }
             val validSegs = segFiles.filterNotNull()
@@ -446,10 +462,46 @@ class AsterionRenderEngine(
             }
             val segListFile = File(sceneTempDir, "bgv_seg_list.txt")
             segListFile.writeText(validSegs.joinToString("\n") { "file '${it.absolutePath}'" })
-            com.arthenica.ffmpegkit.FFmpegKit.execute("-y -f concat -safe 0 -i ${segListFile.absolutePath} -c copy ${bgvBodyFile.absolutePath}")
+            if (!hasAnyTransition) {
+                com.arthenica.ffmpegkit.FFmpegKit.execute("-y -f concat -safe 0 -i ${segListFile.absolutePath} -c copy ${bgvBodyFile.absolutePath}")
+            } else {
+                // v3.33: 전환 효과 — xfade(전환)/concat(NONE) 체인. 나가는 세그먼트 사전 연장 + -t 클램프로 카드 길이와 정확 일치.
+                fun xfadeName(t: BgTransition): String = when (t) {
+                    BgTransition.FADE -> "fade"
+                    BgTransition.SLIDE_LEFT -> "slideleft"
+                    BgTransition.SLIDE_UP -> "slideup"
+                    BgTransition.ZOOM_IN -> "zoomin"
+                    BgTransition.ZOOM_OUT -> "circleclose"
+                    BgTransition.BLUR_FADE -> "hblur"
+                    BgTransition.WIPE_RIGHT -> "wiperight"
+                    else -> "fade"
+                }
+                val xInputs = validSegs.joinToString(" ") { "-i ${it.absolutePath}" }
+                val fpx = mutableListOf<String>()
+                for (i in validSegs.indices) fpx += "[$i:v]setpts=PTS-STARTPTS[v$i]"
+                var acc = "[v0]"; var accLen = encDurs[0]
+                for (i in 1 until validSegs.size) {
+                    if (transTypes[i] == BgTransition.NONE) {
+                        fpx += "${acc}[v$i]concat=n=2:v=1:a=0[c$i]"; accLen += encDurs[i]; acc = "[c$i]"
+                    } else {
+                        val d = transDurs[i]; val off = (accLen - d).coerceAtLeast(0.1f)
+                        fpx += "${acc}[v$i]xfade=transition=${xfadeName(transTypes[i])}:duration=${d.fmtUS(3)}:offset=${off.fmtUS(3)}[x$i]"
+                        accLen = off + encDurs[i]; acc = "[x$i]"
+                    }
+                }
+                fpx += "${acc}format=yuv420p[vout]"
+                val xCmd = "-y $xInputs -filter_complex ${fpx.joinToString(";")} -map [vout] -an -r 30 ${vc("4M",23)} $codecNorm -t ${actualBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
+                onProgress("🎬 BGV 전환 합성 (${validSegs.size}세그, xfade)...")
+                Log.i(TAG, "xfade cmd: $xCmd")
+                com.arthenica.ffmpegkit.FFmpegKit.execute(xCmd)
+                if ((!bgvBodyFile.exists() || bgvBodyFile.length() == 0L) && useHwEnc) {
+                    useHwEnc = false; bgvBodyFile.delete()
+                    com.arthenica.ffmpegkit.FFmpegKit.execute(xCmd.replace("-c:v h264_mediacodec -b:v 4M", "-c:v libx264 -preset ultrafast -crf 23"))
+                }
+            }
             segListFile.delete(); validSegs.forEach { it.delete() }
             if (!bgvBodyFile.exists() || bgvBodyFile.length() == 0L) {
-                onProgress("❌ BGV concat 실패"); bodyCardsFile.delete(); return@withContext null
+                onProgress("❌ BGV 합성 실패"); bodyCardsFile.delete(); return@withContext null
             }
         }
 
