@@ -42,6 +42,7 @@ private const val TAG         = "AsterionRenderEngine"
 private const val VIDEO_W     = 1920
 private const val VIDEO_H     = 1080
 private const val TEMP_SUBDIR = ".temp_scenes"
+private const val SEAMLESS_BGV_LOOP = true   // v3.34: 배경 loop 이음매 크로스페이드 (false=기존 loop cut)
 
 private val MOTION_PATTERNS = setOf(
     AnimationPattern.A, AnimationPattern.B, AnimationPattern.C,
@@ -141,6 +142,26 @@ class AsterionRenderEngine(
         val base = "scale=${VIDEO_W}:${VIDEO_H}:force_original_aspect_ratio=decrease," +
             "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
         return "$base${parseBgEffect(effectCode)},format=yuv420p"
+    }
+
+    // v3.34: 이음새 없는 loop 단위 생성 (끝 D초~처음 D초 크로스페이드 → 재생 끝=시작). 부적합/실패 시 false → 호출측이 원본 직접 loop.
+    private fun buildSeamlessLoopUnit(srcFile: File, vf: String, unitFile: File, hw: Boolean): Boolean {
+        if (!SEAMLESS_BGV_LOOP) return false
+        val srcDur = getMediaDurationSecs(srcFile)
+        val d = 0.5f; val g = 0.1f
+        if (srcDur < 2f * d + g + 0.5f) return false   // 소스 너무 짧음 → 폴백
+        val bodyLen = srcDur - d - g
+        val lu = srcDur - d
+        val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
+        val filter = "[0:v]${vf}[s];[s]split=2[st][sb];" +
+            "[st]trim=start=${(srcDur - d - g).fmtUS()}:end=${srcDur.fmtUS()},setpts=PTS-STARTPTS[tl];" +
+            "[sb]trim=start=0:end=${bodyLen.fmtUS()},setpts=PTS-STARTPTS[bd];" +
+            "[tl][bd]xfade=transition=fade:duration=${d.fmtUS()}:offset=${g.fmtUS()}[vout]"
+        unitFile.delete()
+        val cmd = "-y -i ${srcFile.absolutePath} -filter_complex $filter -map [vout] -an -r 30 $vc2 -pix_fmt yuv420p -g 30 -t ${lu.fmtUS()} ${unitFile.absolutePath}"
+        Log.i(TAG, "loopUnit cmd: $cmd")
+        com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
+        return unitFile.exists() && unitFile.length() > 0L
     }
 
     private fun buildCardVf(prep: ScenePrep): String? {
@@ -371,15 +392,22 @@ class AsterionRenderEngine(
 
         if (bgvSegments.size == 1) {
             val seg0Vf = buildBgvVf(bgvSegments[0].second)
+            val src0   = bgvSegments[0].first
+            // v3.34: seamless loop 단위 시도 (성공 시 단위 loop, 실패 시 원본 직접 loop)
+            val unit0  = File(sceneTempDir, "bgv_loopunit_0.mp4")
+            var loopSrc0 = src0; var loopVf0 = seg0Vf
+            if (buildSeamlessLoopUnit(src0, seg0Vf, unit0, useHwEnc)) { loopSrc0 = unit0; loopVf0 = "" }
             fun runBgv(hw: Boolean): Boolean {
                 val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
+                val vfArg = if (loopVf0.isBlank()) "" else "-vf $loopVf0 "
                 com.arthenica.ffmpegkit.FFmpegKit.execute(
-                    "-y -stream_loop -1 -i ${bgvSegments[0].first.absolutePath} " +
-                    "-an -vf $seg0Vf -r 30 $vc2 $codecNorm -t ${actualBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
+                    "-y -stream_loop -1 -i ${loopSrc0.absolutePath} " +
+                    "-an ${vfArg}-r 30 $vc2 $codecNorm -t ${actualBodyDur.fmtUS()} ${bgvBodyFile.absolutePath}"
                 )
                 return bgvBodyFile.exists() && bgvBodyFile.length() > 0L
             }
             if (!runBgv(useHwEnc) && useHwEnc) { useHwEnc = false; bgvBodyFile.delete(); runBgv(false) }
+            unit0.delete()
             if (!bgvBodyFile.exists() || bgvBodyFile.length() == 0L) {
                 onProgress("❌ BGV 실패"); bodyCardsFile.delete(); return@withContext null
             }
@@ -400,11 +428,16 @@ class AsterionRenderEngine(
                     onProgress("  ❌ BGV[$idx] duration비정상(${segDur.fmtUS(3)}s): ${bgvFile.absolutePath}")
                     return null
                 }
+                // v3.34: seamless loop 단위 시도 (실패/부적합 시 원본 직접 loop)
+                val unitFile = File(sceneTempDir, "bgv_loopunit_${idx}.mp4")
+                var loopSrc = bgvFile; var loopVf = segVf
+                if (buildSeamlessLoopUnit(bgvFile, segVf, unitFile, hw)) { loopSrc = unitFile; loopVf = "" }
                 fun runEnc(useHw: Boolean): Boolean {
                     segFile.delete()
                     val vc2 = if (useHw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
-                    val ffCmd = "-y -stream_loop -1 -i ${bgvFile.absolutePath} " +
-                        "-an -vf $segVf -r 30 $vc2 $codecNorm " +
+                    val vfArg = if (loopVf.isBlank()) "" else "-vf $loopVf "
+                    val ffCmd = "-y -stream_loop -1 -i ${loopSrc.absolutePath} " +
+                        "-an ${vfArg}-r 30 $vc2 $codecNorm " +
                         "-t ${segDur.fmtUS()} ${segFile.absolutePath}"
                     Log.d(TAG, "BGV[$idx] cmd: $ffCmd")
                     val sess = com.arthenica.ffmpegkit.FFmpegKit.execute(ffCmd)
@@ -416,13 +449,15 @@ class AsterionRenderEngine(
                     return false
                 }
                 if (runEnc(hw)) {
+                    unitFile.delete()
                     onProgress("  BGV[$idx] ${bgvFile.name}+${fx}: ${segFile.length()/1024}KB (${segDur.fmtUS(1)}s) [${if(hw)"GPU" else "CPU"}]")
                     return segFile
                 }
-                if (!hw) return null
+                if (!hw) { unitFile.delete(); return null }
                 useHwEnc = false
                 try { Thread.sleep(1500) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
-                if (runEnc(false)) { onProgress("  ✅ BGV[$idx] CPU 재시도 성공"); return segFile }
+                if (runEnc(false)) { unitFile.delete(); onProgress("  ✅ BGV[$idx] CPU 재시도 성공"); return segFile }
+                unitFile.delete()
                 return null
             }
 
