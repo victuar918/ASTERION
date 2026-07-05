@@ -42,7 +42,7 @@ private const val TAG         = "AsterionRenderEngine"
 private const val VIDEO_W     = 1920
 private const val VIDEO_H     = 1080
 private const val TEMP_SUBDIR = ".temp_scenes"
-private const val SEAMLESS_BGV_LOOP = true   // v3.34: 배경 loop 이음매 크로스페이드 (false=기존 loop cut)
+private const val SEAMLESS_BGV_LOOP = false   // v3.34: 배경 loop 이음매 크로스페이드 (false=기존 loop cut)
 
 private val MOTION_PATTERNS = setOf(
     AnimationPattern.A, AnimationPattern.B, AnimationPattern.C,
