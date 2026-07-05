@@ -42,7 +42,7 @@ private const val TAG         = "AsterionRenderEngine"
 private const val VIDEO_W     = 1920
 private const val VIDEO_H     = 1080
 private const val TEMP_SUBDIR = ".temp_scenes"
-private const val SEAMLESS_BGV_LOOP = false   // v3.34: 배경 loop 이음매 크로스페이드 (false=기존 loop cut)
+private const val SEAMLESS_BGV_LOOP = true   // v3.34: 배경 loop 이음매 크로스페이드 (false=기존 loop cut)
 
 private val MOTION_PATTERNS = setOf(
     AnimationPattern.A, AnimationPattern.B, AnimationPattern.C,
@@ -149,17 +149,20 @@ class AsterionRenderEngine(
         if (!SEAMLESS_BGV_LOOP) return false
         val srcDur = getMediaDurationSecs(srcFile)
         val d = 0.5f; val g = 0.1f
-        if (srcDur < 2f * d + g + 0.5f) return false   // 소스 너무 짧음 → 폴백
+        if (srcDur < 2f * d + g + 0.5f || srcDur > 60f) return false   // 너무 짧음/너무 김 → 폴백
         val bodyLen = srcDur - d - g
         val lu = srcDur - d
-        val vc2 = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"
-        val filter = "[0:v]${vf}[s];[s]split=2[st][sb];" +
-            "[st]trim=start=${(srcDur - d - g).fmtUS()}:end=${srcDur.fmtUS()},setpts=PTS-STARTPTS[tl];" +
-            "[sb]trim=start=0:end=${bodyLen.fmtUS()},setpts=PTS-STARTPTS[bd];" +
+        val tailStart = srcDur - d - g
+        // v3.34.2: OOM 방지 — split 제거. tail은 -ss seek 입력(0), body는 입력(1). 두 입력 독립 디코딩 + 입력길이 -t 제한. GPU 인코딩 유지.
+        val vc2 = if (hw) "-c:v h264_mediacodec -b:v 8M" else "-c:v libx264 -preset veryfast -crf 18"
+        val filter = "[0:v]${vf},setpts=PTS-STARTPTS[tl];" +
+            "[1:v]${vf},setpts=PTS-STARTPTS[bd];" +
             "[tl][bd]xfade=transition=fade:duration=${d.fmtUS()}:offset=${g.fmtUS()}[vout]"
         unitFile.delete()
-        val cmd = "-y -i ${srcFile.absolutePath} -filter_complex $filter -map [vout] -an -r 30 $vc2 -pix_fmt yuv420p -g 30 -t ${lu.fmtUS()} ${unitFile.absolutePath}"
-        Log.i(TAG, "loopUnit cmd: $cmd")
+        val cmd = "-y -ss ${tailStart.fmtUS()} -t ${(d + g).fmtUS()} -i ${srcFile.absolutePath} " +
+            "-t ${bodyLen.fmtUS()} -i ${srcFile.absolutePath} " +
+            "-filter_complex $filter -map [vout] -an -r 30 $vc2 -pix_fmt yuv420p -g 30 -t ${lu.fmtUS()} ${unitFile.absolutePath}"
+        Log.i(TAG, "loopUnit(v2) cmd: $cmd")
         com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
         return unitFile.exists() && unitFile.length() > 0L
     }
