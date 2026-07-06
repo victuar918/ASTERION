@@ -43,6 +43,18 @@ jobs:
             echo "⚠ SERVICE_ACCOUNT_JSON secret 없음 — GitHub Settings → Secrets에 등록 필요"
           fi
 
+      - name: YouTube 인증 키 APK에 주입
+        env:
+          YOUTUBE_CREDENTIALS_JSON: ${{ secrets.YOUTUBE_CREDENTIALS_JSON }}
+        run: |
+          mkdir -p android/app/src/main/assets
+          if [ -n "$YOUTUBE_CREDENTIALS_JSON" ]; then
+            echo "$YOUTUBE_CREDENTIALS_JSON" > android/app/src/main/assets/youtube_credentials.json
+            echo "✅ youtube_credentials.json 주입 완료"
+          else
+            echo "⚠ YOUTUBE_CREDENTIALS_JSON secret 없음 — GitHub Settings → Secrets에 등록 필요"
+          fi
+
       - name: Gradle Wrapper 생성
         run: |
           cd android
