@@ -254,7 +254,7 @@ class AsterionRenderEngine(
         val hasDisc=disclaimerWav!=null&&disclaimerWav.exists()
         if(hasDisc){
             fp+="[${silentIdx}:a]atrim=0:15.0,asetpts=PTS-STARTPTS[pre_sil]"
-            fp+="[${numVid+1}:a]aformat=sample_rates=44100:channel_layouts=stereo,asetpts=PTS-STARTPTS[disc_a]"
+            fp+="[${numVid+1}:a]aformat=sample_rates=44100:channel_layouts=stereo,afftdn=nf=-25,asetpts=PTS-STARTPTS[disc_a]"
             fp+="[pre_sil][disc_a]concat=n=2:v=0:a=1,apad=whole_dur=${(totalDur+1.0f).fmtUS(1)}[aout]"
         }
         val outFile=File(sceneTempDir,"scene_intro.mp4"); val introVc=vc("4M",23)
@@ -655,7 +655,7 @@ class AsterionRenderEngine(
         }
         if (bgmFile != null) {
             fp+="${aFilt}volume=0.85[tts]"
-            fp+="[${bgmIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=volume='if(lt(t\\,13.0)\\,0.40\\,if(lt(t\\,15.0)\\,0.40+(t-13.0)*(-0.18)\\,0.04))':eval=frame[bgm]"
+            fp+="[${bgmIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=volume='if(lt(t\\,${(introDurSecs-2f).fmtUS(1)})\\,0.40\\,if(lt(t\\,${introDurSecs.fmtUS(1)})\\,0.40+(t-${(introDurSecs-2f).fmtUS(1)})*(-0.18)\\,0.04))':eval=frame[bgm]"
             fp+="[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"; aMap="[aout]"
         }
         val cmd=buildString{
