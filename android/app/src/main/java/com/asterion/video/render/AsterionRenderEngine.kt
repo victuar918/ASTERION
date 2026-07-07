@@ -43,7 +43,7 @@ private const val VIDEO_W     = 1920
 private const val VIDEO_H     = 1080
 private const val TEMP_SUBDIR = ".temp_scenes"
 private const val SEAMLESS_BGV_LOOP = true   // v3.34: 배경 loop 이음매 크로스페이드 (false=기존 loop cut)
-private const val INTRO_BODY_XFADE  = 2.0f   // v3.36: 인트로↔바디 크로스페이드 길이(초), 0=하드컷
+private const val INTRO_BODY_XFADE  = 0.0f   // v3.36: 인트로↔바디 크로스페이드 길이(초), 0=하드컷
 
 private val MOTION_PATTERNS = setOf(
     AnimationPattern.A, AnimationPattern.B, AnimationPattern.C,
