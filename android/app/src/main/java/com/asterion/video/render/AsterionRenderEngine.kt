@@ -43,7 +43,7 @@ private const val VIDEO_W     = 1920
 private const val VIDEO_H     = 1080
 private const val TEMP_SUBDIR = ".temp_scenes"
 private const val SEAMLESS_BGV_LOOP = true   // v3.34: 배경 loop 이음매 크로스페이드 (false=기존 loop cut)
-private const val INTRO_BODY_XFADE  = 0.0f   // v3.36: 인트로↔바디 크로스페이드 길이(초), 0=하드컷
+private const val INTRO_BODY_XFADE  = 2.0f   // v3.36: 인트로↔바디 크로스페이드 길이(초), 0=하드컷
 
 private val MOTION_PATTERNS = setOf(
     AnimationPattern.A, AnimationPattern.B, AnimationPattern.C,
@@ -629,13 +629,18 @@ class AsterionRenderEngine(
         val introDurX = if (doXf) getMediaDurationSecs(subclipFiles[0]) else 0f
         val xfD = INTRO_BODY_XFADE.coerceAtMost(introDurX * 0.5f).coerceAtLeast(0.3f)
         val canXf = doXf && introDurX > xfD + 0.5f
-        val vFilt  = if (canXf) "[xv]" else "[0:v]"
-        val aFilt  = if (canXf) "[xa]" else "[0:a]"
-        val bgmIdx = if (canXf) "2" else "1"
+        // v3.36.2: 크로스페이드 실패 시 하드컷 자동 폴백 + 에러 화면 출력
+        val xfAttempts = if (canXf) listOf(true, false) else listOf(false)
+        var lastLog = ""
+        for ((atI, useXf) in xfAttempts.withIndex()) {
+        if (atI > 0) { useHwEnc = android.os.Build.VERSION.SDK_INT >= 21; onProgress("⚠ 크로스페이드 실패 → 하드컷 폴백 재시도") }
+        val vFilt  = if (useXf) "[xv]" else "[0:v]"
+        val aFilt  = if (useXf) "[xa]" else "[0:a]"
+        val bgmIdx = if (useXf) "2" else "1"
         val fp = mutableListOf<String>()
-        var vMap = if (canXf) "[xv]" else "0:v"
-        var aMap = if (canXf) "[xa]" else "0:a"
-        if (canXf) {
+        var vMap = if (useXf) "[xv]" else "0:v"
+        var aMap = if (useXf) "[xa]" else "0:a"
+        if (useXf) {
             val off = introDurX - xfD
             fp+="[0:v][1:v]xfade=transition=fade:duration=${xfD.fmtUS()}:offset=${off.fmtUS()}[xv]"
             fp+="[0:a]aformat=sample_rates=44100:channel_layouts=stereo[xa0]"
@@ -654,22 +659,26 @@ class AsterionRenderEngine(
             fp+="[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"; aMap="[aout]"
         }
         val cmd=buildString{
-            if (canXf) append("-y -i ${subclipFiles[0].absolutePath} -i ${subclipFiles[1].absolutePath} ")
+            if (useXf) append("-y -i ${subclipFiles[0].absolutePath} -i ${subclipFiles[1].absolutePath} ")
             else append("-y -f concat -safe 0 -i ${listFile.absolutePath} ")
             if(bgmFile!=null)append("-stream_loop -1 -i ${bgmFile.absolutePath} ")
             if(fp.isNotEmpty())append("-filter_complex \"${fp.joinToString(";")}\" ")
             append("-map \"$vMap\" -map \"$aMap\" ${vc("5M",20)} -c:a aac -b:a 192k -movflags +faststart ${outputFile.absolutePath}")
         }
-        val rc=com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
+        var rc=com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
         if((!outputFile.exists()||outputFile.length()==0L)&&useHwEnc){
-            useHwEnc=false; com.arthenica.ffmpegkit.FFmpegKit.execute(cmd.replace("-c:v h264_mediacodec -b:v 5M","-c:v libx264 -preset fast -crf 20"))
+            useHwEnc=false; rc=com.arthenica.ffmpegkit.FFmpegKit.execute(cmd.replace("-c:v h264_mediacodec -b:v 5M","-c:v libx264 -preset fast -crf 20"))
+        }
+        lastLog = "rc=${rc.returnCode?.value ?: -1} ${(rc.logsAsString ?: "").takeLast(600)}"
+        if (outputFile.exists() && outputFile.length() > 0L) break
+        onProgress("⚠ 합치기 실패(xf=$useXf): $lastLog")
         }
         listFile.delete()
         subclipFiles.filter{it.name.endsWith("_body.mp4")}.forEach{it.delete()}
         runCatching{sceneTempDir.listFiles()?.forEach{it.delete()}}
         return@withContext if(outputFile.exists()&&outputFile.length()>0){
             onProgress("✅ 완성: ${outputFile.name} (${outputFile.length()/1024/1024}MB)"); outputFile
-        }else{ Log.e(TAG,"concat 실패: ${rc.logsAsString.takeLast(400)}"); onProgress("❌ concat 실패"); null }
+        }else{ Log.e(TAG,"concat 실패: $lastLog"); onProgress("❌ concat 실패: $lastLog"); null }
     }
 
     fun release() {
