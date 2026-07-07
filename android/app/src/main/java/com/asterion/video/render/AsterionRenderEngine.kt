@@ -43,6 +43,7 @@ private const val VIDEO_W     = 1920
 private const val VIDEO_H     = 1080
 private const val TEMP_SUBDIR = ".temp_scenes"
 private const val SEAMLESS_BGV_LOOP = true   // v3.34: 배경 loop 이음매 크로스페이드 (false=기존 loop cut)
+private const val INTRO_BODY_XFADE  = 2.0f   // v3.36: 인트로↔바디 크로스페이드 길이(초), 0=하드컷
 
 private val MOTION_PATTERNS = setOf(
     AnimationPattern.A, AnimationPattern.B, AnimationPattern.C,
@@ -623,19 +624,38 @@ class AsterionRenderEngine(
         val duration   = totalDurationSecs
         val wmEnd      = (duration - 5f).coerceAtLeast(introDurSecs + 1f)
         onProgress("합치기: ${subclipFiles.size}개 / ${duration.toInt()}초")
-        val fp = mutableListOf<String>(); var vMap="0:v"; var aMap="0:a"
+        // v3.36: 인트로↔바디 크로스페이드 (정확히 2개[인트로,바디]일 때만; 아니면 기존 하드컷 유지)
+        val doXf = INTRO_BODY_XFADE > 0f && subclipFiles.size == 2
+        val introDurX = if (doXf) getMediaDurationSecs(subclipFiles[0]) else 0f
+        val xfD = INTRO_BODY_XFADE.coerceAtMost(introDurX * 0.5f).coerceAtLeast(0.3f)
+        val canXf = doXf && introDurX > xfD + 0.5f
+        val vFilt  = if (canXf) "[xv]" else "[0:v]"
+        val aFilt  = if (canXf) "[xa]" else "[0:a]"
+        val bgmIdx = if (canXf) "2" else "1"
+        val fp = mutableListOf<String>()
+        var vMap = if (canXf) "[xv]" else "0:v"
+        var aMap = if (canXf) "[xa]" else "0:a"
+        if (canXf) {
+            val off = introDurX - xfD
+            fp+="[0:v][1:v]xfade=transition=fade:duration=${xfD.fmtUS()}:offset=${off.fmtUS()}[xv]"
+            fp+="[0:a]aformat=sample_rates=44100:channel_layouts=stereo[xa0]"
+            fp+="[1:a]aformat=sample_rates=44100:channel_layouts=stereo[xa1]"
+            fp+="[xa0][xa1]acrossfade=d=${xfD.fmtUS()}[xa]"
+            onProgress("🎬 인트로↔바디 크로스페이드 ${xfD.fmtUS(1)}s")
+        }
         if (watermarkText.isNotBlank()) {
             val esc=escapeDrawtext(watermarkText); val fo=if(fontPath.isNotEmpty())"fontfile='${fontPath}':" else ""
-            fp+="[0:v]drawtext=${fo}text='$esc':fontsize=34:fontcolor=white@0.65:shadowcolor=black@0.75:shadowx=2:shadowy=2:x=30:y=40:enable='between(t\\,${introDurSecs.fmtUS(1)}\\,${wmEnd.fmtUS(1)})'[wm]"
+            fp+="${vFilt}drawtext=${fo}text='$esc':fontsize=34:fontcolor=white@0.65:shadowcolor=black@0.75:shadowx=2:shadowy=2:x=30:y=40:enable='between(t\\,${introDurSecs.fmtUS(1)}\\,${wmEnd.fmtUS(1)})'[wm]"
             fp+="[wm]format=yuv420p[vout]"; vMap="[vout]"
         }
         if (bgmFile != null) {
-            fp+="[0:a]volume=0.85[tts]"
-            fp+="[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=volume='if(lt(t\\,13.0)\\,0.40\\,if(lt(t\\,15.0)\\,0.40+(t-13.0)*(-0.18)\\,0.04))':eval=frame[bgm]"
+            fp+="${aFilt}volume=0.85[tts]"
+            fp+="[${bgmIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=volume='if(lt(t\\,13.0)\\,0.40\\,if(lt(t\\,15.0)\\,0.40+(t-13.0)*(-0.18)\\,0.04))':eval=frame[bgm]"
             fp+="[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"; aMap="[aout]"
         }
         val cmd=buildString{
-            append("-y -f concat -safe 0 -i ${listFile.absolutePath} ")
+            if (canXf) append("-y -i ${subclipFiles[0].absolutePath} -i ${subclipFiles[1].absolutePath} ")
+            else append("-y -f concat -safe 0 -i ${listFile.absolutePath} ")
             if(bgmFile!=null)append("-stream_loop -1 -i ${bgmFile.absolutePath} ")
             if(fp.isNotEmpty())append("-filter_complex \"${fp.joinToString(";")}\" ")
             append("-map \"$vMap\" -map \"$aMap\" ${vc("5M",20)} -c:a aac -b:a 192k -movflags +faststart ${outputFile.absolutePath}")
