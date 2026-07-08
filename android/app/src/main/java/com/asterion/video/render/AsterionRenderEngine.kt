@@ -661,7 +661,9 @@ class AsterionRenderEngine(
         var aMap = if (useXf) "[xa]" else "0:a"
         if (useXf) {
             val off = introDurX - xfD
-            fp+="[0:v][1:v]xfade=transition=fade:duration=${xfD.fmtUS()}:offset=${off.fmtUS()}[xv]"
+            fp+="[0:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[nv0]"
+            fp+="[1:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[nv1]"
+            fp+="[nv0][nv1]xfade=transition=fade:duration=${xfD.fmtUS()}:offset=${off.fmtUS()}[xv]"
             fp+="[0:a]aformat=sample_rates=44100:channel_layouts=stereo[xa0]"
             fp+="[1:a]aformat=sample_rates=44100:channel_layouts=stereo[xa1]"
             fp+="[xa0][xa1]acrossfade=d=${xfD.fmtUS()}[xa]"
@@ -688,7 +690,7 @@ class AsterionRenderEngine(
         if((!outputFile.exists()||outputFile.length()==0L)&&useHwEnc){
             useHwEnc=false; rc=com.arthenica.ffmpegkit.FFmpegKit.execute(cmd.replace("-c:v h264_mediacodec -b:v 5M","-c:v libx264 -preset fast -crf 20"))
         }
-        lastLog = "rc=${rc.returnCode?.value ?: -1} ${(rc.logsAsString ?: "").takeLast(600)}"
+        lastLog = "rc=${rc.returnCode?.value ?: -1} " + ((rc.logsAsString ?: "").lines().lastOrNull { it.contains("do not match") || it.contains("Error") || it.contains("Invalid") || it.contains("No such") } ?: (rc.logsAsString ?: "").takeLast(300))
         if (outputFile.exists() && outputFile.length() > 0L) break
         onProgress("⚠ 합치기 실패(xf=$useXf): $lastLog")
         }
