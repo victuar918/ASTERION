@@ -253,9 +253,7 @@ class AsterionRenderEngine(
         val numVid=if(hasBgv2)2 else 1; val silentIdx=numVid
         val hasDisc=disclaimerWav!=null&&disclaimerWav.exists()
         if(hasDisc){
-            fp+="[${silentIdx}:a]atrim=0:15.0,asetpts=PTS-STARTPTS[pre_sil]"
-            fp+="[${numVid+1}:a]aformat=sample_rates=44100:channel_layouts=stereo,afftdn=nf=-25,asetpts=PTS-STARTPTS[disc_a]"
-            fp+="[pre_sil][disc_a]concat=n=2:v=0:a=1,apad=whole_dur=${(totalDur+1.0f).fmtUS(1)}[aout]"
+            fp+="[${numVid+1}:a]adelay=15000:all=1,apad=whole_dur=${(totalDur+1.0f).fmtUS(1)}[aout]"
         }
         val outFile=File(sceneTempDir,"scene_intro.mp4"); val introVc=vc("4M",23)
         val cmd=buildString{
