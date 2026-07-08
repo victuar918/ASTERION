@@ -234,9 +234,9 @@ class AsterionRenderEngine(
         val fp = mutableListOf<String>(); val fOpt = if (fontPath.isNotEmpty()) "fontfile='$fontPath':" else ""
         if(hasBgv2&&bgv2!=null){
             val xOff=(bgv1Dur-xfadeDur).coerceAtLeast(0.5f)
-            fp+="[0:v]setpts=PTS-STARTPTS[v0]"; fp+="[1:v]setpts=PTS-STARTPTS[v1]"
+            fp+="[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,setpts=PTS-STARTPTS[v0]"; fp+="[1:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,setpts=PTS-STARTPTS[v1]"
             fp+="[v0][v1]xfade=transition=fade:duration=${xfadeDur.fmtUS()}:offset=${xOff.fmtUS()}[bgv]"
-        }else{fp+="[0:v]setpts=PTS-STARTPTS[bgv]"}
+        }else{fp+="[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,setpts=PTS-STARTPTS[bgv]"}
         var cur="[bgv]"
         if(videoMeta.introText.isNotBlank()){
             fp+="${cur}drawtext=${fOpt}text='${esc(videoMeta.introText)}':fontsize=64:fontcolor=white:borderw=3:bordercolor=black@0.8:x=(W-tw)/2:y=H/3-th/2:alpha='${alpha(p1Start,p1End)}':enable='${en(p1Start,p1End)}'[p1]"
@@ -609,6 +609,24 @@ class AsterionRenderEngine(
                else { Log.e(TAG, "카드[$idx] 실패"); null }
     }
 
+    // v3.38: BGM 이음새 없는 loop 단위 (끝 d초 <-> 처음 d초 acrossfade). 소스 시작/끝 무음으로 인한 loop 끊김 제거. 실패 시 null.
+    private fun buildSeamlessBgmLoop(bgmFile: File): File? {
+        val bgmDur = getMediaDurationSecs(bgmFile)
+        val d = 3.0f
+        if (bgmDur < 2f * d + 1f) return null
+        val unit = File(sceneTempDir, "bgm_seamless.m4a")
+        val tailStart = bgmDur - d
+        val bodyLen = bgmDur - d
+        val filter = "[0:a]asetpts=PTS-STARTPTS[tl];[1:a]asetpts=PTS-STARTPTS[bd];[tl][bd]acrossfade=d=${d.fmtUS()}[a]"
+        unit.delete()
+        val cmd = "-y -ss ${tailStart.fmtUS()} -t ${d.fmtUS()} -i ${bgmFile.absolutePath} " +
+            "-t ${bodyLen.fmtUS()} -i ${bgmFile.absolutePath} " +
+            "-filter_complex $filter -map [a] -c:a aac -b:a 192k ${unit.absolutePath}"
+        Log.i(TAG, "bgmLoop cmd: $cmd")
+        com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
+        return if (unit.exists() && unit.length() > 0L) unit else null
+    }
+
     suspend fun concatSubclips(
         outputName   : String,
         bgmFileName  : String,
@@ -621,6 +639,7 @@ class AsterionRenderEngine(
         listFile.writeText(subclipFiles.joinToString("\n") { "file '${it.absolutePath}'" })
         val outputFile = File(AppConfig.OUTPUT_DIR, "$outputName.mp4")
         val bgmFile    = AppConfig.resolveBgm(bgmFileName)
+        val bgmSrc     = if (bgmFile != null) (buildSeamlessBgmLoop(bgmFile) ?: bgmFile) else null  // v3.38: BGM 이음매 크로스페이드 loop(실패 시 원본)
         val duration   = totalDurationSecs
         val wmEnd      = (duration - 5f).coerceAtLeast(introDurSecs + 1f)
         onProgress("합치기: ${subclipFiles.size}개 / ${duration.toInt()}초")
@@ -655,13 +674,13 @@ class AsterionRenderEngine(
         }
         if (bgmFile != null) {
             fp+="${aFilt}volume=0.85[tts]"
-            fp+="[${bgmIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=volume='if(lt(t\\,${(introDurSecs-2f).fmtUS(1)})\\,0.40\\,if(lt(t\\,${introDurSecs.fmtUS(1)})\\,0.40+(t-${(introDurSecs-2f).fmtUS(1)})*(-0.18)\\,0.04))':eval=frame[bgm]"
+            fp+="[${bgmIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=volume='if(lt(t\\,13.0)\\,0.40\\,if(lt(t\\,15.0)\\,0.40+(t-13.0)*(-0.18)\\,0.04))':eval=frame[bgm]"
             fp+="[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"; aMap="[aout]"
         }
         val cmd=buildString{
             if (useXf) append("-y -i ${subclipFiles[0].absolutePath} -i ${subclipFiles[1].absolutePath} ")
             else append("-y -f concat -safe 0 -i ${listFile.absolutePath} ")
-            if(bgmFile!=null)append("-stream_loop -1 -i ${bgmFile.absolutePath} ")
+            if(bgmFile!=null)append("-stream_loop -1 -i ${bgmSrc!!.absolutePath} ")
             if(fp.isNotEmpty())append("-filter_complex \"${fp.joinToString(";")}\" ")
             append("-map \"$vMap\" -map \"$aMap\" ${vc("5M",20)} -c:a aac -b:a 192k -movflags +faststart ${outputFile.absolutePath}")
         }
