@@ -610,19 +610,20 @@ class AsterionRenderEngine(
     // v3.38: BGM 이음새 없는 loop 단위 (끝 d초 <-> 처음 d초 acrossfade). 소스 시작/끝 무음으로 인한 loop 끊김 제거. 실패 시 null.
     private fun buildSeamlessBgmLoop(bgmFile: File): File? {
         val bgmDur = getMediaDurationSecs(bgmFile)
-        val d = 3.0f
-        if (bgmDur < 2f * d + 1f) return null
+        val d = 3.0f; val m = 0.5f   // m: acrossfade 여유 마진(MP3 -ss 오차 흡수 + tail>d 보장)
+        if (bgmDur < 2f * d + m + 1f) return null
         val unit = File(sceneTempDir, "bgm_seamless.m4a")
-        val tailStart = bgmDur - d
-        val bodyLen = bgmDur - d
+        val lu  = bgmDur - d          // 단위 길이(seam 보존)
+        val cut = bgmDur - d - m      // tail 시작 = body 길이
         val filter = "[0:a]asetpts=PTS-STARTPTS[tl];[1:a]asetpts=PTS-STARTPTS[bd];[tl][bd]acrossfade=d=${d.fmtUS()}[a]"
         unit.delete()
-        val cmd = "-y -ss ${tailStart.fmtUS()} -t ${d.fmtUS()} -i ${bgmFile.absolutePath} " +
-            "-t ${bodyLen.fmtUS()} -i ${bgmFile.absolutePath} " +
+        val cmd = "-y -ss ${cut.fmtUS()} -t ${(d + m).fmtUS()} -i ${bgmFile.absolutePath} " +
+            "-t ${cut.fmtUS()} -i ${bgmFile.absolutePath} " +
             "-filter_complex $filter -map [a] -c:a aac -b:a 192k ${unit.absolutePath}"
         Log.i(TAG, "bgmLoop cmd: $cmd")
         com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
-        return if (unit.exists() && unit.length() > 0L) unit else null
+        val ok = unit.exists() && kotlin.math.abs(getMediaDurationSecs(unit) - lu) < 2f
+        return if (ok) unit else { unit.delete(); null }
     }
 
     suspend fun concatSubclips(
