@@ -34,7 +34,7 @@ import java.io.File
 class AsterionVideoActivity : AppCompatActivity() {
 
     private lateinit var tvKeyStatus   : TextView
-    private lateinit var spinnerSheet  : Spinner
+    private lateinit var btnSheetSelect: Button          // v3.39: 다중선택 렌더 큐 (기존 Spinner 대체)
     private lateinit var llSpeakers    : LinearLayout
     private lateinit var btnStart      : Button
     private lateinit var btnStop       : Button
@@ -48,6 +48,12 @@ class AsterionVideoActivity : AppCompatActivity() {
     private val speakerSpeedLabels    = mutableMapOf<Int, TextView>()
     private val speakerNumStepsBars   = mutableMapOf<Int, SeekBar>()
     private val speakerNumStepsLabels = mutableMapOf<Int, TextView>()
+
+    // v3.39: 렌더 큐 상태
+    private var allSheets    = listOf<String>()          // 사용 가능한 전체 시트
+    private val renderQueue  = mutableListOf<String>()   // 선택된 시트(순서 유지)
+    private val failedSheets = linkedSetOf<String>()     // 실패(업로드 안 됨) 시트 — 영구 저장
+    private val prefs by lazy { getSharedPreferences("asterion_render", MODE_PRIVATE) }
 
     private val auth            by lazy { ServiceAccountAuth(this) }
     private val youtubeUploader  by lazy { YouTubeUploader(this) }
@@ -75,6 +81,7 @@ class AsterionVideoActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        loadFailed()
         val scroll = ScrollView(this)
         val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48,16,48,48) }
         scroll.addView(layout); setContentView(scroll)
@@ -83,7 +90,10 @@ class AsterionVideoActivity : AppCompatActivity() {
             layout.setPadding(48, b.top+16, 48, b.bottom+48); insets
         }
         tvKeyStatus  = TextView(this).apply { textSize=12f; setTextColor(0xFFAAAAAA.toInt()) }
-        spinnerSheet = Spinner(this)
+        btnSheetSelect = Button(this).apply {
+            text = "▼ 시트 선택 (렌더 큐)"
+            setOnClickListener { showSheetQueueDialog() }
+        }
         llSpeakers   = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
         btnStart     = Button(this).apply { text="▶ 영상 제작 시작"; isEnabled=false }
         btnStop      = Button(this).apply { text="⏹ 중지"; isEnabled=false }
@@ -101,17 +111,11 @@ class AsterionVideoActivity : AppCompatActivity() {
         btnStop.layoutParams  = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         btnReset.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         btnRow.addView(btnStart); btnRow.addView(btnStop); btnRow.addView(btnReset)
-        listOf(tvKeyStatus, spinnerSheet, llSpeakers, btnRow, progressBar, tvStatus, tvLog)
+        listOf(tvKeyStatus, btnSheetSelect, llSpeakers, btnRow, progressBar, tvStatus, tvLog)
             .forEach { layout.addView(it) }
         btnStart.setOnClickListener { startRendering() }
         btnStop.setOnClickListener  { stopRendering() }
-        btnReset.setOnClickListener { confirmReset() }
-        spinnerSheet.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p:AdapterView<*>?,v:android.view.View?,pos:Int,id:Long) {
-                loadSpeakersFromSheet(spinnerSheet.selectedItem?.toString() ?: return)
-            }
-            override fun onNothingSelected(p:AdapterView<*>?){}
-        }
+        btnReset.setOnClickListener { showResetPicker() }
         lifecycleScope.launch { initCore() }
     }
 
@@ -121,6 +125,65 @@ class AsterionVideoActivity : AppCompatActivity() {
             lifecycleScope.launch { initCore() }
         }
     }
+
+    // ── 렌더 큐 (다중선택) ────────────────────────────────────────
+    // v3.39: 시트를 누른 순서대로 큐에 추가(번호 표시), 다시 누르면 해제.
+    //        실패한 시트는 ❌로 표시(누르면 체크박스 복귀). 실패기록은 영구 저장.
+    private fun showSheetQueueDialog() {
+        if (allSheets.isEmpty()) { updateStatus("시트 목록 없음"); return }
+        val ctx = this
+        val lv = ListView(ctx)
+        val ad = object : BaseAdapter() {
+            override fun getCount() = allSheets.size
+            override fun getItem(p: Int) = allSheets[p]
+            override fun getItemId(p: Int) = p.toLong()
+            override fun getView(p: Int, cv: android.view.View?, parent: ViewGroup?): android.view.View {
+                val tv = (cv as? TextView) ?: TextView(ctx).apply { textSize = 15f; setPadding(36,26,36,26) }
+                val s = allSheets[p]; val order = renderQueue.indexOf(s)
+                when {
+                    failedSheets.contains(s) -> { tv.text = "❌  $s  (실패)"; tv.setTextColor(0xFFE57373.toInt()) }
+                    order >= 0               -> { tv.text = "${order + 1}.  $s"; tv.setTextColor(0xFF81C784.toInt()) }
+                    else                     -> { tv.text = "☐  $s"; tv.setTextColor(0xFFBBBBBB.toInt()) }
+                }
+                return tv
+            }
+        }
+        lv.adapter = ad
+        lv.setOnItemClickListener { _, _, pos, _ ->
+            val s = allSheets[pos]
+            when {
+                failedSheets.contains(s) -> { failedSheets.remove(s); saveFailed() }   // ❌ → 체크박스 복귀
+                renderQueue.contains(s)  -> renderQueue.remove(s)                        // 큐에서 해제
+                else                     -> renderQueue.add(s)                           // 큐에 추가(순서 부여)
+            }
+            ad.notifyDataSetChanged()
+        }
+        androidx.appcompat.app.AlertDialog.Builder(ctx)
+            .setTitle("렌더 큐 — 누른 순서대로 렌더")
+            .setView(lv)
+            .setPositiveButton("확인") { _, _ -> onQueueConfirmed() }
+            .setNeutralButton("큐 비우기") { _, _ -> renderQueue.clear(); onQueueConfirmed() }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    private fun onQueueConfirmed() {
+        updateSheetButton()
+        if (renderQueue.isNotEmpty()) loadSpeakersFromSheet(renderQueue.first())
+        else { btnStart.isEnabled = false; tvStatus.text = "큐 비어있음 — 시트 선택" }
+    }
+
+    private fun updateSheetButton() {
+        btnSheetSelect.text =
+            if (renderQueue.isEmpty()) "▼ 시트 선택 (렌더 큐)"
+            else "🎬 큐 ${renderQueue.size}편: " + renderQueue.joinToString(", ")
+    }
+
+    private fun loadFailed() {
+        failedSheets.clear()
+        failedSheets.addAll(prefs.getStringSet("failed_sheets", emptySet()) ?: emptySet())
+    }
+    private fun saveFailed() { prefs.edit().putStringSet("failed_sheets", failedSheets.toSet()).apply() }
 
     // ── 화자 UI ────────────────────────────────────────────────────
 
@@ -199,7 +262,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         val sherpaSid = VoiceConfig.SID_LIST[speakerSpinners[sid]?.selectedItemPosition ?: 0]
         val speed     = progressToSpeed(speakerSeekBars[sid]?.progress ?: 50)
         val numSteps  = progressToNumSteps(speakerNumStepsBars[sid]?.progress ?: 4)
-        val testText  = when(sid){1->"안녕하세요. 에너지 분석을 시작합니다.";2->"극과의 에너지가 축적되는 구간입니다.";else->"운명은 해석하는 순간 바뀏지 않습니다."}
+        val testText  = when(sid){1->"안녕하세요. 에너지 분석을 시작합니다.";2->"극과의 에너지가 축적되는 구간입니다.";else->"운명은 해석하는 순간 바뀌지 않습니다."}
         AppConfig.ensureDirs()
         updateStatus("🔊 [$sid] sid=$sherpaSid steps=$numSteps speed=$speed 합성 중...")
         lifecycleScope.launch(Dispatchers.IO) {
@@ -248,22 +311,30 @@ class AsterionVideoActivity : AppCompatActivity() {
                     buildSpeakerUI(speakers)
                     tvStatus.text = "$sheet | 화자 ${speakers.size}명: $speakers"
                     btnStart.isEnabled = speakers.isNotEmpty()
-                    btnReset.isEnabled = speakers.isNotEmpty()
                 }
             } catch(e:Exception){ Log.e("Activity","loadSpeakers: $e") }
         }
     }
 
-    private fun confirmReset() {
-        val sheet      = spinnerSheet.selectedItem?.toString() ?: return
-        val cacheDir   = AppConfig.sceneCacheDir(sheet)
+    // ── 초기화 (렌더 정지 상태에서 단일 선택) ─────────────────────
+    // v3.39: 큐와 분리 — 정지 상태에서 시트 하나 골라 초기화
+    private fun showResetPicker() {
+        if (isRendering) { updateStatus("⚠ 렌더 중엔 초기화 불가 — 먼저 중지"); return }
+        if (allSheets.isEmpty()) { updateStatus("시트 목록 없음"); return }
+        val arr = allSheets.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("초기화할 시트 선택")
+            .setItems(arr) { _, w -> confirmReset(arr[w]) }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun confirmReset(sheet: String) {
+        val cacheDir    = AppConfig.sceneCacheDir(sheet)
         val cachedCount = cacheDir.listFiles()?.size ?: 0
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("초기화 확인")
-            .setMessage("『$sheet』를 초기화합니다.\n\n" +
-                    "• 캐시 파일: ${cachedCount}개 (WAV, BGV cut)\n" +
-                    "• 시트 상태: 전체 READY로 초기화\n\n" +
-                    "중단한 영상을 재시작합니다.")
+            .setMessage("『$sheet』 초기화: 캐시 ${cachedCount}개(WAV·BGV cut) 삭제 + 시트 전체 READY. 중단한 영상을 재시작합니다.")
             .setPositiveButton("초기화") { _, _ -> doReset(sheet) }
             .setNegativeButton("취소", null)
             .show()
@@ -281,7 +352,6 @@ class AsterionVideoActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 if (ok) {
                     updateStatus("✅ [$sheet] 초기화 완료 — 파일 ${deleted}개 삭제, 상태 READY")
-                    loadSpeakersFromSheet(sheet)
                 } else {
                     updateStatus("⚠ 시트 초기화 실패 — 수동으로 K열 READY 확인 필요")
                 }
@@ -292,7 +362,7 @@ class AsterionVideoActivity : AppCompatActivity() {
     private suspend fun initCore() {
         if (!hasAllFilesPermission()) {
             withContext(Dispatchers.Main) {
-                tvStatus.text = "⚠ '모든 파일 접근' 권한 필요\n설정 화면으로 이동합니다..."
+                tvStatus.text = "⚠ '모든 파일 접근' 권한 필요 — 설정 화면으로 이동합니다..."
                 requestAllFilesPermission()
             }
             return
@@ -308,19 +378,18 @@ class AsterionVideoActivity : AppCompatActivity() {
             engine    = AsterionRenderEngine(this, te)
             val sheets = reader!!.listScriptSheets()
             withContext(Dispatchers.Main) {
+                allSheets = sheets
                 if (sheets.isEmpty()) tvStatus.text = "대본 없음 — VS_로 시작하는 시트명 사용"
                 else {
-                    spinnerSheet.adapter = ArrayAdapter(this@AsterionVideoActivity,
-                        android.R.layout.simple_spinner_item, sheets)
-                        .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-                    tvStatus.text = "VS_ 시트 ${sheets.size}개 — 선택 후 화자 설정"
+                    btnReset.isEnabled = true
+                    tvStatus.text = "VS_ 시트 ${sheets.size}개 — '시트 선택'에서 렌더 큐 구성"
                 }
             }
         } catch(e:Exception){ withContext(Dispatchers.Main){tvStatus.text="❌ ${e.message}"} }
     }
 
-    // ── 렌더링 메인 ───────────────────────────────────────────────
-
+    // ── 렌더링 메인 (큐 순차) ─────────────────────────────────────
+    // v3.39: 큐를 순서대로 렌더→업로드. 실패해도 다음 편 계속(A). 실패 시트는 ❌ 표시+영구저장.
     private fun startRendering() {
         if (isRendering) return
         if (!hasAllFilesPermission()) {
@@ -328,154 +397,162 @@ class AsterionVideoActivity : AppCompatActivity() {
             requestAllFilesPermission()
             return
         }
-        val sheet       = spinnerSheet.selectedItem?.toString() ?: return
+        if (renderQueue.isEmpty()) { updateStatus("⚠ 렌더 큐가 비어있음 — 시트를 선택하세요"); return }
         val voiceConfig = buildVoiceConfig()
+        val queue = renderQueue.toList()          // 스냅샷
+        failedSheets.clear(); saveFailed()        // 새 렌더 → 실패기록 초기화
 
         startForegroundService(Intent(this, RenderForegroundService::class.java))
-        isRendering = true; btnStart.isEnabled = false; btnStop.isEnabled = true
+        isRendering = true; btnStart.isEnabled = false; btnStop.isEnabled = true; btnReset.isEnabled = false
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                engine!!.release()
-
-                updateStatus("[$sheet] 토큰 갱신...")
-                val token = auth.getAccessToken()
-                reader = SheetsVideoReader(token, VIDEO_SS_ID)
-                updateStatus("[$sheet] 대본 읽는 중...")
-                val result = reader!!.readScript(sheet)
-                if (result.isFailure) {
-                    updateStatus("❌ 대본 로드 실패: ${result.exceptionOrNull()?.message}")
-                    return@launch
-                }
-                val data = result.getOrThrow()
-                if (data.scriptRows.isEmpty()) { updateStatus("⚠ 대본 행 없음"); return@launch }
-                withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size }
-
-                val isXrp      = sheet.contains("XRP", ignoreCase = true)
-                val mergedMeta = data.videoMeta.copy(
-                    introBgv1         = "intro01_asterion_signature_bracelet.mp4",
-                    introBgv2         = "intro02_golden_fluid_ink_loop_slow.mp4",
-                    introText         = "빛은 선택된 이에게만 닿는다",
-                    introDurationSecs = 21f,
-                    introType         = if (isXrp) "XRP" else "CRYPTO",
-                    disclaimerText    = if (data.videoMeta.disclaimerText.isNotBlank())
-                                            data.videoMeta.disclaimerText
-                                        else
-                                            "본 영상은 투자 권유 또는 투자 조언이 아닙니다. " +
-                                            "모든 투자 결정은 시청자 본인의 판단과 책임 하에 이루어져야 합니다.",
-                    topWatermark      = if (isXrp)
-                                            "베다점성술로 예측하는 XRP 전망 by ASTERION"
-                                        else
-                                            "베다점성술로 둘러보는 크립토 갤러리 by ASTERION"
-                )
-
-                val disclaimerWav = if (mergedMeta.disclaimerText.isNotBlank()) {
-                    val dWav = File(AppConfig.OUTPUT_DIR, "intro_disclaimer.wav")
-                    try {
-                        val spk = data.scriptRows.firstOrNull()?.speaker ?: 1
-                        val cfg = voiceConfig.forSpeaker(spk)
-                        engine!!.ttsEnginePublic.synthesize(
-                            mergedMeta.disclaimerText, cfg.sid, cfg.speed, dWav, cfg.numSteps
-                        )
-                        if (dWav.exists() && dWav.length() > 0) dWav else null
-                    } catch (e: Exception) { Log.w("Activity","disclaimer TTS 실패: $e"); null }
-                } else null
-
-                engine!!.renderIntro(mergedMeta, disclaimerWav) { msg -> appendLog(msg); updateStatus(msg) }
-
-                val cacheDir    = AppConfig.sceneCacheDir(sheet)
-                val prepList    = mutableListOf<ScenePrep>()
-                var cumSecs     = 0f
-                var processed   = 0
-
-                for (row in data.scriptRows) {
+                for ((qi, sheet) in queue.withIndex()) {
                     if (!isRendering) break
-                    val sceneId = "scene_${row.rowIndex.toString().padStart(4,'0')}"
-
-                    val prep = engine!!.prepareScene(
-                        row         = row,
-                        voiceConfig = voiceConfig,
-                        startSecs   = cumSecs,
-                        cacheDir    = cacheDir
-                    ) { msg -> appendLog(msg); updateStatus(msg) }
-
-                    if (prep != null) {
-                        prepList.add(prep)
-                        cumSecs += prep.wavDuration
-                        reader!!.updateStatus(sheet, row.rowIndex, "DONE", data.scriptStartSheetRow)
-                    } else {
-                        reader!!.updateStatus(sheet, row.rowIndex, "ERROR", data.scriptStartSheetRow)
-                        appendLog("[$sceneId] ❌ prepareScene 실패")
+                    updateStatus("═══ 큐 ${qi + 1}/${queue.size}: $sheet ═══")
+                    appendLog("▶ [$sheet] 시작 (${qi + 1}/${queue.size})")
+                    val ok = try {
+                        renderOneSheet(sheet, voiceConfig)
+                    } catch (e: Exception) {
+                        Log.e("Activity", "[$sheet] 예외", e); updateStatus("❌ [$sheet] ${e.message}"); false
                     }
-
-                    processed++
-                    withContext(Dispatchers.Main) { progressBar.progress = processed }
-                }
-
-                if (!isRendering) {
-                    updateStatus("⏹ 중지 — Phase 1 완료 ${prepList.size}/${data.scriptRows.size}씬")
-                    return@launch
-                }
-
-                val safeSheet = sheet.replace(Regex("[^\\w가-힣]"), "_")
-
-                if (prepList.isNotEmpty()) {
-                    updateStatus("🎬 단일 인코딩 조립 중 (${prepList.size}씬)...")
-                    val bodyFile = engine!!.assembleBody(prepList, safeSheet) { msg ->
-                        appendLog(msg); updateStatus(msg)
-                    }
-                    if (bodyFile == null) {
-                        updateStatus("❌ body 조립 실패 — output 폴더의 임시파일 확인")
-                        return@launch
+                    when {
+                        ok            -> appendLog("✅ [$sheet] 업로드 완료")
+                        !isRendering  -> appendLog("⏹ [$sheet] 중지됨")
+                        else          -> { failedSheets.add(sheet); saveFailed(); appendLog("❌❌ [$sheet] 실패(업로드 안 됨) → 다음 편") }
                     }
                 }
-
-                updateStatus("🔗 최종 합치기 + BGM...")
-                val finalFile = engine!!.concatSubclips(
-                    outputName    = safeSheet,
-                    bgmFileName   = mergedMeta.mainBgm,
-                    watermarkText = mergedMeta.topWatermark,
-                    // v3.25: renderIntro가 저장한 실제 인트로 길이 사용
-                    //   워터마크 시작 시점, BGM 페이드 기준점 정확히
-                    //   (이전: mergedMeta.introDurationSecs = 21f 하드코딩 → 실제 22s외 불일치)
-                    introDurSecs  = engine!!.actualIntroDurationSecs
-                ) { msg -> appendLog(msg); updateStatus(msg) }
-
-                if (finalFile != null && finalFile.exists()) {
-                    updateStatus("🎬 완료: ${finalFile.name} (${finalFile.length()/1024/1024}MB)")
-                    // YouTube 자동 업로드 (youtube_credentials.json 없으면 건너뜀)
-                    youtubeUploader.upload(
-                        videoFile     = finalFile,
-                        title         = buildYouTubeTitle(sheet, isXrp),
-                        description   = buildYouTubeDescription(isXrp),
-                        tags          = buildYouTubeTags(isXrp),
-                        privacyStatus = "private"
-                    ) { msg -> appendLog(msg); updateStatus(msg) }
-                } else {
-                    updateStatus("❌ 최종 합치기 실패 — output 폴더 확인")
-                }
-
-            } catch(e: Exception) {
-                updateStatus("❌ ${e.message}")
-                Log.e("Activity", "startRendering 예외", e)
+                val fails = queue.count { failedSheets.contains(it) }
+                updateStatus("🏁 큐 종료 — 성공 ${queue.size - fails}편" +
+                    if (fails > 0) ", 실패 ${fails}편 ('시트 선택'에서 ❌ 확인)" else " (전편 완료)")
+            } catch (e: Exception) {
+                updateStatus("❌ ${e.message}"); Log.e("Activity", "startRendering 예외", e)
             } finally {
                 isRendering = false
                 stopService(Intent(this@AsterionVideoActivity, RenderForegroundService::class.java))
-                withContext(Dispatchers.Main) { btnStart.isEnabled = true; btnStop.isEnabled = false }
+                withContext(Dispatchers.Main) {
+                    btnStart.isEnabled = true; btnStop.isEnabled = false; btnReset.isEnabled = true
+                    renderQueue.clear(); updateSheetButton()
+                }
             }
         }
+    }
+
+    // v3.39: 한 편 렌더 → 업로드. 업로드까지 성공하면 true, 아니면 false.
+    private suspend fun renderOneSheet(sheet: String, voiceConfig: VoiceConfig): Boolean {
+        engine!!.release()
+
+        updateStatus("[$sheet] 토큰 갱신...")
+        val token = auth.getAccessToken()
+        reader = SheetsVideoReader(token, VIDEO_SS_ID)
+        updateStatus("[$sheet] 대본 읽는 중...")
+        val result = reader!!.readScript(sheet)
+        if (result.isFailure) { updateStatus("❌ [$sheet] 대본 로드 실패: ${result.exceptionOrNull()?.message}"); return false }
+        val data = result.getOrThrow()
+        if (data.scriptRows.isEmpty()) { updateStatus("⚠ [$sheet] 대본 행 없음"); return false }
+        withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size; progressBar.progress = 0 }
+
+        val isXrp      = sheet.contains("XRP", ignoreCase = true)
+        val mergedMeta = data.videoMeta.copy(
+            introBgv1         = "intro01_asterion_signature_bracelet.mp4",
+            introBgv2         = "intro02_golden_fluid_ink_loop_slow.mp4",
+            introText         = "빛은 선택된 이에게만 닿는다",
+            introDurationSecs = 21f,
+            introType         = if (isXrp) "XRP" else "CRYPTO",
+            disclaimerText    = if (data.videoMeta.disclaimerText.isNotBlank())
+                                    data.videoMeta.disclaimerText
+                                else
+                                    "본 영상은 투자 권유 또는 투자 조언이 아닙니다. " +
+                                    "모든 투자 결정은 시청자 본인의 판단과 책임 하에 이루어져야 합니다.",
+            topWatermark      = if (isXrp)
+                                    "베다점성술로 예측하는 XRP 전망 by ASTERION"
+                                else
+                                    "베다점성술로 둘러보는 크립토 갤러리 by ASTERION"
+        )
+
+        val disclaimerWav = if (mergedMeta.disclaimerText.isNotBlank()) {
+            val dWav = File(AppConfig.OUTPUT_DIR, "intro_disclaimer.wav")
+            try {
+                val spk = data.scriptRows.firstOrNull()?.speaker ?: 1
+                val cfg = voiceConfig.forSpeaker(spk)
+                engine!!.ttsEnginePublic.synthesize(
+                    mergedMeta.disclaimerText, cfg.sid, cfg.speed, dWav, cfg.numSteps
+                )
+                if (dWav.exists() && dWav.length() > 0) dWav else null
+            } catch (e: Exception) { Log.w("Activity","disclaimer TTS 실패: $e"); null }
+        } else null
+
+        engine!!.renderIntro(mergedMeta, disclaimerWav) { msg -> appendLog(msg); updateStatus(msg) }
+
+        val cacheDir    = AppConfig.sceneCacheDir(sheet)
+        val prepList    = mutableListOf<ScenePrep>()
+        var cumSecs     = 0f
+        var processed   = 0
+
+        for (row in data.scriptRows) {
+            if (!isRendering) break
+            val sceneId = "scene_${row.rowIndex.toString().padStart(4,'0')}"
+            val prep = engine!!.prepareScene(
+                row         = row,
+                voiceConfig = voiceConfig,
+                startSecs   = cumSecs,
+                cacheDir    = cacheDir
+            ) { msg -> appendLog(msg); updateStatus(msg) }
+
+            if (prep != null) {
+                prepList.add(prep)
+                cumSecs += prep.wavDuration
+                reader!!.updateStatus(sheet, row.rowIndex, "DONE", data.scriptStartSheetRow)
+            } else {
+                reader!!.updateStatus(sheet, row.rowIndex, "ERROR", data.scriptStartSheetRow)
+                appendLog("[$sceneId] ❌ prepareScene 실패")
+            }
+            processed++
+            withContext(Dispatchers.Main) { progressBar.progress = processed }
+        }
+
+        if (!isRendering) { updateStatus("⏹ 중지 — [$sheet] Phase 1 ${prepList.size}/${data.scriptRows.size}씬"); return false }
+
+        val safeSheet = sheet.replace(Regex("[^가-힣A-Za-z0-9_]"), "_")
+
+        if (prepList.isNotEmpty()) {
+            updateStatus("🎬 [$sheet] 단일 인코딩 조립 중 (${prepList.size}씬)...")
+            val bodyFile = engine!!.assembleBody(prepList, safeSheet) { msg -> appendLog(msg); updateStatus(msg) }
+            if (bodyFile == null) { updateStatus("❌ [$sheet] body 조립 실패 — output 폴더 임시파일 확인"); return false }
+        }
+
+        updateStatus("🔗 [$sheet] 최종 합치기 + BGM...")
+        val finalFile = engine!!.concatSubclips(
+            outputName    = safeSheet,
+            bgmFileName   = mergedMeta.mainBgm,
+            watermarkText = mergedMeta.topWatermark,
+            introDurSecs  = engine!!.actualIntroDurationSecs
+        ) { msg -> appendLog(msg); updateStatus(msg) }
+
+        if (finalFile == null || !finalFile.exists()) { updateStatus("❌ [$sheet] 최종 합치기 실패 — output 폴더 확인"); return false }
+
+        updateStatus("🎬 [$sheet] 완료: ${finalFile.name} (${finalFile.length()/1024/1024}MB) → 업로드")
+        val videoId = youtubeUploader.upload(
+            videoFile     = finalFile,
+            title         = buildYouTubeTitle(sheet, isXrp),
+            description   = buildYouTubeDescription(isXrp),
+            tags          = buildYouTubeTags(isXrp),
+            privacyStatus = "private"
+        ) { msg -> appendLog(msg); updateStatus(msg) }
+
+        return videoId != null   // 업로드까지 성공해야 true
     }
 
     private fun stopRendering() {
         isRendering = false
         stopService(Intent(this, RenderForegroundService::class.java))
-        updateStatus("⏹ 중지")
+        updateStatus("⏹ 중지 요청 — 현재 편 마무리 후 정지")
     }
 
     // ── YouTube 메타데이터 빌더 ───────────────────────────────
 
     private fun buildYouTubeTitle(sheet: String, isXrp: Boolean): String {
-        val datePart = Regex("(\\d{8})").find(sheet)?.groupValues?.get(1)?.let {
+        val datePart = Regex("([0-9]{8})").find(sheet)?.groupValues?.get(1)?.let {
             "${it.substring(0,4)}.${it.substring(4,6)}.${it.substring(6,8)}"
         } ?: ""
         val typePart = when {
