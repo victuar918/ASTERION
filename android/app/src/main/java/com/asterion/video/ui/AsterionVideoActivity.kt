@@ -53,7 +53,7 @@ class AsterionVideoActivity : AppCompatActivity() {
     private var allSheets    = listOf<String>()          // 사용 가능한 전체 시트
     private val renderQueue  = mutableListOf<String>()   // 선택된 시트(순서 유지)
     private val failedSheets = linkedSetOf<String>()     // 실패(업로드 안 됨) 시트 — 영구 저장
-    private val prefs by lazy { getSharedPreferences("asterion_render", MODE_PRIVATE) }
+    private val prefs by lazy { getSharedPreferences("asterion_render", android.content.Context.MODE_PRIVATE) }
 
     private val auth            by lazy { ServiceAccountAuth(this) }
     private val youtubeUploader  by lazy { YouTubeUploader(this) }
