@@ -596,7 +596,7 @@ class AsterionRenderEngine(
             val vfCard = when (fxCard) {
                 CardExtraEffect.VIBRATE ->
                     "format=rgba,pad=iw+24:ih+24:12:12:color=0x00000000," +
-                    "crop=w=${VIDEO_W}:h=${VIDEO_H}:x=12+8*sin(2*PI*9*t)*exp(-t*2):y=12+6*sin(2*PI*11*t)*exp(-t*2):eval=frame," +
+                    "crop=w=${VIDEO_W}:h=${VIDEO_H}:x=12+8*sin(2*PI*9*t)*exp(-t*2):y=12+6*sin(2*PI*11*t)*exp(-t*2)," +
                     "format=argb"
                 else -> "format=argb"
             }
