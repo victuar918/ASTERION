@@ -598,6 +598,11 @@ class AsterionRenderEngine(
                     "format=rgba,pad=iw+24:ih+24:12:12:color=0x00000000," +
                     "crop=w=${VIDEO_W}:h=${VIDEO_H}:x=12+8*sin(2*PI*9*t)*exp(-t*2):y=12+6*sin(2*PI*11*t)*exp(-t*2)," +
                     "format=argb"
+                CardExtraEffect.HEARTBEAT ->
+                    "format=rgba," +
+                    "scale=w=iw*(1-0.025*(1-cos(2*PI*1.1*t))*exp(-t*0.4)):h=ih*(1-0.025*(1-cos(2*PI*1.1*t))*exp(-t*0.4)):eval=frame," +
+                    "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=0x00000000:eval=frame," +
+                    "format=argb"
                 else -> "format=argb"
             }
             fun runCard(vf: String): Boolean {
