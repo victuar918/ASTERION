@@ -675,7 +675,7 @@ class AsterionRenderEngine(
         }
         if (bgmFile != null) {
             fp+="${aFilt}volume=0.85[tts]"
-            fp+="[${bgmIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=volume='if(lt(t\\,13.0)\\,0.40\\,if(lt(t\\,15.0)\\,0.40+(t-13.0)*(-0.18)\\,0.04))':eval=frame[bgm]"
+            fp+="[${bgmIdx}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=volume='if(lt(t\\,13.0)\\,0.40\\,if(lt(t\\,15.0)\\,0.40+(t-13.0)*(-0.185)\\,0.03))':eval=frame[bgm]"
             fp+="[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"; aMap="[aout]"
         }
         val cmd=buildString{
