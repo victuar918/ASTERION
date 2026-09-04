@@ -590,10 +590,28 @@ class AsterionRenderEngine(
         // v3.32: alpha-preserving codec (qtrle/.mov). magenta + colorkey workaround removed.
         if (hasCard) {
             // RGBA PNG -> qtrle: keep alpha (static loop, bounded by audio via -shortest)
-            com.arthenica.ffmpegkit.FFmpegKit.execute(
-                "-y -r 30 -loop 1 -i ${pngFile.absolutePath} -i ${audioSrc.absolutePath} " +
-                "-vf format=argb -c:v qtrle -c:a aac -b:a 128k -shortest ${cardFile.absolutePath}"
-            )
+            // v3.41: Card_ExtraEffect(O열) — VIBRATE는 pad+crop으로만 구현(오버레이 미사용) → 카드 투명도 100% 보존.
+            //         감쇠(exp)로 진입 직후만 흔리고 약 1.5초 뒤 정지. 필터에 쉼표/공백 없음(파싱 안전).
+            val fxCard = CardExtraEffect.from(prep.row.cardExtraEffect.trim())
+            val vfCard = when (fxCard) {
+                CardExtraEffect.VIBRATE ->
+                    "format=rgba,pad=iw+24:ih+24:12:12:color=0x00000000," +
+                    "crop=w=${VIDEO_W}:h=${VIDEO_H}:x=12+8*sin(2*PI*9*t)*exp(-t*2):y=12+6*sin(2*PI*11*t)*exp(-t*2):eval=frame," +
+                    "format=argb"
+                else -> "format=argb"
+            }
+            fun runCard(vf: String): Boolean {
+                cardFile.delete()
+                com.arthenica.ffmpegkit.FFmpegKit.execute(
+                    "-y -r 30 -loop 1 -i ${pngFile.absolutePath} -i ${audioSrc.absolutePath} " +
+                    "-vf $vf -c:v qtrle -c:a aac -b:a 128k -shortest ${cardFile.absolutePath}"
+                )
+                return cardFile.exists() && cardFile.length() > 0L
+            }
+            if (!runCard(vfCard) && vfCard != "format=argb") {
+                onProgress("  ⚠ 카드[$idx] 효과 실패 → 정적 카드 폴백")
+                runCard("format=argb")
+            }
         } else {
             // No card: fully transparent clip -> BGV 100% visible after overlay
             com.arthenica.ffmpegkit.FFmpegKit.execute(
