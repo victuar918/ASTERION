@@ -593,18 +593,49 @@ class AsterionRenderEngine(
             // v3.41: Card_ExtraEffect(O열) — VIBRATE는 pad+crop으로만 구현(오버레이 미사용) → 카드 투명도 100% 보존.
             //         감쇠(exp)로 진입 직후만 흔리고 약 1.5초 뒤 정지. 필터에 쉼표/공백 없음(파싱 안전).
             val fxCard = CardExtraEffect.from(prep.row.cardExtraEffect.trim())
-            val vfCard = when (fxCard) {
+            val vfExtra = when (fxCard) {
                 CardExtraEffect.VIBRATE ->
-                    "format=rgba,pad=iw+24:ih+24:12:12:color=0x00000000," +
-                    "crop=w=${VIDEO_W}:h=${VIDEO_H}:x=12+8*sin(2*PI*9*t)*exp(-t*2):y=12+6*sin(2*PI*11*t)*exp(-t*2)," +
-                    "format=argb"
+                    "pad=iw+24:ih+24:12:12:color=0x00000000," +
+                    "crop=w=${VIDEO_W}:h=${VIDEO_H}:x=12+8*sin(2*PI*9*t)*exp(-t*2):y=12+6*sin(2*PI*11*t)*exp(-t*2)"
                 CardExtraEffect.HEARTBEAT ->
-                    "format=rgba," +
                     "scale=w=iw*(1-0.025*(1-cos(2*PI*1.1*t))*exp(-t*0.4)):h=ih*(1-0.025*(1-cos(2*PI*1.1*t))*exp(-t*0.4)):eval=frame," +
-                    "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=0x00000000:eval=frame," +
-                    "format=argb"
-                else -> "format=argb"
+                    "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=0x00000000:eval=frame"
+                else -> ""
             }
+            // v3.43: I열(Animation A~G) 등장/퇴장 — 지수감쇠로 부드럽게(쉼표없는 식). 패딩 320px 안에서만 이동.
+            //         유지 구간엔 식이 상수로 수렴 → 프레임 동일 → 파일크기 증가 최소.
+            val durC = prep.wavDuration.coerceAtLeast(1.2f)
+            val pad0 = 320
+            fun offExpr(a: Int, b: Int): String {
+                var s = "$pad0"
+                if (a != 0) s += (if (a > 0) "+" else "-") + kotlin.math.abs(a) + "*exp(-t*3)"
+                if (b != 0) s += (if (b > 0) "+" else "-") + kotlin.math.abs(b) + "*exp((t-${durC.fmtUS(2)})*3)"
+                return s
+            }
+            fun slide(ax: Int, ay: Int, bx: Int, by: Int): String =
+                "pad=iw+${pad0 * 2}:ih+${pad0 * 2}:${pad0}:${pad0}:color=0x00000000," +
+                "crop=w=${VIDEO_W}:h=${VIDEO_H}:x=${offExpr(ax, bx)}:y=${offExpr(ay, by)}"
+            fun zoom(amt: String, wOnly: Boolean): String {
+                val f = "(1-${amt}*exp(-t*3)-${amt}*exp((t-${durC.fmtUS(2)})*3))"
+                val hE = if (wOnly) "ih" else "ih*$f"
+                return "scale=w=iw*$f:h=$hE:eval=frame," +
+                    "pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=0x00000000:eval=frame"
+            }
+            val vfMotion = when (AnimationPattern.from(prep.row.animation)) {
+                AnimationPattern.A -> slide(300, 0, 0, 300)      // 왼쪽에서 → 위로 퇴장
+                AnimationPattern.B -> slide(-300, 0, 0, -300)    // 오른쪽에서 → 아래로 퇴장
+                AnimationPattern.C -> slide(0, 300, 0, -300)     // 위에서 → 아래로 퇴장
+                AnimationPattern.E -> slide(220, -220, 0, 0)     // 좌하단에서 → 페이드 퇴장
+                AnimationPattern.F -> zoom("0.4", false)         // 중앙 확대/축소
+                AnimationPattern.G -> zoom("0.9", true)          // 좌우 펼침/말림
+                else -> ""                                        // D 등: 페이드만
+            }
+            val fdC = (durC / 4f).coerceAtMost(0.8f).coerceAtLeast(0.2f)
+            val fSt = (durC - fdC).coerceAtLeast(0.1f)
+            val vfFade = "fade=t=in:st=0:d=${fdC.fmtUS(2)}:alpha=1,fade=t=out:st=${fSt.fmtUS(2)}:d=${fdC.fmtUS(2)}:alpha=1"
+            val vfFull = listOf("format=rgba", vfMotion, vfExtra, vfFade, "format=argb")
+                .filter { it.isNotBlank() }.joinToString(",")
+            val vfSafe = "format=rgba,$vfFade,format=argb"
             fun runCard(vf: String): Boolean {
                 cardFile.delete()
                 com.arthenica.ffmpegkit.FFmpegKit.execute(
@@ -613,9 +644,12 @@ class AsterionRenderEngine(
                 )
                 return cardFile.exists() && cardFile.length() > 0L
             }
-            if (!runCard(vfCard) && vfCard != "format=argb") {
-                onProgress("  ⚠ 카드[$idx] 효과 실패 → 정적 카드 폴백")
-                runCard("format=argb")
+            if (!runCard(vfFull)) {
+                onProgress("  ⚠ 카드[$idx] 동작 실패 → 페이드만 재시도")
+                if (!runCard(vfSafe)) {
+                    onProgress("  ⚠ 카드[$idx] 페이드 실패 → 정적 카드")
+                    runCard("format=argb")
+                }
             }
         } else {
             // No card: fully transparent clip -> BGV 100% visible after overlay
