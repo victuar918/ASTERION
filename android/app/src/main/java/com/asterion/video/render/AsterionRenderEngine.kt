@@ -347,6 +347,15 @@ class AsterionRenderEngine(
             Log.e(TAG, "body_cards 실패: ${cRc.logsAsString.takeLast(400)}"); onProgress("❌ 카드 concat 실패"); return@withContext null
         }
         val actualBodyDur = measureDuration(bodyCardsFile, "body_cards", onProgress)
+        // v3.44: concat -c copy 는 입력 규격이 어긋나면 에러 없이 그 지점에서 조용히 종료된다(종료코드 0, 파일 정상).
+        //         → 길이 불일치를 실제 오류로 처리하고 FFmpeg 로그를 노출시켜 원인 추적 가능하게 함.
+        val expectDur = preps.sumOf { it.wavDuration.toDouble() }.toFloat()
+        if (expectDur - actualBodyDur > 0.5f) {
+            Log.e(TAG, "카드 concat 조용한 중단 ${actualBodyDur.fmtUS(2)}/${expectDur.fmtUS(2)} cards=${cardFiles.size}/${preps.size} ${cRc.logsAsString?.takeLast(2000)}")
+            onProgress("❌ 카드 합치기 중단: ${actualBodyDur.fmtUS(1)}s / 기대 ${expectDur.fmtUS(1)}s (카드 ${cardFiles.size}/${preps.size}개)")
+            onProgress("FFmpeg: ${(cRc.logsAsString ?: "").takeLast(600)}")
+            bodyCardsFile.delete(); return@withContext null
+        }
         onProgress("✅ body_cards: ${bodyCardsFile.length()/1024/1024}MB, ${actualBodyDur.fmtUS(1)}s")
 
         // ─ Step 3: BGV body (씬별 세그먼트) ───
@@ -641,7 +650,7 @@ class AsterionRenderEngine(
                 cardFile.delete()
                 com.arthenica.ffmpegkit.FFmpegKit.execute(
                     "-y -r 30 -loop 1 -i ${pngFile.absolutePath} -i ${audioSrc.absolutePath} " +
-                    "-vf $vf -c:v qtrle -c:a aac -b:a 128k -shortest ${cardFile.absolutePath}"
+                    "-vf $vf -c:v qtrle -c:a aac -b:a 128k -ar 44100 -ac 2 -shortest ${cardFile.absolutePath}"
                 )
                 return cardFile.exists() && cardFile.length() > 0L
             }
@@ -657,7 +666,7 @@ class AsterionRenderEngine(
             com.arthenica.ffmpegkit.FFmpegKit.execute(
                 "-y -f lavfi -i color=c=black:size=${VIDEO_W}x${VIDEO_H}:rate=30 -i ${audioSrc.absolutePath} " +
                 "-filter_complex [0:v]format=rgba,colorchannelmixer=aa=0,format=argb[cv] " +
-                "-map [cv] -map 1:a -c:v qtrle -c:a aac -b:a 128k -shortest ${cardFile.absolutePath}"
+                "-map [cv] -map 1:a -c:v qtrle -c:a aac -b:a 128k -ar 44100 -ac 2 -shortest ${cardFile.absolutePath}"
             )
         }
         pngFile.delete(); tempSil?.delete()
