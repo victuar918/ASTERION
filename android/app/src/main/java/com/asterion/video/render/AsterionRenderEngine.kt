@@ -652,7 +652,10 @@ class AsterionRenderEngine(
                     "-y -r 30 -loop 1 -i ${pngFile.absolutePath} -i ${audioSrc.absolutePath} " +
                     "-vf $vf -c:v qtrle -c:a aac -b:a 128k -ar 44100 -ac 2 -shortest ${cardFile.absolutePath}"
                 )
-                return cardFile.exists() && cardFile.length() > 0L
+                // v3.46: 크기만으로는 손상 파일(재생정보 누락)을 못 걸러 concat이 조용히 끊긴다 → 실제 재생길이로 검증
+                if (!cardFile.exists() || cardFile.length() < 1024L) return false
+                val dCard = getMediaDurationSecs(cardFile)
+                return dCard > 0.05f && kotlin.math.abs(dCard - prep.wavDuration) < 1.0f
             }
             if (!runCard(vfFull)) {
                 onProgress("  ⚠ 카드[$idx] 동작 실패 → 페이드만 재시도")
