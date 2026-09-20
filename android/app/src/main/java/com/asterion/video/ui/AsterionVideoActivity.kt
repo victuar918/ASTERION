@@ -52,7 +52,12 @@ class AsterionVideoActivity : AppCompatActivity() {
     // v3.39: 렌더 큐 상태
     private var allSheets    = listOf<String>()          // 사용 가능한 전체 시트
     private val renderQueue  = mutableListOf<String>()   // 선택된 시트(순서 유지)
-    private val failedSheets = linkedSetOf<String>()     // 실패(업로드 안 됨) 시트 — 영구 저장
+    private val failedSheets = linkedSetOf<String>()
+    // v3.47: RenderQueue 자동 감시
+    private val autoQueueRows       = mutableMapOf<String, Int>()   // 시트명 -> RenderQueue 행번호
+    private val pendingStatusWrites = mutableMapOf<Int, String>()   // 실패한 상태쓰기 재시도 대기
+    private var autoPollJob: kotlinx.coroutines.Job? = null
+    private var autoRender = false     // 실패(업로드 안 됨) 시트 — 영구 저장
     private val prefs by lazy { getSharedPreferences("asterion_render", android.content.Context.MODE_PRIVATE) }
 
     private val auth            by lazy { ServiceAccountAuth(this) }
@@ -111,8 +116,17 @@ class AsterionVideoActivity : AppCompatActivity() {
         btnStop.layoutParams  = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         btnReset.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         btnRow.addView(btnStart); btnRow.addView(btnStop); btnRow.addView(btnReset)
-        listOf(tvKeyStatus, btnSheetSelect, llSpeakers, btnRow, progressBar, tvStatus, tvLog)
+        val swAuto = Switch(this).apply {
+            text = "자동 렌더 (RenderQueue 5분 감시)"; textSize = 12f
+            isChecked = prefs.getBoolean("auto_render", false)
+        }
+        listOf(tvKeyStatus, btnSheetSelect, llSpeakers, btnRow, swAuto, progressBar, tvStatus, tvLog)
             .forEach { layout.addView(it) }
+        autoRender = swAuto.isChecked
+        swAuto.setOnCheckedChangeListener { _, on ->
+            autoRender = on; prefs.edit().putBoolean("auto_render", on).apply()
+            if (on) startAutoPoll() else { autoPollJob?.cancel(); updateStatus("자동 렌더 OFF") }
+        }
         btnStart.setOnClickListener { startRendering() }
         btnStop.setOnClickListener  { stopRendering() }
         btnReset.setOnClickListener { showResetPicker() }
@@ -383,6 +397,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                 else {
                     btnReset.isEnabled = true
                     tvStatus.text = "VS_ 시트 ${sheets.size}개 — '시트 선택'에서 렌더 큐 구성"
+                    if (autoRender) startAutoPoll()
                 }
             }
         } catch(e:Exception){ withContext(Dispatchers.Main){tvStatus.text="❌ ${e.message}"} }
@@ -390,7 +405,87 @@ class AsterionVideoActivity : AppCompatActivity() {
 
     // ── 렌더링 메인 (큐 순차) ─────────────────────────────────────
     // v3.39: 큐를 순서대로 렌더→업로드. 실패해도 다음 편 계속(A). 실패 시트는 ❌ 표시+영구저장.
-    private fun startRendering() {
+    // ── 자동 렌더 (RenderQueue 감시) ──────────────────
+    // v3.47: 5분마다 RenderQueue 확인 → PENDING을 순서대로 렌더. 렌더 중이면 이번 배치가 끝난 뒤 처리.
+    //         6시간 넘은 RUNNING만 PENDING 복구(다른 폰이 TTS 선작업 중일 수 있어 최근 RUNNING은 보존).
+    private fun startAutoPoll() {
+        autoPollJob?.cancel()
+        autoPollJob = lifecycleScope.launch(Dispatchers.IO) {
+            updateStatus("🤖 자동 렌더 ON — RenderQueue 5분마다 확인")
+            while (autoRender) {
+                try { if (!isRendering) pollRenderQueue() }
+                catch (e: Exception) { Log.e("Activity", "autoPoll: $e") }
+                kotlinx.coroutines.delay(5L * 60L * 1000L)
+            }
+        }
+    }
+
+    private suspend fun pollRenderQueue() {
+        val r = SheetsVideoReader(auth.getAccessToken(), VIDEO_SS_ID)
+        // 지난 폴링에서 실패한 상태쓰기 재시도 (시트를 열어두어 덮인 경우 복구)
+        for ((rowNum, st) in pendingStatusWrites.entries.toList()) {
+            if (r.updateQueueStatus(rowNum, st)) pendingStatusWrites.remove(rowNum)
+        }
+        val rows = r.readRenderQueue()
+        if (rows.isEmpty()) return
+        val now = System.currentTimeMillis()
+        for (q in rows) {
+            if (q.status != "RUNNING") continue
+            val t = parseKstMillis(q.requested)
+            if (t > 0L && now - t > 6L * 60L * 60L * 1000L) {
+                r.updateQueueStatus(q.sheetRow, "PENDING")
+                appendLog("♻ 방치된 RUNNING 복구: ${q.sheetName}")
+            }
+        }
+        val pend = r.readRenderQueue().filter { it.status == "PENDING" }
+        if (pend.isEmpty()) return
+        autoQueueRows.clear()
+        pend.forEach { autoQueueRows[it.sheetName] = it.sheetRow }
+        appendLog("🤖 자동 큐 ${pend.size}편 감지 → 렌더 시작")
+        withContext(Dispatchers.Main) {
+            renderQueue.clear(); renderQueue.addAll(pend.map { it.sheetName })
+            updateSheetButton()
+            startRendering(voiceConfigFromPrefs(listOf(1, 2, 3)))
+        }
+    }
+
+    private fun parseKstMillis(s: String): Long = try {
+        val f = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
+        f.timeZone = java.util.TimeZone.getTimeZone("Asia/Seoul")
+        f.parse(s.trim())?.time ?: 0L
+    } catch (e: Exception) { 0L }
+
+    private suspend fun markQueue(sheet: String, status: String) {
+        val rowNum = autoQueueRows[sheet] ?: return
+        val ok = runCatching {
+            SheetsVideoReader(auth.getAccessToken(), VIDEO_SS_ID).updateQueueStatus(rowNum, status)
+        }.getOrElse { false }
+        if (!ok) pendingStatusWrites[rowNum] = status
+    }
+
+    private fun saveVoicePrefs() {
+        val e = prefs.edit()
+        for (sid in speakerSpinners.keys) {
+            e.putInt("v_idx_$sid", speakerSpinners[sid]?.selectedItemPosition ?: 0)
+            e.putInt("v_spd_$sid", speakerSeekBars[sid]?.progress ?: 50)
+            e.putInt("v_stp_$sid", speakerNumStepsBars[sid]?.progress ?: 4)
+        }
+        e.apply()
+    }
+
+    // 자동 렌더는 화면 로딩을 기다리지 않고 마지막 수동 설정값을 그대로 사용
+    private fun voiceConfigFromPrefs(speakers: List<Int>): VoiceConfig {
+        val map = speakers.associateWith { sid ->
+            val idx = prefs.getInt("v_idx_$sid", when (sid) { 1 -> 5; 2 -> 0; 3 -> 6; else -> 0 })
+            val spd = prefs.getInt("v_spd_$sid", when (sid) { 1 -> 50; 2 -> 42; 3 -> 58; else -> 50 })
+            val stp = prefs.getInt("v_stp_$sid", 4)
+            val nm  = when (sid) { 1 -> "아스터"; 2 -> "리언"; 3 -> "나레이터"; else -> "Speaker$sid" }
+            SpeakerConfig(VoiceConfig.SID_LIST[idx], progressToSpeed(spd), nm, progressToNumSteps(stp))
+        }
+        return if (map.isEmpty()) VoiceConfig.DEFAULT else VoiceConfig(map)
+    }
+
+    private fun startRendering(autoCfg: VoiceConfig? = null) {
         if (isRendering) return
         if (!hasAllFilesPermission()) {
             updateStatus("⚠ '모든 파일 접근' 권한이 없습니다.")
@@ -398,7 +493,7 @@ class AsterionVideoActivity : AppCompatActivity() {
             return
         }
         if (renderQueue.isEmpty()) { updateStatus("⚠ 렌더 큐가 비어있음 — 시트를 선택하세요"); return }
-        val voiceConfig = buildVoiceConfig()
+        val voiceConfig = autoCfg ?: buildVoiceConfig().also { saveVoicePrefs() }
         val queue = renderQueue.toList()          // 스냅샷
         failedSheets.clear(); saveFailed()        // 새 렌더 → 실패기록 초기화
 
@@ -411,15 +506,16 @@ class AsterionVideoActivity : AppCompatActivity() {
                     if (!isRendering) break
                     updateStatus("═══ 큐 ${qi + 1}/${queue.size}: $sheet ═══")
                     appendLog("▶ [$sheet] 시작 (${qi + 1}/${queue.size})")
+                    markQueue(sheet, "RUNNING")
                     val ok = try {
                         renderOneSheet(sheet, voiceConfig)
                     } catch (e: Exception) {
                         Log.e("Activity", "[$sheet] 예외", e); updateStatus("❌ [$sheet] ${e.message}"); false
                     }
                     when {
-                        ok            -> appendLog("✅ [$sheet] 업로드 완료")
+                        ok            -> { markQueue(sheet, "DONE"); appendLog("✅ [$sheet] 업로드 완료") }
                         !isRendering  -> appendLog("⏹ [$sheet] 중지됨")
-                        else          -> { failedSheets.add(sheet); saveFailed(); appendLog("❌❌ [$sheet] 실패(업로드 안 됨) → 다음 편") }
+                        else          -> { markQueue(sheet, "ERROR"); failedSheets.add(sheet); saveFailed(); appendLog("❌❌ [$sheet] 실패(업로드 안 됨) → 다음 편") }
                     }
                 }
                 val fails = queue.count { failedSheets.contains(it) }
