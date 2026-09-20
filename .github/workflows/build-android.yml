@@ -25,6 +25,8 @@ jobs:
 
       - name: Android SDK 설정
         uses: android-actions/setup-android@v3
+        with:
+          packages: ''
 
       - name: Gradle 설정
         uses: gradle/actions/setup-gradle@v4
