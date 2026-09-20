@@ -14,6 +14,14 @@ import java.util.concurrent.TimeUnit
 private const val TAG = "SheetsVideoReader"
 const val VIDEO_SS_ID = "1ugWJmyLItD95Vz7Jq8Wjxn0_Ml5REjrhUxNZVFoIFmc"
 
+data class RenderQueueRow(
+    val sheetRow: Int,      // RenderQueue 시트의 실제 행 번호 (1-indexed)
+    val sheetName: String,
+    val status: String,
+    val requested: String,
+    val note: String
+)
+
 data class VideoScriptData(
     val sheetName: String,
     val videoMeta: VideoMeta,
@@ -120,6 +128,48 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
                 .map { arr.getJSONObject(it).getJSONObject("properties").getString("title") }
                 .filter { it.startsWith("VS_") }
         }.getOrElse { Log.e(TAG, "listScriptSheets: $it"); emptyList() }
+    }
+
+    // v3.47: RenderQueue (Sheet | Status | Requested | Note) — 대본 완성 시 외부에서 PENDING 등록됨
+    suspend fun readRenderQueue(): List<RenderQueueRow> = withContext(Dispatchers.IO) {
+        runCatching {
+            val encoded = java.net.URLEncoder.encode("RenderQueue!A2:D", "UTF-8")
+            val resp   = get("$base/$spreadsheetId/values/$encoded") ?: return@runCatching emptyList<RenderQueueRow>()
+            val values = resp.optJSONArray("values") ?: return@runCatching emptyList<RenderQueueRow>()
+            (0 until values.length()).mapNotNull { i ->
+                val row = values.getJSONArray(i)
+                // 빈 칸은 응답에서 아예 생략되므로 길이 확인 후 접근
+                fun cell(j: Int): String = if (j < row.length()) row.getString(j).trim() else ""
+                val name = cell(0)
+                if (name.isBlank()) null
+                else RenderQueueRow(i + 2, name, cell(1).uppercase(), cell(2), cell(3))
+            }
+        }.getOrElse { Log.e(TAG, "readRenderQueue: $it"); emptyList() }
+    }
+
+    suspend fun updateQueueStatus(sheetRow: Int, status: String, note: String? = null): Boolean =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val ok1 = putValues("RenderQueue!B$sheetRow", status)
+                val ok2 = if (note != null) putValues("RenderQueue!D$sheetRow", note) else true
+                ok1 && ok2
+            }.getOrElse { false }
+        }
+
+    private fun putValues(rangeA1: String, value: String): Boolean {
+        val encoded = java.net.URLEncoder.encode(rangeA1, "UTF-8")
+        val url  = "$base/$spreadsheetId/values/$encoded?valueInputOption=USER_ENTERED"
+        val body = JSONObject().apply {
+            put("values", org.json.JSONArray().apply {
+                put(org.json.JSONArray().apply { put(value) })
+            })
+        }
+        val req = Request.Builder().url(url)
+            .addHeader("Authorization", "Bearer $accessToken")
+            .addHeader("Content-Type", "application/json")
+            .put(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        return client.newCall(req).execute().use { it.isSuccessful }
     }
 
     private fun parseVideoMeta(rows: List<List<String>>): VideoMeta {
