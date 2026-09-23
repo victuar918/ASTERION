@@ -57,7 +57,7 @@ class AsterionVideoActivity : AppCompatActivity() {
     private val autoQueueRows       = mutableMapOf<String, Int>()   // 시트명 -> RenderQueue 행번호
     private val pendingStatusWrites = mutableMapOf<Int, String>()   // 실패한 상태쓰기 재시도 대기
     private var autoPollJob: kotlinx.coroutines.Job? = null
-    private var autoRender = false     // 실패(업로드 안 됨) 시트 — 영구 저장
+    private var autoRender = false
     private val prefs by lazy { getSharedPreferences("asterion_render", android.content.Context.MODE_PRIVATE) }
 
     private val auth            by lazy { ServiceAccountAuth(this) }
@@ -630,7 +630,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         updateStatus("🎬 [$sheet] 완료: ${finalFile.name} (${finalFile.length()/1024/1024}MB) → 업로드")
         val videoId = youtubeUploader.upload(
             videoFile     = finalFile,
-            title         = buildYouTubeTitle(sheet, isXrp),
+            title         = mergedMeta.youtubeTitle.trim().ifBlank { buildYouTubeTitle(sheet, isXrp) },
             description   = buildYouTubeDescription(isXrp),
             tags          = buildYouTubeTags(isXrp),
             privacyStatus = "private"
@@ -661,6 +661,23 @@ class AsterionVideoActivity : AppCompatActivity() {
         return if (datePart.isNotBlank()) "$base | $datePart$typePart" else "$base$typePart"
     }
 
+    // v3.48: 매 영상 동일하게 들어가는 고정 안내 문구 (줄바꿈 그대로 보존)
+    private val PROMO_BLOCK = """
+그동안 XRP 분석을 통해 소통하며 많은 분이 운의 흐름에 대해 고민하시는 것을 보았습니다.
+제가 밤잠을 설쳐가며 만든 ASTERION Structure Design의 시스템이 여러분의 앞길에 실질적인 빛이 되길 바라는 마음으로, 가장 정중하고 조심스럽게 이 안내를 준비했습니다.
+자세한 내용을 아래 블로그에서 확인하실 수 있습니다.
+
+티스토리 블로그: https://by-asterion.tistory.com
+
+네이버 블로그 URL: https://m.blog.naver.com/victuar
+
+ASTERION Signature 구매 및 결제, 스마트스토어 URL:
+https://naver.me/FZo4B3AX
+
+카카오채널 URL:
+http://pf.kakao.com/_MLxmIX
+""".trim()
+
     private fun buildYouTubeDescription(isXrp: Boolean): String = buildString {
         append("🌟 ASTERION | 베다점성술 기반 암호화폐 분석\n\n")
         if (isXrp) {
@@ -671,6 +688,8 @@ class AsterionVideoActivity : AppCompatActivity() {
         }
         append("⚠️ 본 영상은 투자 권유 또는 투자 조언이 아닙니다.\n")
         append("모든 투자 결정은 시청자 본인의 판단과 책임 하에 이루어져야 합니다.\n\n")
+        append(PROMO_BLOCK)
+        appendLine(); appendLine()
         append("#ASTERION #베다점성술 #암호화폐 ")
         if (isXrp) append("#XRP #리플") else append("#크립토")
     }
