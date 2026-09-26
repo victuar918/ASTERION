@@ -11,6 +11,7 @@ data class VideoMeta(
     val introText: String = "빛은 선택된 이에게만 닿는다",  // Phase1 상단 1/3 텍스트
     val introDurationSecs: Float = 15f,           // 면책 TTS 시작 시점(초)
     val introType: String = "",                   // "XRP" 또는 "" (CRYPTO) — Phase2 텍스트 결정
+    val publishAt: String = "",                   // v3.49: 공개예약 시각 KST "yyyy-MM-dd HH:mm" (값 있음=크립토 갤러리)
     val disclaimerText: String = ""               // t=introDurationSecs에 시작할 면책 TTS 텍스트
 )
 
