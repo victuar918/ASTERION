@@ -548,7 +548,8 @@ class AsterionVideoActivity : AppCompatActivity() {
         if (data.scriptRows.isEmpty()) { updateStatus("⚠ [$sheet] 대본 행 없음"); return false }
         withContext(Dispatchers.Main) { progressBar.max = data.scriptRows.size; progressBar.progress = 0 }
 
-        val isXrp      = sheet.contains("XRP", ignoreCase = true)
+        // v3.49: 분류 기준 = Publish_At 유무 (크립토 갤러리에도 XRP 편이 있어 시트명으로 판단 불가)
+        val isXrp      = data.videoMeta.publishAt.isBlank()
         val mergedMeta = data.videoMeta.copy(
             introBgv1         = "intro01_asterion_signature_bracelet.mp4",
             introBgv2         = "intro02_golden_fluid_ink_loop_slow.mp4",
@@ -633,7 +634,10 @@ class AsterionVideoActivity : AppCompatActivity() {
             title         = mergedMeta.youtubeTitle.trim().ifBlank { buildYouTubeTitle(sheet, isXrp) },
             description   = buildYouTubeDescription(isXrp),
             tags          = buildYouTubeTags(isXrp),
-            privacyStatus = "private"
+            privacyStatus = "private",
+            publishAt     = toPublishAtUtc(mergedMeta.publishAt),
+            playlistId    = if (isXrp) PLAYLIST_XRP else PLAYLIST_CRYPTO,
+            thumbnailFile = File(finalFile.parentFile, if (isXrp) "thumb_xrp.jpg" else "thumb_crypto.jpg").takeIf { it.exists() }
         ) { msg -> appendLog(msg); updateStatus(msg) }
 
         return videoId != null   // 업로드까지 성공해야 true
@@ -646,6 +650,24 @@ class AsterionVideoActivity : AppCompatActivity() {
     }
 
     // ── YouTube 메타데이터 빌더 ───────────────────────────────
+
+    // v3.49: 재생목록 ID
+    private val PLAYLIST_XRP    = "PLy5E1_q6EmYbvgoqHt-wr-NlVZslgZOhc"   // XRP분석
+    private val PLAYLIST_CRYPTO = "PLy5E1_q6EmYZibiAfUcUluFs65QutNWnf"   // 크립토 갤러리
+
+    // v3.49: 시트의 KST "yyyy-MM-dd HH:mm" -> 유튜브 publishAt(UTC RFC3339).
+    //        비었거나/형식 오류/지났거나 15분 이내 임박이면 "" (예약 없이 비공개)
+    private fun toPublishAtUtc(kst: String): String {
+        if (kst.isBlank()) return ""
+        val t = parseKstMillis(kst)
+        if (t <= 0L) { appendLog("⚠ Publish_At 형식 오류 [$kst] → 비공개 업로드"); return "" }
+        if (t < System.currentTimeMillis() + 15L * 60L * 1000L) {
+            appendLog("⚠ Publish_At 지남/임박 [$kst] → 비공개 업로드"); return ""
+        }
+        val f = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+        f.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        return f.format(java.util.Date(t))
+    }
 
     private fun buildYouTubeTitle(sheet: String, isXrp: Boolean): String {
         val datePart = Regex("([0-9]{8})").find(sheet)?.groupValues?.get(1)?.let {
