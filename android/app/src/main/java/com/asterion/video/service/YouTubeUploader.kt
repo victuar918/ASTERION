@@ -45,6 +45,9 @@ class YouTubeUploader(private val context: Context) {
         tags         : List<String> = emptyList(),
         categoryId   : String   = "27",       // Education
         privacyStatus: String   = "private",
+        publishAt    : String   = "",        // v3.49: RFC3339 UTC. 값 있으면 그 시각에 자동 공개
+        playlistId   : String   = "",
+        thumbnailFile: File?    = null,
         onProgress   : (String) -> Unit = {}
     ): String? = withContext(Dispatchers.IO) {
         if (!isConfigured()) {
@@ -56,12 +59,13 @@ class YouTubeUploader(private val context: Context) {
             val token = auth.getAccessToken()
 
             onProgress("📋 YouTube: 업로드 세션 시작...")
-            val sessionUrl = startResumableSession(token, title, description, tags, categoryId, privacyStatus, videoFile.length())
+            val sessionUrl = startResumableSession(token, title, description, tags, categoryId, privacyStatus, videoFile.length(), publishAt)
 
             onProgress("⬆️ YouTube: 업로드 중 (${videoFile.length()/1024/1024}MB)...")
             val videoId = uploadChunked(sessionUrl, videoFile, onProgress)
 
             if (videoId != null) {
+                postUploadSteps(videoId, publishAt, playlistId, thumbnailFile, onProgress)
                 onProgress("✅ YouTube 업로드 완료: https://youtu.be/$videoId (상태: $privacyStatus)")
             } else {
                 onProgress("❌ YouTube: 업로드 완료 응답 없음")
@@ -81,7 +85,8 @@ class YouTubeUploader(private val context: Context) {
         tags         : List<String>,
         categoryId   : String,
         privacyStatus: String,
-        fileSize     : Long
+        fileSize     : Long,
+        publishAt    : String = ""
     ): String {
         val meta = JSONObject().apply {
             put("snippet", JSONObject().apply {
@@ -93,6 +98,7 @@ class YouTubeUploader(private val context: Context) {
             })
             put("status", JSONObject().apply {
                 put("privacyStatus", privacyStatus)
+                if (publishAt.isNotBlank()) put("publishAt", publishAt)
                 put("selfDeclaredMadeForKids", false)
             })
         }
@@ -109,6 +115,64 @@ class YouTubeUploader(private val context: Context) {
             throw Exception("세션 시작 실패 ${resp.code}: ${resp.body?.string()?.take(200)}")
         return resp.header("Location")
             ?: throw Exception("Location 헤더 없음 — 업로드 URL 수신 실패")
+    }
+
+    // v3.49: 업로드 성공 후 부가 작업. 각 단계 실패는 경고만 (영상은 이미 올라감)
+    private suspend fun postUploadSteps(
+        videoId      : String,
+        publishAt    : String,
+        playlistId   : String,
+        thumbnailFile: File?,
+        onProgress   : (String) -> Unit
+    ) {
+        if (publishAt.isNotBlank()) onProgress("🗓 공개 예약: $publishAt (UTC)")
+        val token = try { auth.getAccessToken() } catch (e: Exception) {
+            onProgress("⚠ 후처리 토큰 실패: ${e.message}"); return
+        }
+        // 썸네일
+        if (thumbnailFile == null) {
+            onProgress("⚠ 썸네일 파일 없음 — 건너뜀")
+        } else if (thumbnailFile.length() > 2L * 1024L * 1024L) {
+            onProgress("⚠ 썸네일 2MB 초과(${thumbnailFile.length() / 1024}KB) — 건너뜀")
+        } else {
+            try {
+                val mime = if (thumbnailFile.name.endsWith(".png", true)) "image/png" else "image/jpeg"
+                client.newCall(
+                    Request.Builder()
+                        .url("https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=$videoId")
+                        .post(thumbnailFile.readBytes().toRequestBody(mime.toMediaType()))
+                        .addHeader("Authorization", "Bearer $token")
+                        .build()
+                ).execute().use { r ->
+                    if (r.isSuccessful) onProgress("🖼 썸네일 적용: ${thumbnailFile.name}")
+                    else onProgress("⚠ 썸네일 실패 ${r.code}: ${r.body?.string()?.take(200)}")
+                }
+            } catch (e: Exception) { onProgress("⚠ 썸네일 예외: ${e.message}") }
+        }
+        // 재생목록
+        if (playlistId.isNotBlank()) {
+            try {
+                val body = JSONObject().apply {
+                    put("snippet", JSONObject().apply {
+                        put("playlistId", playlistId)
+                        put("resourceId", JSONObject().apply {
+                            put("kind", "youtube#video")
+                            put("videoId", videoId)
+                        })
+                    })
+                }
+                client.newCall(
+                    Request.Builder()
+                        .url("https://www.googleapis.com/youtube/v3/playlistItems?part=snippet")
+                        .post(body.toString().toRequestBody("application/json".toMediaType()))
+                        .addHeader("Authorization", "Bearer $token")
+                        .build()
+                ).execute().use { r ->
+                    if (r.isSuccessful) onProgress("📂 재생목록 추가 완료")
+                    else onProgress("⚠ 재생목록 실패 ${r.code}: ${r.body?.string()?.take(200)}")
+                }
+            } catch (e: Exception) { onProgress("⚠ 재생목록 예외: ${e.message}") }
+        }
     }
 
     private fun uploadChunked(
