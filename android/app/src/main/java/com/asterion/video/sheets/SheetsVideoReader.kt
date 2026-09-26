@@ -191,7 +191,8 @@ class SheetsVideoReader(private val accessToken: String, private val spreadsheet
             introText         = m["Intro_Text"] ?: "빛은 선택된 이에게만 닿는다",
             introDurationSecs = m["Intro_Duration"]?.toFloatOrNull() ?: 15f,
             introType         = m["Intro_Type"] ?: "",
-            disclaimerText    = m["Intro_Disclaimer"] ?: ""
+            disclaimerText    = m["Intro_Disclaimer"] ?: "",
+            publishAt         = m["Publish_At"]?.trim() ?: ""
         )
     }
 
