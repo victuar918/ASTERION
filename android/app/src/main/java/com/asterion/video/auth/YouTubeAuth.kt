@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
  * 설정 방법:
  * 1. Google Cloud Console → OAuth 2.0 클라이언트 ID (웹 애플리케이션) 생성
  * 2. https://developers.google.com/oauthplayground 에서 refresh_token 획득
- *    - YouTube Data API v3 → https://www.googleapis.com/auth/youtube.upload 선택
+ *    - YouTube Data API v3 → https://www.googleapis.com/auth/youtube 선택 (재생목록 추가에 필요. youtube.upload만으로는 403)
  * 3. 위 JSON을 GitHub Secrets → YOUTUBE_CREDENTIALS_JSON 에 등록
  *    (빌드 시 assets/youtube_credentials.json 으로 자동 주입)
  * 4. 또는 디바이스 Android/data/com.asterion.video/files/youtube_credentials.json 에 직접 저장
@@ -58,6 +58,20 @@ class YouTubeAuth(private val context: Context) {
     }
 
     fun isConfigured(): Boolean = loadCredsOrNull() != null
+
+    // v3.50: 인증 파일 형식 점검 — Secret에 JSON 전체가 아닌 값 일부만 저장한 경우 등을 앱 시작 시 발견
+    fun credentialCheck(): String {
+        val raw = try { context.assets.open(YT_CREDS_FILE).bufferedReader().readText() } catch (_: Exception) {
+            val ext = File(context.getExternalFilesDir(null), YT_CREDS_FILE)
+            if (ext.exists()) ext.readText() else return "❌ YouTube 인증 파일 없음 (GitHub Secret YOUTUBE_CREDENTIALS_JSON 확인)"
+        }
+        val j = try { JSONObject(raw) } catch (_: Exception) {
+            return "❌ YouTube 인증 파일 형식 오류 — Secret에 JSON 전체({...})를 저장했는지 확인"
+        }
+        val missing = listOf("client_id", "client_secret", "refresh_token").filter { j.optString(it).isBlank() }
+        return if (missing.isEmpty()) "✅ YouTube 인증 파일 형식 정상"
+               else "❌ YouTube 인증 파일에 누락: ${missing.joinToString()}"
+    }
 
     private fun loadCredsOrNull(): JSONObject? = try {
         JSONObject(context.assets.open(YT_CREDS_FILE).bufferedReader().readText())
