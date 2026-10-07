@@ -44,6 +44,7 @@ private const val VIDEO_H     = 1080
 private const val TEMP_SUBDIR = ".temp_scenes"
 private const val SEAMLESS_BGV_LOOP = true   // v3.34: 배경 loop 이음매 크로스페이드 (false=기존 loop cut)
 private const val CARD_ANIM         = true   // v3.43.1: 카드 등장/퇴장(페이드+이동). 무손실 카드 파일 급증→저장공간 고갈 이슈로 잠정 OFF
+private const val SINGLE_PASS       = true   // v3.50: 블렌딩+최종합성 단일 패스(긴 영상 인코딩 1회 절약). 실패 시 기존 방식 자동 복귀, false=기존 2단계
 private const val INTRO_BODY_XFADE  = 2.0f   // v3.36: 인트로↔바디 크로스페이드 길이(초), 0=하드컷
 
 private val MOTION_PATTERNS = setOf(
@@ -76,6 +77,9 @@ class AsterionRenderEngine(
     private var totalDurationSecs     = 0f
     var actualIntroDurationSecs: Float = 21f
     private var bgvFallbackCount      = 0
+    // v3.50: 단일 패스 대기 바디(배경 영상 + 카드 영상 + 길이) — concatSubclips에서 한 번에 합성
+    private class SpBody(val bgv: File, val cards: File, val dur: Float, val outName: String)
+    private var spBody: SpBody? = null
 
     @Volatile private var useHwEnc: Boolean = android.os.Build.VERSION.SDK_INT >= 21
 
@@ -564,6 +568,16 @@ class AsterionRenderEngine(
             else            -> onProgress("✅ BGV: ${bgvBodyFile.length()/1024/1024}MB (Δ${durDiff.fmtUS(3)}s OK)")
         }
 
+        // v3.50: 단일 패스 — 인트로가 준비돼 있으면 여기서 블렌딩하지 않고, 최종 합성(concatSubclips)에서
+        //        배경+카드+인트로+워터마크+BGM을 한 번에 인코딩(긴 영상 인코딩 1회 절약).
+        //        단일 패스 실패 시 concatSubclips가 blendLegacy(아래 기존 블렌딩과 동일 명령)로 자동 복귀.
+        if (SINGLE_PASS && INTRO_BODY_XFADE > 0f && subclipFiles.size == 1) {
+            spBody = SpBody(bgvBodyFile, bodyCardsFile, actualBodyDur, outputName)
+            preps.forEach { it.wavFile?.let { f -> if (f.absolutePath.contains(TEMP_SUBDIR)) f.delete() } }
+            totalDurationSecs += actualBodyDur
+            onProgress("✅ 바디 준비 (${actualBodyDur.fmtUS(1)}s) — 최종 단계에서 단일 패스 합성")
+            return@withContext bodyCardsFile
+        }
         val bodyFile = File(AppConfig.OUTPUT_DIR, "${outputName}_body.mp4")
         onProgress("🎬 블렌딩 (${actualBodyDur.fmtUS(1)}s)...")
         val ckFilter = "[1:v]format=rgba[ov];[0:v][ov]overlay=0:0,format=yuv420p[vout]"
@@ -696,6 +710,24 @@ class AsterionRenderEngine(
         return if (ok) unit else { unit.delete(); null }
     }
 
+    // v3.50: 단일 패스 실패 시 기존 방식 복귀용 — assembleBody의 기존 블렌딩과 동일한 명령으로 body.mp4 생성
+    private fun blendLegacy(sp: SpBody, onProgress: (String) -> Unit): File? {
+        val bodyFile = File(AppConfig.OUTPUT_DIR, "${sp.outName}_body.mp4")
+        onProgress("🎬 블렌딩 (기존 방식, ${sp.dur.fmtUS(1)}s)...")
+        val ckFilter = "[1:v]format=rgba[ov];[0:v][ov]overlay=0:0,format=yuv420p[vout]"
+        val blendCmd = "-y -i ${sp.bgv.absolutePath} -i ${sp.cards.absolutePath} " +
+            "-filter_complex $ckFilter -map [vout] -map 1:a ${vc("5M",20)} -c:a aac -b:a 192k " +
+            "-t ${sp.dur.fmtUS()} -movflags +faststart ${bodyFile.absolutePath}"
+        com.arthenica.ffmpegkit.FFmpegKit.execute(blendCmd)
+        if (!bodyFile.exists() || bodyFile.length() == 0L) {
+            if (useHwEnc) { useHwEnc = false; bodyFile.delete(); com.arthenica.ffmpegkit.FFmpegKit.execute(blendCmd.replace("-c:v h264_mediacodec -b:v 5M", "-c:v libx264 -preset ultrafast -crf 20")) }
+            if (!bodyFile.exists() || bodyFile.length() == 0L) { onProgress("❌ 블렌딩 실패"); return null }
+        }
+        subclipFiles.add(bodyFile)
+        onProgress("✅ body: ${bodyFile.length()/1024/1024}MB (${sp.dur.fmtUS(1)}s)")
+        return bodyFile
+    }
+
     suspend fun concatSubclips(
         outputName   : String,
         bgmFileName  : String,
@@ -713,28 +745,41 @@ class AsterionRenderEngine(
         val wmEnd      = (duration - 5f).coerceAtLeast(introDurSecs + 1f)
         onProgress("합치기: ${subclipFiles.size}개 / ${duration.toInt()}초")
         // v3.36: 인트로↔바디 크로스페이드 (정확히 2개[인트로,바디]일 때만; 아니면 기존 하드컷 유지)
-        val doXf = INTRO_BODY_XFADE > 0f && subclipFiles.size == 2
+        val sp0 = spBody   // v3.50: 단일 패스 대기 바디 (있으면 subclipFiles엔 인트로만 있음)
+        val doXf = INTRO_BODY_XFADE > 0f && (subclipFiles.size == 2 || (sp0 != null && subclipFiles.size == 1))
         val introDurX = if (doXf) getMediaDurationSecs(subclipFiles[0]) else 0f
         val xfD = INTRO_BODY_XFADE.coerceAtMost(introDurX * 0.5f).coerceAtLeast(0.3f)
         val canXf = doXf && introDurX > xfD + 0.5f
         // v3.36.2: 크로스페이드 실패 시 하드컷 자동 폴백 + 에러 화면 출력
-        val xfAttempts = if (canXf) listOf(true, false) else listOf(false)
+        // v3.50: 시도 순서 0=단일 패스(인트로+배경+카드 한 번에) → 1=크로스페이드(기존 2단계) → 2=하드컷(기존)
+        val xfAttempts = if (canXf) (if (sp0 != null) listOf(0, 1, 2) else listOf(1, 2)) else listOf(2)
+        var legacyReady = sp0 == null
         var lastLog = ""
-        for ((atI, useXf) in xfAttempts.withIndex()) {
-        if (atI > 0) { useHwEnc = android.os.Build.VERSION.SDK_INT >= 21; onProgress("⚠ 크로스페이드 실패 → 하드컷 폴백 재시도") }
+        for ((atI, mode) in xfAttempts.withIndex()) {
+        val useXf = mode < 2
+        val sp = mode == 0 && sp0 != null
+        if (atI > 0) { useHwEnc = android.os.Build.VERSION.SDK_INT >= 21; onProgress(if (mode == 1) "⚠ 단일 패스 실패 → 기존 방식(블렌딩+합치기)으로 재시도" else "⚠ 크로스페이드 실패 → 하드컷 폴백 재시도") }
+        if (!sp && !legacyReady) {
+            // v3.50: 단일 패스 불가/실패 → 기존 방식으로 body.mp4를 만든 뒤 기존 경로 그대로 진행
+            if (sp0 == null || blendLegacy(sp0, onProgress) == null) { lastLog = "블렌딩 실패"; break }
+            useHwEnc = android.os.Build.VERSION.SDK_INT >= 21
+            listFile.writeText(subclipFiles.joinToString(System.lineSeparator()) { "file '${it.absolutePath}'" })
+            legacyReady = true
+        }
         val vFilt  = if (useXf) "[xv]" else "[0:v]"
         val aFilt  = if (useXf) "[xa]" else "[0:a]"
-        val bgmIdx = if (useXf) "2" else "1"
+        val bgmIdx = if (sp) "3" else if (useXf) "2" else "1"
         val fp = mutableListOf<String>()
         var vMap = if (useXf) "[xv]" else "0:v"
         var aMap = if (useXf) "[xa]" else "0:a"
         if (useXf) {
             val off = introDurX - xfD
             fp+="[0:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[nv0]"
-            fp+="[1:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[nv1]"
+            fp += if (sp) "[2:v]format=rgba[ov];[1:v][ov]overlay=0:0,trim=duration=${sp0!!.dur.fmtUS()},setpts=PTS-STARTPTS,scale=1920:1080,setsar=1,fps=30,format=yuv420p[nv1]"
+                  else "[1:v]scale=1920:1080,setsar=1,fps=30,format=yuv420p[nv1]"
             fp+="[nv0][nv1]xfade=transition=fade:duration=${xfD.fmtUS()}:offset=${off.fmtUS()}[xv]"
             fp+="[0:a]aformat=sample_rates=44100:channel_layouts=stereo[xa0]"
-            fp+="[1:a]aformat=sample_rates=44100:channel_layouts=stereo[xa1]"
+            fp+="[${if (sp) 2 else 1}:a]aformat=sample_rates=44100:channel_layouts=stereo[xa1]"
             fp+="[xa0][xa1]acrossfade=d=${xfD.fmtUS()}[xa]"
             onProgress("🎬 인트로↔바디 크로스페이드 ${xfD.fmtUS(1)}s")
         }
@@ -749,7 +794,8 @@ class AsterionRenderEngine(
             fp+="[tts][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"; aMap="[aout]"
         }
         val cmd=buildString{
-            if (useXf) append("-y -i ${subclipFiles[0].absolutePath} -i ${subclipFiles[1].absolutePath} ")
+            if (sp) append("-y -i ${subclipFiles[0].absolutePath} -i ${sp0!!.bgv.absolutePath} -i ${sp0!!.cards.absolutePath} ")
+            else if (useXf) append("-y -i ${subclipFiles[0].absolutePath} -i ${subclipFiles[1].absolutePath} ")
             else append("-y -f concat -safe 0 -i ${listFile.absolutePath} ")
             if(bgmFile!=null)append("-stream_loop -1 -i ${bgmSrc!!.absolutePath} ")
             if(fp.isNotEmpty())append("-filter_complex \"${fp.joinToString(";")}\" ")
@@ -760,10 +806,17 @@ class AsterionRenderEngine(
             useHwEnc=false; rc=com.arthenica.ffmpegkit.FFmpegKit.execute(cmd.replace("-c:v h264_mediacodec -b:v 5M","-c:v libx264 -preset fast -crf 20"))
         }
         lastLog = "rc=${rc.returnCode?.value ?: -1} " + ((rc.logsAsString ?: "").lines().lastOrNull { it.contains("do not match") || it.contains("Error") || it.contains("Invalid") || it.contains("No such") } ?: (rc.logsAsString ?: "").takeLast(300))
-        if (outputFile.exists() && outputFile.length() > 0L) break
+        if (outputFile.exists() && outputFile.length() > 0L) {
+            // v3.50: 길이 검증 — 중간에 끊긴 출력을 성공으로 오인하지 않도록 (허용 ±2초)
+            val expectOut = duration - (if (useXf) xfD else 0f)
+            val gotOut = (try { com.arthenica.ffmpegkit.FFprobeKit.getMediaInformation(outputFile.absolutePath)?.mediaInformation?.duration?.toFloatOrNull() } catch (_: Exception) { null }) ?: getMediaDurationSecs(outputFile)
+            if (kotlin.math.abs(gotOut - expectOut) <= 2.0f) break
+            lastLog = "길이 불일치 ${gotOut.fmtUS(1)}s / 기대 ${expectOut.fmtUS(1)}s"
+            outputFile.delete()
+        }
         onProgress("⚠ 합치기 실패(xf=$useXf): $lastLog")
         }
-        listFile.delete()
+        listFile.delete(); spBody = null
         subclipFiles.filter{it.name.endsWith("_body.mp4")}.forEach{it.delete()}
         runCatching{sceneTempDir.listFiles()?.forEach{it.delete()}}
         return@withContext if(outputFile.exists()&&outputFile.length()>0){
@@ -772,7 +825,7 @@ class AsterionRenderEngine(
     }
 
     fun release() {
-        subclipFiles.clear(); totalDurationSecs=0f; actualIntroDurationSecs=21f; bgvFallbackCount=0
+        subclipFiles.clear(); totalDurationSecs=0f; actualIntroDurationSecs=21f; bgvFallbackCount=0; spBody=null
         runCatching{sceneTempDir.listFiles()?.forEach{it.delete()}}
     }
 
