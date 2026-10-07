@@ -42,6 +42,8 @@ class AsterionVideoActivity : AppCompatActivity() {
     private lateinit var progressBar   : ProgressBar
     private lateinit var tvStatus      : TextView
     private lateinit var tvLog         : TextView
+    private lateinit var tvYtStatus    : TextView        // v3.50: YouTube 인증 상태
+    private lateinit var btnRetry      : Button          // v3.50: 업로드 재시도
 
     private val speakerSpinners       = mutableMapOf<Int, Spinner>()
     private val speakerSeekBars       = mutableMapOf<Int, SeekBar>()
@@ -62,10 +64,16 @@ class AsterionVideoActivity : AppCompatActivity() {
 
     private val auth            by lazy { ServiceAccountAuth(this) }
     private val youtubeUploader  by lazy { YouTubeUploader(this) }
+    private val ytAuth           by lazy { com.asterion.video.auth.YouTubeAuth(this) }   // v3.50: 시작 시 인증 점검용
     private var reader     : SheetsVideoReader? = null
     private var engine     : AsterionRenderEngine? = null
     private var ttsEngine  : SupertonicTtsEngine? = null
     private var isRendering = false
+    // v3.50: 에러 기록 (render_errors.log 누적 + RenderQueue Note에 편별 대표 오류)
+    @Volatile private var currentSheet  = ""
+    @Volatile private var lastErrMsg    = ""
+    @Volatile private var lastLoggedErr = ""
+    private val errLogLock = Any()
     private var mediaPlayer: MediaPlayer? = null
 
     private fun hasAllFilesPermission(): Boolean =
@@ -108,6 +116,8 @@ class AsterionVideoActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).also{it.topMargin=12} }
         tvStatus = TextView(this).apply { text="시작 중..."; textSize=14f; setPadding(0,16,0,8) }
         tvLog    = TextView(this).apply { textSize=10f; setTextColor(0xFF777777.toInt()); maxLines=16 }
+        tvYtStatus = TextView(this).apply { textSize=12f; setTextColor(0xFFAAAAAA.toInt()); text="YouTube 인증 확인 중..." }
+        btnRetry   = Button(this).apply { text="⬆ 업로드 재시도 (완성 영상)"; setOnClickListener { showUploadRetryPicker() } }
         val btnRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -120,7 +130,7 @@ class AsterionVideoActivity : AppCompatActivity() {
             text = "자동 렌더 (RenderQueue 5분 감시)"; textSize = 12f
             isChecked = prefs.getBoolean("auto_render", false)
         }
-        listOf(tvKeyStatus, btnSheetSelect, llSpeakers, btnRow, swAuto, progressBar, tvStatus, tvLog)
+        listOf(tvKeyStatus, tvYtStatus, btnSheetSelect, llSpeakers, btnRow, btnRetry, swAuto, progressBar, tvStatus, tvLog)
             .forEach { layout.addView(it) }
         autoRender = swAuto.isChecked
         swAuto.setOnCheckedChangeListener { _, on ->
@@ -210,7 +220,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         llSpeakers.addView(TextView(this).apply {
             text="🎙 화자 설정 (Supertonic 3)"; textSize=11f; setTextColor(0xFFAAAAAA.toInt()); setPadding(0,12,0,4)
         })
-        val defVoice=mapOf(1 to 5,2 to 0,3 to 6); val defSpeed=mapOf(1 to 50,2 to 42,3 to 58)
+        val defVoice=DEF_VOICE; val defSpeed=DEF_SPEED   // v3.50: 기본값 상수로 일원화
         val MP=ViewGroup.LayoutParams.MATCH_PARENT; val WC=ViewGroup.LayoutParams.WRAP_CONTENT
 
         for (sid in speakers.sorted()) {
@@ -258,7 +268,7 @@ class AsterionVideoActivity : AppCompatActivity() {
             val stepsLabel=TextView(this).apply{textSize=10f;setTextColor(0xFF999999.toInt());minWidth=100;layoutParams=LinearLayout.LayoutParams(WC,WC).also{it.gravity=Gravity.CENTER_VERTICAL;it.marginStart=6}}
             speakerNumStepsLabels[sid]=stepsLabel
             val stepsBar=SeekBar(this).apply{
-                max=28; progress=4; layoutParams=LinearLayout.LayoutParams(0,WC,1f)
+                max=28; progress=DEF_STEPS; layoutParams=LinearLayout.LayoutParams(0,WC,1f)
                 setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
                     override fun onProgressChanged(s:SeekBar?,v:Int,u:Boolean){stepsLabel.text="${progressToNumSteps(v)}step"}
                     override fun onStartTrackingTouch(s:SeekBar?){}
@@ -299,6 +309,19 @@ class AsterionVideoActivity : AppCompatActivity() {
             } catch(e:Exception){ withContext(Dispatchers.Main){updateStatus("❌ 예외: ${e.message}")} }
         }
     }
+
+    // v3.50: 화자 기본값 — 수동으로 바꾸지 않으면 이 값으로 렌더 (자동 렌더는 항상 이 값)
+    //        아스터 sid-5 / 리언 sid-0 / 나레이터 sid-6, 속도 1.2 / 1.2 / 1.1, 품질 21step
+    private val DEF_VOICE = mapOf(1 to 5, 2 to 0, 3 to 6)      // VoiceConfig.SID_LIST 인덱스
+    private val DEF_SPEED = mapOf(1 to 83, 2 to 83, 3 to 67)   // 진행값 → 1.20x / 1.20x / 1.10x
+    private val DEF_STEPS = 17                                   // 진행값 → 21step
+
+    private fun defaultVoiceConfig(): VoiceConfig = VoiceConfig(
+        listOf(1, 2, 3).associateWith { sid ->
+            val nm = when (sid) { 1 -> "아스터"; 2 -> "리언"; else -> "나레이터" }
+            SpeakerConfig(VoiceConfig.SID_LIST[DEF_VOICE[sid] ?: 0], progressToSpeed(DEF_SPEED[sid] ?: 50), nm, progressToNumSteps(DEF_STEPS))
+        }
+    )
 
     private fun progressToSpeed(p: Int): Float =
         String.format("%.2f", 0.7f + p.toFloat() / 100f * 0.6f).toFloat()
@@ -382,6 +405,13 @@ class AsterionVideoActivity : AppCompatActivity() {
             return
         }
         withContext(Dispatchers.Main) { tvKeyStatus.text = auth.keyStatusMessage() }
+        // v3.50: YouTube 인증 점검 — 파일 형식 + 실제 토큰 발급까지 확인 (렌더 전에 문제 발견)
+        val ytFmt = ytAuth.credentialCheck()
+        val ytMsg = if (!ytFmt.startsWith("✅")) ytFmt else try {
+            ytAuth.getAccessToken(); "✅ YouTube 인증 정상 (토큰 확인됨)"
+        } catch (e: Exception) { "❌ YouTube 토큰 발급 실패: ${e.message?.take(150)}" }
+        withContext(Dispatchers.Main) { tvYtStatus.text = ytMsg }
+        if (ytMsg.startsWith("❌")) recordError(ytMsg)
         if (!auth.keyStatusMessage().startsWith("✅")) return
         try {
             val token = auth.getAccessToken()
@@ -445,7 +475,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         withContext(Dispatchers.Main) {
             renderQueue.clear(); renderQueue.addAll(pend.map { it.sheetName })
             updateSheetButton()
-            startRendering(voiceConfigFromPrefs(listOf(1, 2, 3)))
+            startRendering(defaultVoiceConfig())   // v3.50: 자동 렌더는 항상 기본값
         }
     }
 
@@ -455,10 +485,10 @@ class AsterionVideoActivity : AppCompatActivity() {
         f.parse(s.trim())?.time ?: 0L
     } catch (e: Exception) { 0L }
 
-    private suspend fun markQueue(sheet: String, status: String) {
+    private suspend fun markQueue(sheet: String, status: String, note: String? = null) {
         val rowNum = autoQueueRows[sheet] ?: return
         val ok = runCatching {
-            SheetsVideoReader(auth.getAccessToken(), VIDEO_SS_ID).updateQueueStatus(rowNum, status)
+            SheetsVideoReader(auth.getAccessToken(), VIDEO_SS_ID).updateQueueStatus(rowNum, status, note)
         }.getOrElse { false }
         if (!ok) pendingStatusWrites[rowNum] = status
     }
@@ -498,7 +528,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         failedSheets.clear(); saveFailed()        // 새 렌더 → 실패기록 초기화
 
         startForegroundService(Intent(this, RenderForegroundService::class.java))
-        isRendering = true; btnStart.isEnabled = false; btnStop.isEnabled = true; btnReset.isEnabled = false
+        isRendering = true; btnStart.isEnabled = false; btnStop.isEnabled = true; btnReset.isEnabled = false; btnRetry.isEnabled = false
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -507,15 +537,16 @@ class AsterionVideoActivity : AppCompatActivity() {
                     updateStatus("═══ 큐 ${qi + 1}/${queue.size}: $sheet ═══")
                     appendLog("▶ [$sheet] 시작 (${qi + 1}/${queue.size})")
                     markQueue(sheet, "RUNNING")
+                    currentSheet = sheet; lastErrMsg = ""
                     val ok = try {
                         renderOneSheet(sheet, voiceConfig)
                     } catch (e: Exception) {
                         Log.e("Activity", "[$sheet] 예외", e); updateStatus("❌ [$sheet] ${e.message}"); false
                     }
                     when {
-                        ok            -> { markQueue(sheet, "DONE"); appendLog("✅ [$sheet] 업로드 완료") }
+                        ok            -> { markQueue(sheet, "DONE", ""); appendLog("✅ [$sheet] 업로드 완료") }
                         !isRendering  -> appendLog("⏹ [$sheet] 중지됨")
-                        else          -> { markQueue(sheet, "ERROR"); failedSheets.add(sheet); saveFailed(); appendLog("❌❌ [$sheet] 실패(업로드 안 됨) → 다음 편") }
+                        else          -> { markQueue(sheet, "ERROR", "'" + lastErrMsg.take(200)); failedSheets.add(sheet); saveFailed(); appendLog("❌❌ [$sheet] 실패(업로드 안 됨) → 다음 편") }
                     }
                 }
                 val fails = queue.count { failedSheets.contains(it) }
@@ -527,7 +558,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                 isRendering = false
                 stopService(Intent(this@AsterionVideoActivity, RenderForegroundService::class.java))
                 withContext(Dispatchers.Main) {
-                    btnStart.isEnabled = true; btnStop.isEnabled = false; btnReset.isEnabled = true
+                    btnStart.isEnabled = true; btnStop.isEnabled = false; btnReset.isEnabled = true; btnRetry.isEnabled = true
                     renderQueue.clear(); updateSheetButton()
                 }
             }
@@ -629,18 +660,83 @@ class AsterionVideoActivity : AppCompatActivity() {
         if (finalFile == null || !finalFile.exists()) { updateStatus("❌ [$sheet] 최종 합치기 실패 — output 폴더 확인"); return false }
 
         updateStatus("🎬 [$sheet] 완료: ${finalFile.name} (${finalFile.length()/1024/1024}MB) → 업로드")
-        val videoId = youtubeUploader.upload(
+        val videoId = uploadFinal(sheet, finalFile, mergedMeta)   // v3.50: 업로드 재시도와 공용
+
+        return videoId != null   // 업로드까지 성공해야 true
+    }
+
+    // v3.50: 완성 영상 업로드 (렌더 직후 + 업로드 재시도 공용). 분류 기준 = Publish_At 유무
+    private suspend fun uploadFinal(sheet: String, finalFile: File, meta: com.asterion.video.model.VideoMeta): String? {
+        val isXrp = meta.publishAt.isBlank()
+        return youtubeUploader.upload(
             videoFile     = finalFile,
-            title         = mergedMeta.youtubeTitle.trim().ifBlank { buildYouTubeTitle(sheet, isXrp) },
+            title         = meta.youtubeTitle.trim().ifBlank { buildYouTubeTitle(sheet, isXrp) },
             description   = buildYouTubeDescription(isXrp),
             tags          = buildYouTubeTags(isXrp),
             privacyStatus = "private",
-            publishAt     = toPublishAtUtc(mergedMeta.publishAt),
+            publishAt     = toPublishAtUtc(meta.publishAt),
             playlistId    = if (isXrp) PLAYLIST_XRP else PLAYLIST_CRYPTO,
             thumbnailFile = File(finalFile.parentFile, if (isXrp) "thumb_xrp.jpg" else "thumb_crypto.jpg").takeIf { it.exists() }
         ) { msg -> appendLog(msg); updateStatus(msg) }
+    }
 
-        return videoId != null   // 업로드까지 성공해야 true
+    // v3.50: 업로드 재시도 — 렌더 없이 output 폴더의 완성 영상만 다시 업로드
+    private fun showUploadRetryPicker() {
+        if (isRendering) { updateStatus("⚠ 렌더/업로드 중엔 재시도 불가 — 끝난 뒤 시도"); return }
+        val files = (AppConfig.OUTPUT_DIR.listFiles() ?: emptyArray())
+            .filter { it.isFile && it.name.endsWith(".mp4") && !it.name.endsWith("_body.mp4") }
+            .sortedByDescending { it.lastModified() }
+        if (files.isEmpty()) { updateStatus("완성 영상 없음 (output 폴더)"); return }
+        val names = files.map { "${it.nameWithoutExtension}  (${it.length() / 1024 / 1024}MB)" }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("업로드할 완성 영상 선택")
+            .setItems(names) { _, w -> confirmUploadRetry(files[w]) }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun confirmUploadRetry(file: File) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("업로드 재시도")
+            .setMessage("『${file.nameWithoutExtension}』 업로드. 제목·재생목록·공개예약은 같은 이름의 대본 시트에서 읽습니다. 이미 올라간 영상이면 중복 업로드되니 확인하세요.")
+            .setPositiveButton("업로드") { _, _ -> doUploadRetry(file) }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun doUploadRetry(file: File) {
+        if (isRendering) return
+        val sheet = file.nameWithoutExtension
+        val prevStart = btnStart.isEnabled
+        isRendering = true; btnStart.isEnabled = false; btnReset.isEnabled = false; btnRetry.isEnabled = false
+        currentSheet = sheet; lastErrMsg = ""
+        startForegroundService(Intent(this, RenderForegroundService::class.java))
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                updateStatus("⬆ [$sheet] 업로드 재시도 — 대본 시트 읽는 중...")
+                val r = SheetsVideoReader(auth.getAccessToken(), VIDEO_SS_ID)
+                val res = r.readScript(sheet)
+                if (res.isFailure) {
+                    updateStatus("❌ [$sheet] 대본 시트를 읽지 못해 재시도 불가: ${res.exceptionOrNull()?.message}")
+                    return@launch
+                }
+                val id = uploadFinal(sheet, file, res.getOrThrow().videoMeta)
+                if (id != null) {
+                    failedSheets.remove(sheet); saveFailed()
+                    r.readRenderQueue().firstOrNull { it.sheetName == sheet && it.status == "ERROR" }
+                        ?.let { r.updateQueueStatus(it.sheetRow, "DONE", "") }
+                    updateStatus("✅ [$sheet] 업로드 재시도 성공")
+                } else {
+                    updateStatus("❌ [$sheet] 업로드 재시도 실패 — render_errors.log 확인")
+                }
+            } catch (e: Exception) {
+                updateStatus("❌ [$sheet] 업로드 재시도 예외: ${e.message}")
+            } finally {
+                isRendering = false
+                stopService(Intent(this@AsterionVideoActivity, RenderForegroundService::class.java))
+                withContext(Dispatchers.Main) { btnStart.isEnabled = prevStart; btnReset.isEnabled = true; btnRetry.isEnabled = true }
+            }
+        }
     }
 
     private fun stopRendering() {
@@ -722,8 +818,36 @@ http://pf.kakao.com/_MLxmIX
         else       addAll(listOf("크립토갤러리", "비트코인", "이더리움", "알트코인"))
     }
 
-    private fun updateStatus(msg: String) = lifecycleScope.launch(Dispatchers.Main) { tvStatus.text = msg }
-    private fun appendLog(msg: String) = lifecycleScope.launch(Dispatchers.Main) {
+    // v3.50: ❌/⚠ 메시지를 render_errors.log(완성 영상 폴더)에 시각·시트명과 함께 누적 + 편별 대표 오류 유지
+    private fun recordError(msg: String) {
+        val isErr = msg.contains("❌")
+        if (!isErr && !msg.contains("⚠")) return
+        val m = msg.trim()
+        if (isErr) { if (!lastErrMsg.startsWith("❌")) lastErrMsg = m }
+        else if (lastErrMsg.isBlank()) lastErrMsg = m
+        if (m == lastLoggedErr) return          // updateStatus·appendLog 중복 기록 방지
+        lastLoggedErr = m
+        val ts = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("Asia/Seoul") }
+            .format(java.util.Date())
+        val line = "$ts [${currentSheet.ifBlank { "-" }}] $m" + System.lineSeparator()
+        lifecycleScope.launch(Dispatchers.IO) {
+            synchronized(errLogLock) {
+                try {
+                    val f = File(AppConfig.OUTPUT_DIR, "render_errors.log")
+                    if (f.length() > 2L * 1024L * 1024L) {
+                        val old = File(AppConfig.OUTPUT_DIR, "render_errors.old.log")
+                        old.delete(); f.renameTo(old)
+                    }
+                    f.appendText(line)
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    private fun updateStatus(msg: String): kotlinx.coroutines.Job { recordError(msg); return lifecycleScope.launch(Dispatchers.Main) { tvStatus.text = msg } }
+    private fun appendLog(msg: String): kotlinx.coroutines.Job { recordError(msg); return appendLogUi(msg) }
+    private fun appendLogUi(msg: String) = lifecycleScope.launch(Dispatchers.Main) {
         tvLog.text = (tvLog.text.toString().lines().takeLast(15) + msg).joinToString("\n")
     }
 
