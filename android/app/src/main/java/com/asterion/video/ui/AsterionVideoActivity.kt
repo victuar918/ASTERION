@@ -74,6 +74,11 @@ class AsterionVideoActivity : AppCompatActivity() {
     @Volatile private var lastErrMsg    = ""
     @Volatile private var lastLoggedErr = ""
     private val errLogLock = Any()
+    // v3.51: 서비스 유지 상태 + 상태 파일(render_status.txt)용
+    private val APP_VER = "v3.51"
+    private var fgsOn = false
+    private var heartbeatStarted = false
+    @Volatile private var lastStatusMsg = ""
     private var mediaPlayer: MediaPlayer? = null
 
     private fun hasAllFilesPermission(): Boolean =
@@ -135,12 +140,13 @@ class AsterionVideoActivity : AppCompatActivity() {
         autoRender = swAuto.isChecked
         swAuto.setOnCheckedChangeListener { _, on ->
             autoRender = on; prefs.edit().putBoolean("auto_render", on).apply()
-            if (on) startAutoPoll() else { autoPollJob?.cancel(); updateStatus("자동 렌더 OFF") }
+            if (on) { ensureFgs(); startAutoPoll() } else { autoPollJob?.cancel(); if (!isRendering) stopFgs(); updateStatus("자동 렌더 OFF") }
         }
         btnStart.setOnClickListener { startRendering() }
         btnStop.setOnClickListener  { stopRendering() }
         btnReset.setOnClickListener { showResetPicker() }
         lifecycleScope.launch { initCore() }
+        startHeartbeat()   // v3.51
     }
 
     override fun onResume() {
@@ -404,6 +410,7 @@ class AsterionVideoActivity : AppCompatActivity() {
             }
             return
         }
+        logLastExitReasons()   // v3.51: 직전 종료 사유 기록
         withContext(Dispatchers.Main) { tvKeyStatus.text = auth.keyStatusMessage() }
         // v3.50: YouTube 인증 점검 — 파일 형식 + 실제 토큰 발급까지 확인 (렌더 전에 문제 발견)
         val ytFmt = ytAuth.credentialCheck()
@@ -427,7 +434,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                 else {
                     btnReset.isEnabled = true
                     tvStatus.text = "VS_ 시트 ${sheets.size}개 — '시트 선택'에서 렌더 큐 구성"
-                    if (autoRender) startAutoPoll()
+                    if (autoRender) { ensureFgs(); startAutoPoll() }
                 }
             }
         } catch(e:Exception){ withContext(Dispatchers.Main){tvStatus.text="❌ ${e.message}"} }
@@ -442,6 +449,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         autoPollJob?.cancel()
         autoPollJob = lifecycleScope.launch(Dispatchers.IO) {
             updateStatus("🤖 자동 렌더 ON — RenderQueue 5분마다 확인")
+            recoverOwnRunning()   // v3.51: 비정상 종료로 남은 자기 RUNNING 즉시 재대기
             while (autoRender) {
                 try { if (!isRendering) pollRenderQueue() }
                 catch (e: Exception) { Log.e("Activity", "autoPoll: $e") }
@@ -487,6 +495,9 @@ class AsterionVideoActivity : AppCompatActivity() {
 
     private suspend fun markQueue(sheet: String, status: String, note: String? = null) {
         val rowNum = autoQueueRows[sheet] ?: return
+        // v3.51: 이 폰이 RUNNING으로 만든 행 기록 → 비정상 종료 후 재시작 시 즉시 재대기 (다른 폰 행은 건드리지 않음)
+        if (status == "RUNNING") prefs.edit().putInt("own_running_row", rowNum).putString("own_running_sheet", sheet).apply()
+        else prefs.edit().remove("own_running_row").remove("own_running_sheet").apply()
         val ok = runCatching {
             SheetsVideoReader(auth.getAccessToken(), VIDEO_SS_ID).updateQueueStatus(rowNum, status, note)
         }.getOrElse { false }
@@ -527,7 +538,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         val queue = renderQueue.toList()          // 스냅샷
         failedSheets.clear(); saveFailed()        // 새 렌더 → 실패기록 초기화
 
-        startForegroundService(Intent(this, RenderForegroundService::class.java))
+        ensureFgs()
         isRendering = true; btnStart.isEnabled = false; btnStop.isEnabled = true; btnReset.isEnabled = false; btnRetry.isEnabled = false
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -556,7 +567,7 @@ class AsterionVideoActivity : AppCompatActivity() {
                 updateStatus("❌ ${e.message}"); Log.e("Activity", "startRendering 예외", e)
             } finally {
                 isRendering = false
-                stopService(Intent(this@AsterionVideoActivity, RenderForegroundService::class.java))
+                releaseFgs()
                 withContext(Dispatchers.Main) {
                     btnStart.isEnabled = true; btnStop.isEnabled = false; btnReset.isEnabled = true; btnRetry.isEnabled = true
                     renderQueue.clear(); updateSheetButton()
@@ -710,7 +721,7 @@ class AsterionVideoActivity : AppCompatActivity() {
         val prevStart = btnStart.isEnabled
         isRendering = true; btnStart.isEnabled = false; btnReset.isEnabled = false; btnRetry.isEnabled = false
         currentSheet = sheet; lastErrMsg = ""
-        startForegroundService(Intent(this, RenderForegroundService::class.java))
+        ensureFgs()
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 updateStatus("⬆ [$sheet] 업로드 재시도 — 대본 시트 읽는 중...")
@@ -733,15 +744,93 @@ class AsterionVideoActivity : AppCompatActivity() {
                 updateStatus("❌ [$sheet] 업로드 재시도 예외: ${e.message}")
             } finally {
                 isRendering = false
-                stopService(Intent(this@AsterionVideoActivity, RenderForegroundService::class.java))
+                releaseFgs()
                 withContext(Dispatchers.Main) { btnStart.isEnabled = prevStart; btnReset.isEnabled = true; btnRetry.isEnabled = true }
             }
         }
     }
 
+    // ── v3.51: 서비스 유지 / 종료 원인 기록 / 상태 파일 / 비정상 종료 복구 ─────────
+    private fun ensureFgs() {
+        if (fgsOn) return
+        try {
+            startForegroundService(Intent(this, RenderForegroundService::class.java)); fgsOn = true
+        } catch (e: Exception) { recordError("⚠ 백그라운드 서비스 시작 실패: ${e.message}") }
+    }
+    private fun stopFgs() {
+        stopService(Intent(this, RenderForegroundService::class.java)); fgsOn = false
+    }
+    // 자동 렌더가 켜져 있으면 대기 중에도 서비스 유지 (렌더 사이 대기 시간에 안드로이드가 앱을 정리하지 않도록)
+    private fun releaseFgs() { if (!autoRender) stopFgs() }
+
+    private fun kstNow(): String = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+        .apply { timeZone = java.util.TimeZone.getTimeZone("Asia/Seoul") }.format(java.util.Date())
+
+    // 안드로이드가 보관하는 '직전 종료 사유'를 render_errors.log에 기록 (한 번 기록한 건 다시 안 씀)
+    private fun logLastExitReasons() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        try {
+            val am = getSystemService(android.app.ActivityManager::class.java) ?: return
+            val lastTs = prefs.getLong("last_exit_ts", 0L)
+            var newest = lastTs
+            val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+                .apply { timeZone = java.util.TimeZone.getTimeZone("Asia/Seoul") }
+            for (info in am.getHistoricalProcessExitReasons(packageName, 0, 5).sortedBy { it.timestamp }) {
+                if (info.timestamp <= lastTs) continue
+                val why = when (info.reason) {
+                    android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "메모리 부족으로 시스템이 종료"
+                    android.app.ApplicationExitInfo.REASON_CRASH -> "앱 오류(크래시)"
+                    android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "네이티브 오류(FFmpeg/TTS 등)"
+                    android.app.ApplicationExitInfo.REASON_ANR -> "응답 없음(ANR)"
+                    android.app.ApplicationExitInfo.REASON_SIGNALED -> "시스템 신호로 종료"
+                    android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "자원 과다 사용"
+                    android.app.ApplicationExitInfo.REASON_USER_REQUESTED -> "사용자/설정에 의한 종료"
+                    android.app.ApplicationExitInfo.REASON_USER_STOPPED -> "사용자 강제 중지"
+                    android.app.ApplicationExitInfo.REASON_EXIT_SELF -> "앱 스스로 종료"
+                    else -> "기타(${info.reason})"
+                }
+                recordError("⚠ 직전 종료 기록 ${fmt.format(java.util.Date(info.timestamp))}: $why — ${info.description ?: "-"} (메모리 ${info.pss / 1024}MB)")
+                if (info.timestamp > newest) newest = info.timestamp
+            }
+            prefs.edit().putLong("last_exit_ts", newest).apply()
+        } catch (e: Exception) { Log.w("Activity", "exitInfo: $e") }
+    }
+
+    // 1분마다 render_status.txt 갱신 — 서버폰 감시 프로그램과 원격 상태 확인용 (화면이 살아 있는 동안만 갱신됨)
+    private fun startHeartbeat() {
+        if (heartbeatStarted) return
+        heartbeatStarted = true
+        lifecycleScope.launch(Dispatchers.IO) {
+            while (true) {
+                try {
+                    val state = when { isRendering -> "RENDERING"; autoRender -> "IDLE(자동대기)"; else -> "IDLE" }
+                    val last = lastStatusMsg.lines().joinToString(" ").take(200)
+                    File(AppConfig.OUTPUT_DIR, "render_status.txt")
+                        .writeText("${kstNow()} | $APP_VER | $state | ${currentSheet.ifBlank { "-" }} | $last" + System.lineSeparator())
+                } catch (_: Exception) {}
+                kotlinx.coroutines.delay(60_000L)
+            }
+        }
+    }
+
+    // 이 폰이 RUNNING으로 만든 행이 남아 있으면(비정상 종료) 즉시 PENDING으로 — 다른 폰의 RUNNING은 건드리지 않음
+    private suspend fun recoverOwnRunning() {
+        val ownRow = prefs.getInt("own_running_row", -1)
+        if (ownRow <= 0) return
+        val name = prefs.getString("own_running_sheet", "") ?: ""
+        try {
+            val r = SheetsVideoReader(auth.getAccessToken(), VIDEO_SS_ID)
+            val row = r.readRenderQueue().firstOrNull { it.sheetRow == ownRow }
+            val done = if (row != null && row.sheetName == name && row.status == "RUNNING") {
+                r.updateQueueStatus(ownRow, "PENDING", "'비정상 종료 후 자동 재대기").also { if (it) appendLog("♻ 비정상 종료로 중단된 [$name] → 재대기") }
+            } else true
+            if (done) prefs.edit().remove("own_running_row").remove("own_running_sheet").apply()
+        } catch (e: Exception) { Log.w("Activity", "recoverOwnRunning: $e") }
+    }
+
     private fun stopRendering() {
         isRendering = false
-        stopService(Intent(this, RenderForegroundService::class.java))
+        releaseFgs()
         updateStatus("⏹ 중지 요청 — 현재 편 마무리 후 정지")
     }
 
@@ -845,7 +934,7 @@ http://pf.kakao.com/_MLxmIX
         }
     }
 
-    private fun updateStatus(msg: String): kotlinx.coroutines.Job { recordError(msg); return lifecycleScope.launch(Dispatchers.Main) { tvStatus.text = msg } }
+    private fun updateStatus(msg: String): kotlinx.coroutines.Job { recordError(msg); lastStatusMsg = msg; return lifecycleScope.launch(Dispatchers.Main) { tvStatus.text = msg } }
     private fun appendLog(msg: String): kotlinx.coroutines.Job { recordError(msg); return appendLogUi(msg) }
     private fun appendLogUi(msg: String) = lifecycleScope.launch(Dispatchers.Main) {
         tvLog.text = (tvLog.text.toString().lines().takeLast(15) + msg).joinToString("\n")
