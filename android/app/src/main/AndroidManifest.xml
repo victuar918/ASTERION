@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:label="@string/app_name"
@@ -25,6 +26,7 @@
         <activity
             android:name=".ui.AsterionVideoActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -35,8 +37,12 @@
         <!-- 장시간 렌더링 시 Android 백그라운드 킬 방지용 Foreground Service -->
         <service
             android:name=".service.RenderForegroundService"
-            android:foregroundServiceType="dataSync"
-            android:exported="false" />
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Long-running on-device video rendering and upload for a personal automation tool" />
+        </service>
 
     </application>
 </manifest>
