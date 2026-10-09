@@ -484,9 +484,13 @@ class AsterionRenderEngine(
                 else bgvTransitions[i].second.coerceIn(0.3f, 2.0f).coerceAtMost(bgvSegments[i].third * 0.8f)
             }
             val hasAnyTransition = transTypes.any { it != BgTransition.NONE }
+            // v3.51: 배경 목표 길이를 실제 카드 길이(actualBodyDur) 기준으로 — 카드 클립이 음성보다 조금씩 길어
+            //        장편일수록 배경이 짧아지던 문제(Δ≥0.5s 치명) 해소. 넘치는 길이는 아래 -t 로 정확히 잘림.
+            val bgvSlack = (actualBodyDur - bgvSegments.sumOf { it.third.toDouble() }.toFloat()).coerceAtLeast(0f)
+            if (hasAnyTransition && bgvSlack > 0.05f) onProgress("📹 BGV 길이 보정 +${bgvSlack.fmtUS(2)}s")
             val encDurs = List(bgvSegments.size) { i ->
                 val outPad = if (i < bgvSegments.size - 1) transDurs[i + 1] else 0f
-                val eps    = if (hasAnyTransition && i == bgvSegments.size - 1) 0.2f else 0f
+                val eps    = if (hasAnyTransition && i == bgvSegments.size - 1) 0.3f + bgvSlack + bgvSegments.size * 0.034f else 0f
                 bgvSegments[i].third + outPad + eps
             }
             val bgvSemaphore = Semaphore(3)
