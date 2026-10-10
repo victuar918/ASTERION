@@ -75,7 +75,7 @@ class AsterionVideoActivity : AppCompatActivity() {
     @Volatile private var lastLoggedErr = ""
     private val errLogLock = Any()
     // v3.51: 서비스 유지 상태 + 상태 파일(render_status.txt)용
-    private val APP_VER = "v3.51"
+    private val APP_VER = "v3.52"
     private var fgsOn = false
     private var heartbeatStarted = false
     @Volatile private var lastStatusMsg = ""
