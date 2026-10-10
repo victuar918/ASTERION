@@ -45,6 +45,7 @@ private const val TEMP_SUBDIR = ".temp_scenes"
 private const val SEAMLESS_BGV_LOOP = true   // v3.34: 배경 loop 이음매 크로스페이드 (false=기존 loop cut)
 private const val CARD_ANIM         = true   // v3.43.1: 카드 등장/퇴장(페이드+이동). 무손실 카드 파일 급증→저장공간 고갈 이슈로 잠정 OFF
 private const val SINGLE_PASS       = true   // v3.50: 블렌딩+최종합성 단일 패스(긴 영상 인코딩 1회 절약). 실패 시 기존 방식 자동 복귀, false=기존 2단계
+private const val BAKED_BGV_TRANSITIONS = true   // v3.52: 배경 전환을 조각에 미리 굽고 재인코딩 없이 이어붙임(전환 합성 단계 제거). false=기존 방식
 private const val INTRO_BODY_XFADE  = 2.0f   // v3.36: 인트로↔바디 크로스페이드 길이(초), 0=하드컷
 
 private val MOTION_PATTERNS = setOf(
@@ -346,6 +347,8 @@ class AsterionRenderEngine(
         cardList.writeText(cardFiles.joinToString("\n") { "file '${it.absolutePath}'" })
         val bodyCardsFile = File(sceneTempDir, "body_cards.mov")
         val cRc = com.arthenica.ffmpegkit.FFmpegKit.execute("-y -f concat -safe 0 -i ${cardList.absolutePath} -c copy ${bodyCardsFile.absolutePath}")
+        // v3.52: 카드별 실제 길이(이어붙이기 기준) — 배경 조각 경계를 카드 경계에 프레임 단위로 맞춤. 하나라도 못 재면 null → 기존 방식
+        val cardDurs: List<Double>? = if (BAKED_BGV_TRANSITIONS && cardFiles.size == preps.size) cardFiles.map { probeDurSecs(it) }.takeIf { l -> l.all { it > 0.05 } } else null
         cardList.delete(); cardFiles.forEach { it.delete() }
         if (!bodyCardsFile.exists() || bodyCardsFile.length() == 0L) {
             Log.e(TAG, "body_cards 실패: ${cRc.logsAsString.takeLast(400)}"); onProgress("❌ 카드 concat 실패"); return@withContext null
@@ -370,6 +373,7 @@ class AsterionRenderEngine(
         // Fix5: BGV 그룹화 시 BUFFER/빈BG_File 행 안정 처리 (이전 유효 BGV 재사용)
         // v3.30: 세그먼트 = Triple(파일, 효과코드, 길이)
         val bgvSegments = mutableListOf<Triple<File, String, Float>>()
+        val segFirstPrep = mutableListOf<Int>()   // v3.52: 세그먼트별 첫 씬 번호(카드 경계 정렬용), bgvSegments와 index 정합
         val bgvTransitions = mutableListOf<Pair<BgTransition, Float>>()  // v3.33: 세그먼트별 전환(첫 행 기준), bgvSegments와 index 정합
         var lastValidBgv: File? = null
         for (prep in preps) {
@@ -394,6 +398,7 @@ class AsterionRenderEngine(
                 bgvSegments[bgvSegments.lastIndex] = Triple(last.first, last.second, last.third + prep.wavDuration)
             } else {
                 bgvSegments.add(Triple(effectiveBgv, fx, prep.wavDuration))
+                segFirstPrep.add(preps.indexOfFirst { it === prep })
                 val trRaw = prep.row.bgTransition.trim()
                 val tr = if (trRaw.isBlank()) BgTransition.FADE else BgTransition.from(trRaw)  // 빈칸=기본 크로스페이드
                 bgvTransitions.add(tr to prep.row.bgTransitionDuration.coerceIn(0.3f, 2.0f))
@@ -406,7 +411,14 @@ class AsterionRenderEngine(
 
         val bgvBodyFile = File(sceneTempDir, "bgv_body.mp4")
 
-        if (bgvSegments.size == 1) {
+        // v3.52: 배경 전환 미리 굽기 — 조각마다 앞부분에 '이전 조각에서 넘어오는 전환'을 넣어 만들고 재인코딩 없이 이어붙임.
+        //        한 번에 여는 파일이 조각당 최대 3개라 조각 수와 무관(기존 전환 합성은 전 조각 동시 오픈 → 126조각에서 메모리 고갈).
+        //        실패·검증 불일치 시 아래 기존 방식으로 자동 진행(롤백: BAKED_BGV_TRANSITIONS=false).
+        val baked = BAKED_BGV_TRANSITIONS && bgvSegments.size > 1 && cardDurs != null &&
+            bakeBgvBody(bgvSegments, bgvTransitions, segFirstPrep, cardDurs, actualBodyDur, bgvBodyFile, onProgress)
+        if (baked) {
+            onProgress("✅ BGV 미리 굽기 완료 — 전환 합성 단계 생략")
+        } else if (bgvSegments.size == 1) {
             val seg0Vf = buildBgvVf(bgvSegments[0].second)
             val src0   = bgvSegments[0].first
             // v3.34: seamless loop 단위 시도 (성공 시 단위 loop, 실패 시 원본 직접 loop)
@@ -531,7 +543,7 @@ class AsterionRenderEngine(
                     BgTransition.WIPE_RIGHT -> "wiperight"
                     else -> "fade"
                 }
-                val xInputs = validSegs.joinToString(" ") { "-i ${it.absolutePath}" }
+                val xInputs = validSegs.joinToString(" ") { "-threads 1 -i ${it.absolutePath}" }   // v3.52: 입력별 해독 작업 1개(조각 수에 비례한 메모리 폭증 완화)
                 val fpx = mutableListOf<String>()
                 for (i in validSegs.indices) fpx += "[$i:v]setpts=PTS-STARTPTS[v$i]"
                 var acc = "[v0]"; var accLen = encDurs[0]
@@ -601,6 +613,216 @@ class AsterionRenderEngine(
         onProgress("✅ body: ${bodyFile.length()/1024/1024}MB (${actualBodyDur.fmtUS(1)}s)")
         bodyFile
     }
+
+    // ── v3.52: 배경 전환 미리 굽기 ──────────────────────────────────────────
+    // 조각 i = [앞부분 d초: 조각 i-1이 이어서 재생될 장면 → 조각 i 첫 장면으로 넘어가는 전환] + [조각 i 나머지].
+    //   기존 전환 합성(xfade 체인)과 같은 화면이 나오도록, 이전 조각은 '자기 길이만큼 재생된 지점'부터 이어 붙인다.
+    // 조각 길이 = 카드(장면) 경계 기준 정확한 프레임 수 → 재인코딩 없이 concat -c copy 로 이어붙임.
+    // 한 번에 여는 파일: 조각당 최대 3개(이전 반복단위 1~2 + 현재 반복단위 1) → 조각 수와 무관.
+    // 같은 (배경 파일+효과)는 반복 단위를 한 번만 만들어 재사용.
+    // 하나라도 실패하거나 검증(조각 프레임 수·이음새 규격·전체 프레임 수)이 어긋나면 false → 호출측이 기존 방식으로 진행.
+    private class BakeSrc(val file: File, val vf: String, val period: Double, val temp: Boolean)
+
+    private fun xfadeNameOf(t: BgTransition): String = when (t) {   // 기존 전환 합성(xfadeName)과 동일 매핑
+        BgTransition.FADE -> "fade"
+        BgTransition.SLIDE_LEFT -> "slideleft"
+        BgTransition.SLIDE_UP -> "slideup"
+        BgTransition.ZOOM_IN -> "zoomin"
+        BgTransition.ZOOM_OUT -> "circleclose"
+        BgTransition.BLUR_FADE -> "hblur"
+        BgTransition.WIPE_RIGHT -> "wiperight"
+        else -> "fade"
+    }
+
+    private suspend fun bakeBgvBody(
+        segs      : List<Triple<File, String, Float>>,
+        trans     : List<Pair<BgTransition, Float>>,
+        firstPrep : List<Int>,
+        cardDurs  : List<Double>,
+        bodyDur   : Float,
+        outFile   : File,
+        onProgress: (String) -> Unit
+    ): Boolean = coroutineScope {
+        val n = segs.size
+        if (n < 2 || trans.size != n || firstPrep.size != n) return@coroutineScope false
+        val fps = 30
+        fun f3(x: Double) = String.format(Locale.US, "%.3f", x)
+        // 1) 조각 경계(프레임) — 카드 누적 길이 기준(첫 조각은 0부터, 끝은 카드 전체 길이)
+        val cum = DoubleArray(cardDurs.size + 1)
+        for (k in cardDurs.indices) cum[k + 1] = cum[k] + cardDurs[k]
+        val bounds = IntArray(n + 1)
+        for (i in 1 until n) {
+            val p = firstPrep[i]
+            if (p < 0 || p > cardDurs.size) return@coroutineScope false
+            bounds[i] = Math.round(cum[p] * fps).toInt()
+        }
+        bounds[n] = Math.round(bodyDur.toDouble() * fps).toInt()
+        val frames = IntArray(n) { bounds[it + 1] - bounds[it] }
+        if (frames.any { it < 2 }) { onProgress("⚠ BGV 미리 굽기: 조각 길이 이상 → 기존 방식"); return@coroutineScope false }
+
+        val hw = useHwEnc
+        val vcFixed = if (hw) "-c:v h264_mediacodec -b:v 4M" else "-c:v libx264 -preset ultrafast -crf 23"   // 전 조각 동일(이어붙이기 전제)
+        fun keyOf(i: Int) = segs[i].first.absolutePath + "|" + segs[i].second
+        val keys = (0 until n).map { keyOf(it) }.distinct()
+        val sem = Semaphore(3)
+        val pieceFiles = (0 until n).map { File(sceneTempDir, "bgv_pc_${it}.mp4") }
+        val listFile = File(sceneTempDir, "bgv_pc_list.txt")
+        val srcs = mutableMapOf<String, BakeSrc?>()
+        fun cleanup() {
+            pieceFiles.forEach { it.delete() }; listFile.delete()
+            srcs.values.forEach { s -> if (s != null && s.temp) s.file.delete() }
+        }
+        onProgress("🎞 BGV 미리 굽기: ${n}조각 / 반복단위 ${keys.size}개 [${if (hw) "GPU" else "CPU"}]")
+        try {
+            // 2) 반복 단위 — (파일+효과)별 1회 생성. 이음새 없는 단위가 실패/부적합이면 원본+효과 필터로 직접 반복(기존과 동일)
+            val built: List<Pair<String, BakeSrc?>> = keys.mapIndexed { ki, key ->
+                async(Dispatchers.IO) {
+                    sem.withPermit {
+                        val i = (0 until n).first { keyOf(it) == key }
+                        val f = segs[i].first
+                        val vf = buildBgvVf(segs[i].second)
+                        val unit = File(sceneTempDir, "bgv_ku_${ki}.mp4")
+                        val src: BakeSrc? = when {
+                            !f.exists() || f.isDirectory -> null
+                            buildSeamlessLoopUnit(f, vf, unit, hw) ->
+                                probeDurSecs(unit).let { p -> if (p > 0.5) BakeSrc(unit, "", p, true) else { unit.delete(); null } }
+                            else -> { unit.delete(); probeDurSecs(f).let { p -> if (p > 0.1) BakeSrc(f, vf, p, false) else null } }
+                        }
+                        onProgress("  BGV 단위[${ki + 1}/${keys.size}] ${f.name}+${segs[i].second}${if (src == null) " ❌" else ""}")
+                        key to src
+                    }
+                }
+            }.awaitAll()
+            built.forEach { (k, s) -> srcs[k] = s }
+            if (srcs.values.any { it == null }) { onProgress("⚠ BGV 미리 굽기: 반복 단위 준비 실패 → 기존 방식"); cleanup(); return@coroutineScope false }
+
+            // 3) 조각 인코딩(병렬 3) — 앞부분 전환 포함, 정확한 프레임 수
+            fun encodePiece(i: Int): Boolean {
+                val cur = srcs[keyOf(i)] ?: return false
+                val out = pieceFiles[i]; out.delete()
+                val norm = "fps=$fps,setsar=1,format=yuv420p"
+                fun br(vf: String) = if (vf.isBlank()) norm else "$vf,$norm"
+                val ty = if (i == 0) BgTransition.NONE else trans[i].first
+                val dSec = if (ty == BgTransition.NONE) 0f else trans[i].second.coerceIn(0.3f, 2.0f).coerceAtMost(segs[i].third * 0.8f)
+                val hd = Math.round(dSec * fps).coerceAtMost(frames[i] - 1)
+                val cmd = if (hd < 1) {
+                    "-y -stream_loop -1 -i ${cur.file.absolutePath} -an -vf ${br(cur.vf)} -r $fps $vcFixed -pix_fmt yuv420p -g 30 -frames:v ${frames[i]} ${out.absolutePath}"
+                } else {
+                    val prev = srcs[keyOf(i - 1)] ?: return false
+                    // 이전 조각이 '자기 길이만큼 재생된 지점'(반복 주기 안의 위치)부터 이어지는 장면
+                    val s0raw = (frames[i - 1].toDouble() / fps) % prev.period
+                    val s0 = if (prev.period - s0raw < 0.05) 0.0 else s0raw
+                    val tr = hd.toDouble() / fps
+                    val need = tr + 0.2
+                    val avail = prev.period - s0
+                    val inp = StringBuilder(); val fc = StringBuilder()
+                    if (avail >= tr + 0.1) {
+                        inp.append("-ss ${f3(s0)} -t ${f3(minOf(need, avail))} -i ${prev.file.absolutePath} ")
+                        fc.append("[0:v]${br(prev.vf)},setpts=PTS-STARTPTS[h];")
+                        inp.append("-stream_loop -1 -i ${cur.file.absolutePath} ")
+                        fc.append("[1:v]${br(cur.vf)},setpts=PTS-STARTPTS[b];")
+                    } else {
+                        // 반복 경계를 넘는 경우: 끝부분 + 처음부분을 이어서 사용(반복 재생과 같은 화면)
+                        inp.append("-ss ${f3(s0)} -t ${f3(avail)} -i ${prev.file.absolutePath} ")
+                        inp.append("-t ${f3(need - avail)} -i ${prev.file.absolutePath} ")
+                        fc.append("[0:v]${br(prev.vf)},setpts=PTS-STARTPTS[h0];")
+                        fc.append("[1:v]${br(prev.vf)},setpts=PTS-STARTPTS[h1];")
+                        fc.append("[h0][h1]concat=n=2:v=1:a=0,fps=$fps[h];")   // concat 출력 시간단위(1/1000000)를 xfade 요구(1/30)로 맞춤
+                        inp.append("-stream_loop -1 -i ${cur.file.absolutePath} ")
+                        fc.append("[2:v]${br(cur.vf)},setpts=PTS-STARTPTS[b];")
+                    }
+                    fc.append("[h][b]xfade=transition=${xfadeNameOf(ty)}:duration=${f3(tr)}:offset=0,format=yuv420p[vout]")
+                    "-y ${inp}-filter_complex $fc -map [vout] -an -r $fps $vcFixed -pix_fmt yuv420p -g 30 -frames:v ${frames[i]} ${out.absolutePath}"
+                }
+                Log.d(TAG, "BGV piece[$i] cmd: $cmd")
+                val sess = com.arthenica.ffmpegkit.FFmpegKit.execute(cmd)
+                val ok = out.exists() && out.length() > 0L
+                if (ok) onProgress("  BGV[$i] ${segs[i].first.name}+${segs[i].second}: ${out.length() / 1024}KB (${frames[i]}fr${if (hd >= 1) "+전환" else ""}) [${if (hw) "GPU" else "CPU"}]")
+                else Log.e(TAG, "BGV piece[$i] 실패 rc=${sess.returnCode?.value ?: -1}\n$cmd\n${sess.logsAsString?.takeLast(1500)}")
+                return ok
+            }
+            val okAll = (0 until n).map { i -> async(Dispatchers.IO) { sem.withPermit { encodePiece(i) } } }.awaitAll()
+            val failIdx = okAll.indexOfFirst { !it }
+            if (failIdx >= 0) { onProgress("⚠ BGV 미리 굽기: 조각[$failIdx] 인코딩 실패 → 기존 방식"); cleanup(); return@coroutineScope false }
+
+            // 4) 검증 — 조각별 프레임 수, 이음새 규격(avcC: SPS/PPS) 완전 일치
+            var ref: String? = null
+            for (i in 0 until n) {
+                val nf = probeFrames(pieceFiles[i])
+                if (nf != frames[i].toLong()) { onProgress("⚠ BGV 미리 굽기: 조각[$i] 프레임 $nf/${frames[i]} → 기존 방식"); cleanup(); return@coroutineScope false }
+                val a = readAvcC(pieceFiles[i])
+                if (a == null || (ref != null && a != ref)) { onProgress("⚠ BGV 미리 굽기: 조각[$i] 이음새 규격 불일치 → 기존 방식"); cleanup(); return@coroutineScope false }
+                if (ref == null) ref = a
+            }
+
+            // 5) 재인코딩 없이 이어붙이기 + 전체 프레임 수 검증
+            onProgress("🔗 BGV 이어붙이기 (${n}조각)...")
+            listFile.writeText(pieceFiles.joinToString("\n") { "file '${it.absolutePath}'" })
+            outFile.delete()
+            com.arthenica.ffmpegkit.FFmpegKit.execute("-y -f concat -safe 0 -i ${listFile.absolutePath} -c copy ${outFile.absolutePath}")
+            val total = if (outFile.exists() && outFile.length() > 0L) probeFrames(outFile) else -1L
+            cleanup()
+            if (total != bounds[n].toLong()) {
+                onProgress("⚠ BGV 미리 굽기: 이어붙인 결과 ${total}/${bounds[n]}프레임 → 기존 방식"); outFile.delete(); return@coroutineScope false
+            }
+            onProgress("🔗 BGV 이어붙이기 완료: ${outFile.length() / 1024 / 1024}MB (${total}프레임)")
+            true
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Log.e(TAG, "bakeBgvBody: $e"); onProgress("⚠ BGV 미리 굽기 예외: ${e.message} → 기존 방식")
+            cleanup(); outFile.delete(); false
+        }
+    }
+
+    // v3.52: 컨테이너 길이(초) — FFprobe 정밀값, 실패 시 MediaMetadataRetriever(ms), 그래도 실패면 0
+    private fun probeDurSecs(f: File): Double {
+        try {
+            val d = com.arthenica.ffmpegkit.FFprobeKit.getMediaInformation(f.absolutePath)?.mediaInformation?.duration?.toDoubleOrNull()
+            if (d != null && d > 0.0) return d
+        } catch (_: Exception) {}
+        return getMediaDurationSecs(f).toDouble()
+    }
+
+    // v3.52: 영상 프레임 수(MP4 표본 수) — 못 읽으면 -1
+    private fun probeFrames(f: File): Long = try {
+        com.arthenica.ffmpegkit.FFprobeKit.getMediaInformation(f.absolutePath)?.mediaInformation?.streams
+            ?.firstOrNull { it.type == "video" }?.allProperties?.optString("nb_frames")?.toLongOrNull() ?: -1L
+    } catch (_: Exception) { -1L }
+
+    // v3.52: MP4 'avcC'(SPS/PPS) 바이트 — 조각 간 이음새 규격 비교용(최상위 moov 상자 안에서만 찾음). 못 찾으면 null
+    private fun readAvcC(f: File): String? = try {
+        java.io.RandomAccessFile(f, "r").use { raf ->
+            val len = raf.length()
+            var off = 0L
+            var moov: ByteArray? = null
+            while (off + 8 <= len) {
+                raf.seek(off)
+                val sz32 = raf.readInt().toLong() and 0xFFFFFFFFL
+                val type = raf.readInt()
+                val size = when (sz32) { 1L -> raf.readLong(); 0L -> len - off; else -> sz32 }
+                if (size < 8) break
+                if (type == 0x6D6F6F76) {   // 'moov'
+                    if (size <= 64L * 1024 * 1024) { val buf = ByteArray(size.toInt()); raf.seek(off); raf.readFully(buf); moov = buf }
+                    break
+                }
+                off += size
+            }
+            val m = moov ?: return@use null
+            var i = 4
+            var found: String? = null
+            while (i + 4 < m.size && found == null) {
+                if (m[i] == 0x61.toByte() && m[i + 1] == 0x76.toByte() && m[i + 2] == 0x63.toByte() && m[i + 3] == 0x43.toByte()) {
+                    val bl = ((m[i - 4].toInt() and 0xFF) shl 24) or ((m[i - 3].toInt() and 0xFF) shl 16) or
+                             ((m[i - 2].toInt() and 0xFF) shl 8) or (m[i - 1].toInt() and 0xFF)
+                    val end = i - 4 + bl
+                    if (bl in 15..65535 && end <= m.size && m[i + 4] == 1.toByte())
+                        found = m.copyOfRange(i + 4, end).joinToString("") { b -> String.format(Locale.US, "%02x", b.toInt() and 0xFF) }
+                }
+                i++
+            }
+            found
+        }
+    } catch (e: Exception) { Log.w(TAG, "avcC [${f.name}]: $e"); null }
 
     private fun encodeOneCard(prep: ScenePrep, onProgress: (String) -> Unit): File? {
         val idx = prep.row.rowIndex.toString().padStart(4,'0')
