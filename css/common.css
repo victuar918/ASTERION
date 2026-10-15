@@ -1,0 +1,179 @@
+/* ============================================================
+   ASTERION — common.css
+   모든 HTML에서 공통으로 적용되는 스타일
+   <link rel="stylesheet" href="css/common.css"/>
+   ============================================================ */
+
+/* ── 리셋 ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+/* ── body: 배경만 담당, 수직 중앙 정렬 ── */
+body {
+  font-family: 'Arial', sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;  /* 상단 정렬 */
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* ── 앱 래퍼 ──
+   배경(body)은 화면 100% 사용
+   모든 UI 구성요소는 이 안에서 90vh로 제한
+   → Android/iOS 네비게이션 바에 가릴 일 없음 */
+.app-wrap {
+  color: #1a2e5a;           /* 기본 텍스트 색상 — 짙은 네이비 */
+  width: 100%;
+  max-width: 480px;
+  height: 93vh;              /* 화면 높이의 93%만 사용 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── 타이틀 이미지 ── */
+.ttl {
+  width: 370px;
+  max-width: 92vw;
+  display: block;
+  margin: 14px auto 8px;
+  flex-shrink: 0;
+}
+
+/* ── StructureCode / NameKr 표시 ── */
+.code-disp {
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  text-align: center;
+  color: #1a2e5a;
+  padding: 4px 0 6px;
+  flex-shrink: 0;
+}
+
+/* ── 하단 네비바 ── */
+.nav-bar {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 6px 8px;
+  background: transparent;
+  border-top: none;
+}
+
+/* 버튼 이미지 크기 */
+.nav-bar img {
+  height: 88px;
+  object-fit: contain;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .15s;
+}
+.nav-bar img:active { opacity: .6; }
+
+/* worksdesk 전용 2열 그리드 nav */
+.nav-bar.grid4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  max-width: 480px;
+}
+.nav-bar.grid4 .row2 {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+}
+.nav-bar.grid4 img,
+.nav-bar.grid4 .row2 img {
+  width: 100%;
+  height: 88px;
+  object-fit: contain;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .15s;
+}
+.nav-bar.grid4 img:active,
+.nav-bar.grid4 .row2 img:active { opacity: .6; }
+
+/* ── 투명도 60% 입력창 ── */
+.input-60 {
+  background: rgba(0, 0, 0, .60);
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color .15s;
+}
+.input-60:focus { border-color: rgba(210, 170, 100, .65); }
+.input-60::placeholder { color: rgba(255, 255, 255, .3); }
+
+/* ── 목록 행 ── */
+.list-row {
+  padding: 12px 16px;
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+  transition: background .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.list-row:active { background: rgba(255, 255, 255, .15); }
+.list-row.selected {
+  background: rgba(255, 255, 255, .60);
+  color: #1a2e5a;
+  font-weight: 600;
+}
+
+/* ── 빈 목록 안내 ── */
+.empty-row {
+  padding: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, .28);
+}
+
+/* ── 스크롤바 ── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .15); border-radius: 3px; }
+
+/* ── 이미지 오버레이 박스 ── */
+.img-wrap {
+  position: relative;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.img-wrap input[type=file] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+}
+.img-bg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+.img-ov {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  z-index: 2;
+  display: none;
+}
+.img-ov.show { display: block; }
